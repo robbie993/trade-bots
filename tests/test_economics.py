@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from mvv.config import CashConfig, DiscoveryConfig
-from mvv.economics import EconomicCalculator
-from mvv.scout import ProductCandidate
+from src.config import CashConfig, DiscoveryConfig
+from src.agents.economic_calculator import EconomicCalculator
+from src.agents.scout import ProductCandidate
 
 from .conftest import make_experiment
 

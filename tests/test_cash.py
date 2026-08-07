@@ -12,10 +12,10 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.cash import CashLedger, InsufficientCash
-from mvv.config import CashConfig
-from mvv.db import utcnow
-from mvv.models import CashCategory
+from src.agents.cash_ledger import CashLedger, InsufficientCash
+from src.config import CashConfig
+from src.db import utcnow
+from src.models import CashCategory
 
 
 def test_opening_balance(cash):
@@ -128,3 +128,53 @@ def test_hold_settings_are_configurable(db):
     now = utcnow()
     ledger.record_customer_payment(Decimal("50"), when=now)
     assert ledger.held(now + timedelta(seconds=1)) == Decimal("0.00")
+
+
+# -- v1.0: consecutive-negative-days tracking (stop condition 2) ----------
+def test_balance_history_replays_the_ledger(cash):
+    """Each row is the balance at *end of day*, oldest first."""
+    now = utcnow()
+    cash.credit("seed", Decimal("100"), "opening_balance", date=now - timedelta(days=5))
+    cash.debit("ads", Decimal("300"), "ad_spend", date=now - timedelta(days=2))
+    history = cash.balance_history(days=6, when=now)
+
+    assert len(history) == 6
+    assert history[0]["available_cash"] == Decimal("100.00")   # day -5, seed landed
+    assert history[2]["available_cash"] == Decimal("100.00")   # day -3, before the ads
+    assert history[3]["available_cash"] == Decimal("-200.00")  # day -2, ads charged
+    assert history[-1]["available_cash"] == Decimal("-200.00")  # today
+
+
+def test_consecutive_negative_days_counts_back_from_today(cash):
+    now = utcnow()
+    cash.debit("ads", Decimal("50"), "ad_spend", date=now - timedelta(days=3))
+    assert cash.consecutive_negative_days(now) == 4  # days 3, 2, 1, 0
+
+
+def test_consecutive_negative_days_is_zero_when_solvent(cash):
+    cash.open_account()
+    assert cash.consecutive_negative_days() == 0
+
+
+def test_a_recovery_resets_the_streak(cash):
+    now = utcnow()
+    cash.debit("ads", Decimal("50"), "ad_spend", date=now - timedelta(days=10))
+    cash.credit("top-up", Decimal("500"), "opening_balance", date=now - timedelta(days=1))
+    assert cash.consecutive_negative_days(now) == 0
+
+
+def test_flow_between_sums_one_category_in_a_window(cash):
+    now = utcnow()
+    cash.debit("ads in window", Decimal("40"), "ad_spend", date=now - timedelta(days=5))
+    cash.debit("ads outside", Decimal("999"), "ad_spend", date=now - timedelta(days=60))
+    cash.credit("revenue", Decimal("70"), "customer_revenue", date=now - timedelta(days=5))
+    window = now - timedelta(days=30)
+    assert cash.flow_between("ad_spend", window, now) == Decimal("40.00")
+    assert cash.flow_between("customer_revenue", window, now) == Decimal("70.00")
+
+
+def test_open_account_once_does_nothing_twice(cash):
+    first = cash.open_account(once=True)
+    assert first is not None
+    assert cash.open_account(once=True) is None
+    assert cash.total_balance() == Decimal("1000.00")

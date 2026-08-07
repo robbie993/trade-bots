@@ -7,11 +7,13 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.db import Database, sum_decimal, to_datetime, to_iso
+from src.db import Database, sum_decimal, to_datetime, to_iso
 
 
 def test_schema_creates_the_spec_tables(db):
-    assert db.table_names() >= ["approvals", "cash_flow", "experiment_events", "experiments", "orders"]
+    assert db.table_names() >= [
+        "cash_flow", "experiment_events", "experiments", "human_approvals", "orders",
+    ]
 
 
 def test_init_schema_is_idempotent(db):
@@ -72,7 +74,7 @@ def test_placeholders_are_translated_for_postgres():
     pg = Database("postgresql://localhost/nope")
     assert pg.dialect == "postgres"
     assert pg._sql("SELECT * FROM t WHERE a = ? AND b = ?") == "SELECT * FROM t WHERE a = %s AND b = %s"
-    assert pg.schema_path().name == "schema.postgres.sql"
+    assert pg.migrations_dir().name == "migrations"
 
 
 def test_sqlite_urls_resolve(tmp_path):
@@ -93,11 +95,12 @@ def test_timestamp_helpers():
     assert to_datetime(datetime(2026, 3, 4)).tzinfo is timezone.utc
 
 
-def test_postgres_schema_matches_the_sqlite_one():
-    """Both schema files must define the same tables and columns, or the
-    Postgres deployment and the local one are not the same system."""
+def test_postgres_migrations_match_the_sqlite_ones():
+    """Every migration must define the same tables and columns in both
+    dialects, or the Postgres deployment and the local one are not the same
+    system. Also checks the two sets have the same migration filenames."""
     import re
-    from mvv.db import SCHEMA_POSTGRES, SCHEMA_SQLITE
+    from src.db.connection import MIGRATIONS
 
     def tables(sql: str) -> dict:
         out = {}
@@ -117,8 +120,14 @@ def test_postgres_schema_matches_the_sqlite_one():
             out[name] = columns
         return out
 
-    pg = tables(SCHEMA_POSTGRES.read_text())
-    lite = tables(SCHEMA_SQLITE.read_text())
-    assert set(pg) == set(lite)
-    for table in pg:
-        assert pg[table] == lite[table], f"{table} columns differ between dialects"
+    pg_files = sorted(p.name for p in MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
+    lite_files = sorted(p.name for p in (MIGRATIONS / "sqlite").glob("[0-9][0-9][0-9]_*.sql"))
+    assert pg_files == lite_files
+    assert len(pg_files) == 5
+
+    for name in pg_files:
+        pg = tables((MIGRATIONS / name).read_text())
+        lite = tables((MIGRATIONS / "sqlite" / name).read_text())
+        assert set(pg) == set(lite), f"{name} defines different tables"
+        for table in pg:
+            assert pg[table] == lite[table], f"{name}: {table} columns differ"

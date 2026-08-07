@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.human_gate import ApprovalAction, ApprovalRequired, ApprovalStatus
+from src.agents.human_gate import ApprovalAction, ApprovalRequired, ApprovalStatus
 
 from .conftest import make_experiment
 

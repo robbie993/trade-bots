@@ -1,0 +1,54 @@
+# Spec sections 11.1 and 12.
+#
+#   docker compose up -d db
+#   export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
+#   ./scripts/reset_db.sh
+#
+# Only `db` is required. Redis is optional in the spec and nothing in Phase 1
+# reads from it yet — it is here so caching has somewhere to go without a
+# schema change, not because the loop needs it.
+
+services:
+  db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mvv}
+      POSTGRES_DB: ${POSTGRES_DB:-mvv}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - mvv_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mvv} -d ${POSTGRES_DB:-mvv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:6-alpine
+    profiles: ["optional"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The web approval gate. Bound to localhost by default: the page has no
+  # authentication, and anyone who can reach it can approve spending.
+  gate:
+    build: .
+    profiles: ["optional"]
+    command: python -m src.main serve --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mvv}:${POSTGRES_PASSWORD:-mvv}@db:5432/${POSTGRES_DB:-mvv}
+    ports:
+      - "127.0.0.1:${GATE_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mvv_pgdata:

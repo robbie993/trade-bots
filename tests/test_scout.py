@@ -6,9 +6,10 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.scout import FixtureSource, Scout, SourceNotConfigured
-from mvv.scout.aliexpress import AliExpressSource
-from mvv.scout.temu import TemuSource
+from src.agents.scout import Scout, SourceNotConfigured
+from src.agents.sources import FixtureSource
+from src.agents.sources.aliexpress import AliExpressSource
+from src.agents.sources.temu import TemuSource
 
 
 def test_fixture_source_reads_products(fixture_file):
@@ -49,7 +50,7 @@ def test_unconfigured_source_is_skipped_quietly(fixture_file):
 
 
 def test_candidates_require_a_product_id():
-    from mvv.scout import ProductCandidate
+    from src.agents.scout import ProductCandidate
 
     with pytest.raises(ValueError):
         ProductCandidate(product_id="", product_name="x", source_platform="temu")

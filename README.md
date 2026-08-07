@@ -1,5 +1,7 @@
 # Minimum Viable Village — Phase 1: The Experiment Ledger
 
+Spec version 1.0.
+
 The smallest system that can answer one question:
 
 > Can this system consistently find, test, market, fulfill and manage
@@ -9,8 +11,8 @@ If yes, scale it. If no, kill it. This repository is built so that either
 answer is cheap to reach and impossible to fudge.
 
 No Monte Carlo. No 68 agents. No $1M/month claims. Five components, concrete
-kill thresholds, a human gate in front of every dollar, and a stop condition
-that lets the system conclude it does not work.
+kill thresholds, a human gate in front of every dollar, and **four**
+independent stop conditions that let the system conclude it does not work.
 
 ---
 
@@ -18,47 +20,76 @@ that lets the system conclude it does not work.
 
 ```bash
 git clone <this repo> && cd trade-bots
-pip install -e '.[dev]'          # no runtime deps; pytest for the suite
-python -m mvv init-db            # SQLite at ./data/mvv.db by default
-python -m mvv cash open          # seed the $1,000 budget
-python -m mvv tick               # discover -> ask permission -> report
-python -m mvv approvals          # see what it is waiting on
-python -m mvv approve 1 --by you
-python -m mvv tick
+pip install -r requirements.txt        # or: pip install -e '.[dev]' for the core only
+
+python -m src.main init-db             # SQLite at ./data/mvv.db by default
+python -m src.main cash open --once    # seed the $1,000 budget
+python -m src.main tick                # discover -> ask permission -> report
+python -m src.main approvals           # see what it is waiting on
+python -m src.main approve 1 --by you
+python -m src.main tick
 ```
 
-Run the tests:
+Or drive it from the web gate — the [KILL] [CONTINUE] [REVIEW_DATA] buttons of
+spec §4.4:
 
 ```bash
-python -m pytest            # 185 tests, no database server, no network
+./scripts/start.sh                     # migrations, opening balance, gate on :8000
+```
+
+Postgres instead of SQLite:
+
+```bash
+docker compose up -d db
+export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
+./scripts/reset_db.sh
+```
+
+Tests:
+
+```bash
+python -m pytest            # 225 tests, no database server, no network
 ```
 
 ---
 
-## The five components
+## Layout (spec §12)
 
-| # | Component | Module | Job |
-|---|-----------|--------|-----|
-| 1 | Scout | `mvv/scout/` | Discover products from one or two platforms |
-| 2 | Economic Calculator | `mvv/economics.py` | Unit economics, margin, CAC, breakeven |
-| 3 | Experiment Ledger | `mvv/ledger.py` | The single source of truth |
-| 4 | Human Approval Gate | `mvv/human_gate.py` | Hard boundary for spend |
-| 5 | Orchestrator | `mvv/orchestrator.py` | Coordinate the loop |
+```
+src/
+├── config.py               all tunables, the whole risk surface in one file
+├── money.py                Decimal helpers — no float ever touches cash
+├── kill_criteria.py        §4 thresholds, pure functions
+├── notifications.py        console / file / Slack / email
+├── cli.py, main.py         the operator's interface
+├── models/                 one module per table
+│   ├── experiment.py       §3.1  ├── order.py  §3.2  └── cash_flow.py §3.3
+├── agents/                 the five components
+│   ├── scout.py                    1. Scout
+│   ├── economic_calculator.py      2. Economic Calculator
+│   ├── experiment_ledger.py        3. Experiment Ledger
+│   ├── human_gate.py               4. Human Approval Gate
+│   ├── orchestrator.py             5. Orchestrator
+│   ├── web.py              §4.4 approval UI
+│   ├── cash_ledger.py      §7 working capital
+│   ├── monitoring.py       §8 alerts, §14 scorecard and stop conditions
+│   ├── metrics.py          §5.4 ingestion
+│   └── sources/            platform adapters
+└── db/
+    ├── connection.py
+    └── migrations/         001-005, Postgres + a sqlite/ mirror
+```
 
-Supporting: `kill_criteria.py` (the thresholds), `cash.py` (working capital),
-`monitoring.py` (alerts and reports), `metrics.py` (ingestion), `models.py`,
-`db.py`, `money.py`, `cli.py`.
-
-Deliberately **not** built: court system, sharks, government, alliances,
-black market, marketing team, territory, gamification, risk management beyond
-kill criteria, backup/recovery beyond retries.
+Deliberately **not** built (spec §2.1): court system, sharks, government,
+alliances, black market, marketing team, territory, gamification, risk
+management beyond kill criteria, backup/recovery beyond retries, and any agent
+beyond the five.
 
 ---
 
 ## The loop
 
-One `mvv tick` is the whole business. Each step is marked with who is allowed
-to do it.
+One `tick` is the whole business. Each step is marked with who may do it.
 
 ```
 1. DISCOVER   scout -> economic filter -> ledger              autonomous
@@ -67,7 +98,7 @@ to do it.
 4. EVALUATE   kill logic -> pause ads -> ask a human          pause autonomous
                                                               kill gated
 5. SCALE      propose budget increases                        gated
-6. REPORT     health check + stop condition                   autonomous
+6. REPORT     health check + four stop conditions             autonomous
 ```
 
 The asymmetry in step 4 is the design: **the system may always stop the
@@ -76,7 +107,7 @@ tick, without asking. The kill itself is a row a human has to change.
 
 ---
 
-## Kill criteria (spec section 4)
+## Kill criteria (§4)
 
 ### Sample-size gates — no decision without data
 
@@ -88,9 +119,9 @@ tick, without asking. The kill itself is a row a human has to change.
 
 All three, no partial credit. Below the gates the answer is
 `(False, "Insufficient data")` — not a kill, and not a clean bill of health
-either. This is the single most important behaviour in the codebase and it has
-its own test: an experiment with 5 orders, 1 click and 3 refunds is *not*
-killed, because none of those numbers mean anything yet.
+either. This is the most important behaviour in the codebase and it has its
+own test: an experiment with 5 orders, 1 click and 3 refunds is *not* killed,
+because none of those numbers mean anything yet.
 
 ### Kill conditions, evaluated in this order
 
@@ -105,32 +136,25 @@ killed, because none of those numbers mean anything yet.
 | 7 | Avg delivery | > 10 days |
 
 The order is fixed so the same data always produces the same recorded reason.
-`mvv show <id>` prints every condition with its value and whether it fired —
-the operator approving a kill sees the whole table, not just the first trip.
-
-Thresholds live in `KillThresholds` and `SampleGate` (`mvv/kill_criteria.py`)
-and are configurable, defaulting to exactly the values above.
+`show <id>` and the web REVIEW_DATA page print every condition with its value
+and whether it fired — the operator approving a kill sees the whole table, not
+just the first trip.
 
 ---
 
-## The human gate (spec section 6)
+## The human gate (§6)
 
-| Action | Approval | Enforced by |
-|--------|----------|-------------|
-| Spending money on ads | required | `ApprovalAction.AD_SPEND` |
-| Ordering samples | required | `ORDER_SAMPLE` |
-| Listing a product | required | `LIST_PRODUCT` |
-| Killing a product | required | `KILL_EXPERIMENT` |
-| Scaling beyond $50/day | required, separately | `SCALE_AD_SPEND` |
-| Adding a platform | required | `ADD_PLATFORM` |
+| Action | Approval | `human_approvals.action` |
+|--------|----------|--------------------------|
+| Spending money on ads | required | `ad_spend` |
+| Ordering samples | required | `sample_order` |
+| Listing a product | required | `launch` |
+| Killing a product | required | `kill` |
+| Scaling beyond $50/day | required, separately | `scale` |
+| Adding a platform | required | `add_platform` |
 
-| Action | Autonomy |
-|--------|----------|
-| Scraping product data | full — costs nothing |
-| Calculating metrics | full — math, not decisions |
-| Monitoring kill conditions | full — alerting only |
-| Pausing ads on a trigger | full — stops the bleeding |
-| Writing the ledger | full — logs everything |
+Autonomous: scraping, calculating, monitoring, **pausing** ads, writing the
+ledger.
 
 Properties the tests pin down:
 
@@ -142,57 +166,72 @@ Properties the tests pin down:
 * Duplicate requests do not re-notify — an operator who is spammed stops
   reading.
 * A stale launch approval cannot silently restart ads that a kill trigger
-  paused. Restarting spend is an explicit act: `mvv resume <id> --approval-id
-  <n> --budget <x>`.
+  paused. Restarting spend is explicit: `resume <id> --approval-id <n>
+  --budget <x>`.
+* The web tier can only *decide*. Every route writes an approval row through
+  the same `HumanGate` the CLI uses; none of them spends money or kills
+  anything. The orchestrator acts on the decision on its next tick.
 
 ### CONTINUE is not a snooze
 
-When the operator answers CONTINUE to a kill trigger, the system records
-*which condition* was overridden and stops re-escalating that exact trigger.
-Otherwise the same alert fires every hour on unchanged data and the operator
-learns to ignore it. A *different* kill condition still escalates normally,
-the daily health check still reports the condition as failing, and ads stay
-paused until a separate spend approval resumes them.
+When the operator answers CONTINUE, the system records *which condition* was
+overridden and stops re-escalating that exact trigger. Otherwise the same
+alert fires every hour on unchanged data and the operator learns to ignore it.
+A *different* condition still escalates, the health check still reports the
+condition as failing, and ads stay paused until a separate spend approval
+resumes them.
 
 ---
 
-## Cash, not profit (spec section 7)
+## Cash, not profit (§7)
 
-Real stores fail from cash. The ledger tracks three different numbers and
-never confuses them:
+Real stores fail from cash. The ledger tracks three numbers and never confuses
+them:
 
 * **total balance** — everything on the books. The accounting number.
 * **available cash** — what has actually settled. Held money does not count
-  until its release date passes.
-* **spendable** — available cash minus the untouchable emergency buffer.
-  This is the only number a spend decision may look at.
+  until its release date.
+* **spendable** — available cash minus the untouchable emergency buffer. The
+  only number a spend decision may look at.
 
-A customer payment is split into a settling amount (released after
-`settlement_days`), a processor rolling reserve (released after
-`processor_hold_days`) and an immediate fee debit. So a store showing $600 on
-the books can correctly refuse a $100 ad buy, which is the failure this module
-exists to prevent.
+A customer payment splits into a settling amount, a processor rolling reserve
+and an immediate fee debit. So a store showing $600 on the books correctly
+refuses a $100 ad buy — the failure this module exists to prevent.
 
-All money is `Decimal`. No binary float ever touches a cash figure — see
-`mvv/money.py`. Money is summed in Python, never in SQL, because SQLite's
-NUMERIC affinity would store it as a float.
+All money is `Decimal`, summed in Python, never in SQL (SQLite's NUMERIC
+affinity would store it as a float).
 
 ---
 
-## Stop condition (spec section 9)
+## Stop conditions (§1.3, §14.3)
 
-After 20 experiments, if the store's contribution margin is not positive, the
-system files a `KILL_ALL` request, pauses every live experiment and tells the
-operator to stop. `mvv health` exits with status 2 when this fires, so a cron
-job or CI check can act on it.
+Four, independent. **Any one ends Phase 1.** `health` prints all four and
+exits 2 if any fired, so cron or CI can act on it.
 
-`mvv weekly` reports where Phase 1 stands against its own bar: experiments
-run, data quality, kill-decision accuracy, cash survival, store
-profitability.
+| # | Condition | Measured from |
+|---|-----------|---------------|
+| 1 | After 20 experiments, not one has a positive contribution margin | the ledger, **per experiment** |
+| 2 | Cash flow negative for 7 consecutive days | replaying the cash ledger day by day |
+| 3 | A kill decision unanswered for more than 72 hours | `human_approvals.requested_at` |
+| 4 | Ad costs > 2× revenue over the trailing 30 days | the cash ledger |
 
-Kill-decision accuracy is measured honestly: of the killed experiments that
-had enough data to judge, how many were genuinely losing money. A product
-killed while profitable counts against the system.
+Two readings worth stating, since the spec's prose leaves them open:
+
+* **#1 is per-experiment, not store-total** (spec §14.3's code says
+  `[e for e in experiments if e.contribution_margin > 0]`). One genuine winner
+  among twenty means the system works and the losers were the cost of finding
+  it.
+* **#4 requires 30 days of history before it can fire.** Otherwise a store
+  three days old trips it before making its first sale.
+
+Condition 3 exists because the gate is the whole safety model. A gate nobody
+is watching stops the system rather than quietly becoming decoration.
+
+`weekly` reports the §1.2 scorecard: experiments run, data quality, kill
+accuracy, cash survival, **profitable products found**, store P&L. Kill
+accuracy is measured honestly — of the killed experiments that had enough data
+to judge, how many were genuinely losing money. A product killed while
+profitable counts against the system.
 
 ---
 
@@ -200,57 +239,40 @@ killed while profitable counts against the system.
 
 Being straight about this matters more than a longer feature list.
 
-**Fully implemented and tested:** the database schema, the domain model and
-all derived metrics, the kill criteria, the economic calculator, the
-experiment ledger with its audit trail, the cash flow ledger, the human
-approval gate, the monitoring and reports, the orchestrator loop, the CLI.
+**Fully implemented and tested:** the schema and migrations, the domain model
+and all derived metrics, the kill criteria, the economic calculator, the
+experiment ledger with its audit trail, the cash ledger, the human approval
+gate (CLI and web), the monitoring, scorecard and all four stop conditions,
+the orchestrator loop, the CLI.
 
 **Deliberately stubbed, with a working seam:**
 
-* **Platform connectors.** `mvv/scout/aliexpress.py` and `mvv/scout/temu.py`
+* **Platform connectors.** `src/agents/sources/aliexpress.py` and `temu.py`
   implement the payload → candidate mapping (unit-tested, including Temu's
-  minor-unit prices) and the credential handling. `fetch_raw()` raises
+  minor-unit prices) and credential handling. `fetch_raw()` raises
   `SourceNotConfigured` with a precise message. DSers' product API needs an
   authenticated merchant account, and a scraper written against a page
   structure nobody has looked at would be a plausible-looking lie rather than
   a component. To go live, implement `fetch_raw()` or pass
-  `transport=<callable>` — everything downstream already works.
+  `transport=<callable>`.
 * **Metrics ingestion.** No Meta/TikTok/Shopify credentials exist here, so
-  metrics come from `mvv metrics` (typed in) or a JSON file
-  (`--metrics-source file`). Copying seven numbers a day out of a dashboard
-  is a legitimate way to run Phase 1 — cheaper than an integration for a
-  system whose whole point is to be killable. A real provider implements one
-  method (`fetch`) and nothing else changes.
-* **Ad pausing** updates the ledger's `ads_paused` flag. Wiring that to the
-  ad platform's API is one call inside `ExperimentLedger.pause_ads`; until
-  then the operator must pause in the dashboard when the alert arrives. The
-  alert says so.
+  metrics come from `metrics` (typed in) or a JSON file
+  (`--metrics-source file`). Copying seven numbers a day out of a dashboard is
+  a legitimate way to run Phase 1 — cheaper than an integration for a system
+  whose point is to be killable. A real provider implements one method
+  (`fetch`).
+* **Ad pausing** updates the ledger's `ads_paused` flag. Wiring it to the ad
+  platform is one call inside `ExperimentLedger.pause_ads`; until then the
+  operator pauses in the dashboard when the alert arrives. The alert says so.
 
-The fixture scout (`data/products.sample.json`) is not a placeholder to be
-replaced later — it is how the loop is meant to run while the connectors are
-unbuilt. Paste in products you found by hand and the rest of the machine
-treats them exactly like scraped ones.
+The fixture scout (`data/products.sample.json`) is not a placeholder — it is
+how the loop is meant to run while the connectors are unbuilt. Paste in
+products you found by hand and the machine treats them like scraped ones.
 
----
-
-## Database
-
-The spec names PostgreSQL as the source of truth, and it is: point
-`DATABASE_URL` at Postgres and `db/schema.postgres.sql` is applied verbatim.
-SQLite is the zero-setup default, because a Phase 1 system whose tests need a
-database server does not get run. Both schemas are kept in lockstep by a test
-that compares their tables and columns.
-
-Tables 1–3 are the spec schema (sections 3.1–3.3) with additive columns only.
-Two tables are Phase 1 additions:
-
-* `approvals` — required by section 6. The gate has to be a row somewhere.
-* `experiment_events` — an append-only audit trail. Every state change writes
-  one. "Auditable" is a requirement, not an adjective.
-
-Additive columns on `experiments`: `product_url`, `ads_paused`,
-`daily_ad_budget`, `pending_kill_reason`, `kill_override_reason`. On `orders`:
-`external_id`. On `cash_flow`: `experiment_id`, `order_id`.
+**Security note on the web gate:** it has no authentication. Anyone who can
+reach the page can approve spending. It binds to `127.0.0.1` by default and
+warns on stderr if you bind it wider. Put your own auth in front of it before
+exposing it.
 
 ---
 
@@ -258,37 +280,32 @@ Additive columns on `experiments`: `product_url`, `ads_paused`,
 
 | Command | What it does |
 |---------|--------------|
-| `init-db` | Create the schema |
+| `init-db` | Apply migrations 001-005 |
 | `config` | Print the effective configuration — the whole risk surface |
 | `scout` | Discover and price candidates. **Writes nothing** |
-| `tick` | One pass of the loop |
-| `run` | The loop, forever |
-| `list` | All experiments with their live metrics and flags |
-| `show <id>` | Full audit view: gates, every kill condition, event history |
+| `tick` / `run` | One pass of the loop / forever |
+| `serve` | The web approval gate (§4.4 buttons) |
+| `list` / `show <id>` | Experiments; full audit view of one |
 | `metrics <id> --orders N ...` | Record observed metrics |
 | `evaluate` | Run the kill logic now |
-| `health` | Daily health check (exit 2 if `KILL_ALL` fires) |
-| `weekly` | Weekly summary and Phase 1 scorecard |
-| `approvals` | Pending requests |
-| `approve <id>` / `reject <id>` | The human decision. On a kill request these are the KILL and CONTINUE buttons |
+| `health` | Daily health check + all four stop conditions (exit 2 if any fired) |
+| `weekly` | Weekly summary and the Phase 1 scorecard |
+| `approvals` / `approve <id>` / `reject <id>` | The human decision. On a kill request these are KILL and CONTINUE |
 | `resume <id> --approval-id <n> --budget <x>` | Restart paused ads |
-| `cash open` / `cash add` / `cash` | The cash flow ledger |
+| `cash open --once` / `cash add` / `cash` | The cash flow ledger |
 | `order <id> --customer-paid X` | Record a real order and its cash consequences |
 | `recompute <id>` | Rebuild order metrics from the orders table |
+| `export <table> --out f.csv` | Export for analysis (pandas, falls back to stdlib csv) |
 
----
-
-## Configuration
-
-Everything is environment-driven with safe defaults; see `.env.example` and
-`mvv/config.py`. All tunables live in that one file so the risk surface can be
-read in a single sitting.
+Scripts (§12): `scripts/start.sh` (migrations + balance + gate),
+`scripts/reset_db.sh` (destroys everything, asks first),
+`scripts/run_loop.sh [once|loop|health]`.
 
 ---
 
 ## Implementation notes
 
-Three places where this deviates from the spec's sample code, each on purpose:
+Deviations from the spec's sample code, each on purpose:
 
 1. **`Decimal`, not `float`.** The spec's dataclass uses floats. Money that
    drifts by fractions of a cent is not auditable. Derived metrics are
@@ -296,18 +313,25 @@ Three places where this deviates from the spec's sample code, each on purpose:
    a kill is the number in the ledger.
 2. **The loop does not block on approvals by default.** The spec's skeleton
    calls `gate.wait_for_decision()` inline. One unanswered notification would
-   then stop the system monitoring every *other* experiment — a worse failure
-   than a delayed kill. Default: pause ads, file the request, keep going. Set
-   `MVV_BLOCK_ON_APPROVAL=true` for the spec's behaviour;
-   `wait_for_decision()` is implemented either way.
+   then stop the system monitoring every *other* experiment. Default: pause
+   ads, file the request, keep going — and stop condition 3 catches the
+   request nobody answered. `MVV_BLOCK_ON_APPROVAL=true` restores the spec's
+   behaviour; `wait_for_decision()` is implemented either way.
 3. **COGS includes shipping.** A supplier listing $5 + $2 shipping costs $7.
    Discovery stores landed cost as `unit_cost`, so contribution margin is not
    quietly overstated on every experiment.
-
-And one rule that only shows up once you run it: **order rows and typed-in
-totals are alternatives, not layers.** `mvv order` records an order and its
-cash consequences but leaves the aggregate metrics alone, because recomputing
-from a partial orders table would overwrite 55 dashboard-sourced orders with
-the 1 row that happens to exist — and the kill logic runs on those numbers.
-`mvv recompute` does it explicitly, and refuses to lower the order count
-without `--force`.
+4. **Order rows and typed-in totals are alternatives, not layers.** `order`
+   records an order and its cash but leaves aggregate metrics alone;
+   recomputing from a partial orders table would overwrite 55
+   dashboard-sourced orders with the 1 row that exists, and the kill logic
+   runs on those numbers. `recompute` does it explicitly and refuses to lower
+   the order count without `--force`.
+5. **`human_approvals` keeps the spec's column names**, including
+   `approved_at` / `approved_by`. Those record when a decision was made and by
+   whom *whatever the outcome*; `status` distinguishes approved from rejected,
+   so a rejection is timestamped and attributed rather than losing its author.
+6. **`requirements.txt` is the spec's list**, with a note per line on what
+   each package is for. `pandas`/`numpy` serve `export` and reporting only —
+   money arithmetic deliberately does not go through them. The core loop
+   itself imports nothing outside the standard library, so the thing that
+   decides whether to spend money has no supply chain.

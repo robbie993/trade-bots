@@ -6,8 +6,8 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.ledger import LedgerError
-from mvv.models import Order, Status
+from src.agents.experiment_ledger import LedgerError
+from src.models import Order, Status
 
 from .conftest import make_experiment
 

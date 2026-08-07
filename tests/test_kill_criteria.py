@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.kill_criteria import (
+from src.kill_criteria import (
     INSUFFICIENT_DATA,
     KillThresholds,
     SampleGate,

@@ -1,0 +1,35 @@
+# Spec section 11.2.
+#
+# The core loop — ledger, kill criteria, cash, orchestrator, CLI — runs on the
+# standard library alone. That is deliberate: a Phase 1 system whose whole
+# point is to be killable should not need a stack to prove it does not work.
+# Everything below is for a specific job, noted per line.
+
+# PostgreSQL, the spec's source of truth (section 2, component 3).
+# psycopg2-binary is the driver the spec names; psycopg 3 is what src/db
+# actually imports, and is the one to install on Python 3.10+.
+psycopg[binary]>=3.1
+psycopg2-binary>=2.9.0
+asyncpg>=0.28.0          # only needed if you add async workers later
+
+# Web approval gate (component 4, section 4.4) — src/agents/web.py.
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+python-multipart>=0.0.6  # FastAPI form posts: the KILL / CONTINUE buttons
+
+# Configuration from .env (section 11).
+python-dotenv>=1.0.0
+
+# Platform connectors (src/agents/sources/) once you implement fetch_raw().
+requests>=2.28.0
+
+# Analysis and reporting only. Money arithmetic deliberately does NOT go
+# through these: every cash figure is a decimal.Decimal (see src/money.py),
+# because float64 drift is not auditable. pandas is used for `mvv export`.
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Tests.
+pytest>=7.4.0
+httpx>=0.24.0            # FastAPI TestClient transport

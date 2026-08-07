@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from mvv.cli import main
-from mvv.db import Database
+from src.cli import main
+from src.db import Database
 
 
 @pytest.fixture
@@ -65,14 +65,14 @@ def test_full_operator_workflow(env, capsys):
     capsys.readouterr()
     main(["approvals"])
     out = capsys.readouterr().out
-    assert "order_sample" in out
+    assert "sample_order" in out
 
     db = db_of(env)
     exp_id = db.query_one("SELECT id FROM experiments WHERE product_id = 'ae-1'")["id"]
 
     def approve_pending(action):
         row = db.query_one(
-            "SELECT id FROM approvals WHERE action = ? AND status = 'pending' "
+            "SELECT id FROM human_approvals WHERE action = ? AND status = 'pending' "
             "AND experiment_id = ?",
             (action, exp_id),
         )
@@ -81,9 +81,9 @@ def test_full_operator_workflow(env, capsys):
         capsys.readouterr()
 
     # 3. Approve each gate in turn; the loop advances one step per approval.
-    approve_pending("order_sample")
+    approve_pending("sample_order")
     main(["tick"]); capsys.readouterr()
-    approve_pending("list_product")
+    approve_pending("launch")
     main(["tick"]); capsys.readouterr()
     approve_pending("ad_spend")
     main(["tick"]); capsys.readouterr()
@@ -112,7 +112,7 @@ def test_full_operator_workflow(env, capsys):
 
     # 6. The human decides.
     kill_request = db.query_one(
-        "SELECT id FROM approvals WHERE action = 'kill_experiment' AND experiment_id = ?", (exp_id,)
+        "SELECT id FROM human_approvals WHERE action = 'kill' AND experiment_id = ?", (exp_id,)
     )
     assert main(["approve", str(kill_request["id"]), "--by", "robbie"]) == 0
     capsys.readouterr()
@@ -179,7 +179,7 @@ def test_resume_refuses_without_an_approved_request(env, capsys):
     capsys.readouterr()
     db = db_of(env)
     exp_id = db.query_one("SELECT id FROM experiments WHERE product_id = 'ae-1'")["id"]
-    approval_id = db.query_one("SELECT id FROM approvals WHERE experiment_id = ?", (exp_id,))["id"]
+    approval_id = db.query_one("SELECT id FROM human_approvals WHERE experiment_id = ?", (exp_id,))["id"]
     assert main(["resume", str(exp_id), "--approval-id", str(approval_id), "--budget", "10"]) == 1
     assert "not approved" in capsys.readouterr().err
 
@@ -191,7 +191,7 @@ def test_resume_refuses_while_a_kill_decision_is_outstanding(env, capsys):
     db = db_of(env)
     exp_id = db.query_one("SELECT id FROM experiments WHERE product_id = 'ae-1'")["id"]
     db.update("experiments", exp_id, {"pending_kill_reason": "CTR too low"})
-    approval_id = db.query_one("SELECT id FROM approvals WHERE experiment_id = ?", (exp_id,))["id"]
+    approval_id = db.query_one("SELECT id FROM human_approvals WHERE experiment_id = ?", (exp_id,))["id"]
     main(["approve", str(approval_id)])
     capsys.readouterr()
     assert main(["resume", str(exp_id), "--approval-id", str(approval_id), "--budget", "10"]) == 1
@@ -255,3 +255,84 @@ def test_order_does_not_clobber_metrics_entered_by_hand(env, capsys):
     assert "would discard metrics" in capsys.readouterr().err
     assert main(["recompute", str(exp_id), "--force"]) == 0
     assert db.query_one("SELECT orders FROM experiments WHERE id = ?", (exp_id,))["orders"] == 1
+
+
+# =========================================================================
+# v1.0 additions
+# =========================================================================
+def test_cash_open_once_is_idempotent(env, capsys):
+    """A startup script must not double the budget on every restart."""
+    assert main(["cash", "open", "--once"]) == 0
+    capsys.readouterr()
+    assert main(["cash", "open", "--once"]) == 0
+    assert "already open" in capsys.readouterr().out
+    db = db_of(env)
+    assert db.query_one("SELECT COUNT(*) AS n FROM cash_flow")["n"] == 1
+
+
+def test_cash_open_without_once_still_records_a_second_entry(env, capsys):
+    main(["cash", "open"])
+    main(["cash", "open"])
+    capsys.readouterr()
+    db = db_of(env)
+    assert db.query_one("SELECT COUNT(*) AS n FROM cash_flow")["n"] == 2
+
+
+def test_health_lists_all_four_stop_conditions(env, capsys):
+    main(["cash", "open", "--once"])
+    capsys.readouterr()
+    assert main(["health"]) == 0
+    out = capsys.readouterr().out
+    for condition in ("no_profitable_products", "cash_negative_streak",
+                      "stalled_kill_approval", "ad_spend_outruns_revenue"):
+        assert condition in out
+
+
+def test_health_exits_two_on_a_stalled_kill_decision(env, capsys, tmp_path):
+    from datetime import timedelta
+    from src.db import utcnow
+
+    main(["cash", "open", "--once"])
+    main(["tick"])
+    capsys.readouterr()
+    db = db_of(env)
+    exp_id = db.query_one("SELECT id FROM experiments WHERE product_id = 'ae-1'")["id"]
+    db.insert(
+        "human_approvals",
+        {
+            "experiment_id": exp_id,
+            "action": "kill",
+            "status": "pending",
+            "requested_at": (utcnow() - timedelta(hours=100)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "reason": "CTR too low",
+        },
+    )
+    assert main(["health"]) == 2
+    out = capsys.readouterr().out
+    assert "TRIGGERED" in out
+    assert "unanswered for more than 72h" in out
+
+
+def test_export_writes_a_csv(env, capsys, tmp_path):
+    main(["cash", "open", "--once"])
+    main(["tick"])
+    capsys.readouterr()
+    out_path = tmp_path / "experiments.csv"
+    assert main(["export", "experiments", "--out", str(out_path)]) == 0
+    assert "wrote" in capsys.readouterr().out
+    text = out_path.read_text()
+    assert "product_id" in text
+    assert "ae-1" in text
+
+
+def test_export_of_an_empty_table_is_not_an_error(env, capsys, tmp_path):
+    assert main(["export", "orders", "--out", str(tmp_path / "o.csv")]) == 0
+    assert "no rows" in capsys.readouterr().out
+
+
+def test_weekly_reports_profitable_products_found(env, capsys):
+    main(["cash", "open", "--once"])
+    main(["tick"])
+    capsys.readouterr()
+    main(["weekly"])
+    assert "profitable_products" in capsys.readouterr().out

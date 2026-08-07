@@ -10,12 +10,13 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.config import CashConfig, Config, DiscoveryConfig, GateConfig, StopConfig
-from mvv.human_gate import ApprovalAction, HumanGate
-from mvv.metrics import MetricsSnapshot, StaticMetricsProvider
-from mvv.models import Status
-from mvv.orchestrator import Orchestrator
-from mvv.scout import FixtureSource, Scout
+from src.config import CashConfig, Config, DiscoveryConfig, GateConfig, StopConfig
+from src.agents.human_gate import ApprovalAction, HumanGate
+from src.agents.metrics import MetricsSnapshot, StaticMetricsProvider
+from src.models import Status
+from src.agents.orchestrator import Orchestrator
+from src.agents.scout import Scout
+from src.agents.sources import FixtureSource
 
 from .conftest import make_experiment
 

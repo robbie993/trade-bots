@@ -7,8 +7,8 @@ from decimal import Decimal
 
 import pytest
 
-from mvv.models import CashFlowEntry, Experiment, Order, Status
-from mvv.money import D, money, percent, ratio_pct, safe_div
+from src.models import CashFlowEntry, Experiment, Order, Status
+from src.money import D, money, percent, ratio_pct, safe_div
 
 from .conftest import make_experiment
 

@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from mvv.cash import CashLedger
-from mvv.config import CashConfig, Config, DiscoveryConfig, GateConfig, StopConfig
-from mvv.db import Database
-from mvv.human_gate import HumanGate
-from mvv.ledger import ExperimentLedger
-from mvv.models import Experiment
-from mvv.notifications import NullNotifier
+from src.agents.cash_ledger import CashLedger
+from src.config import CashConfig, Config, DiscoveryConfig, GateConfig, StopConfig
+from src.db import Database
+from src.agents.human_gate import HumanGate
+from src.agents.experiment_ledger import ExperimentLedger
+from src.models import Experiment
+from src.notifications import NullNotifier
 
 
 @pytest.fixture

@@ -8,19 +8,22 @@ version = "1.0.0"
 description = "Minimum Viable Village Phase 1 — the Experiment Ledger"
 readme = "README.md"
 requires-python = ">=3.10"
-# No runtime dependencies. Phase 1 runs on the standard library plus SQLite.
-# Postgres and the test runner are opt-in extras below.
+# The core loop runs on the standard library alone. Everything else is an
+# extra, so the thing that decides whether to spend money has no supply chain.
+# requirements.txt installs the full stack from spec section 11.2.
 dependencies = []
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
-dev = ["pytest>=7.4"]
+web = ["fastapi>=0.100.0", "uvicorn>=0.23.0", "pydantic>=2.0.0", "python-multipart>=0.0.6"]
+analysis = ["pandas>=2.0.0", "numpy>=1.24.0"]
+dev = ["pytest>=7.4", "httpx>=0.24.0"]
 
 [project.scripts]
-mvv = "mvv.cli:main"
+mvv = "src.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["mvv*"]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
