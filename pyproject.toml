@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mvv"
+version = "1.0.0"
+description = "Minimum Viable Village Phase 1 — the Experiment Ledger"
+readme = "README.md"
+requires-python = ">=3.10"
+# No runtime dependencies. Phase 1 runs on the standard library plus SQLite.
+# Postgres and the test runner are opt-in extras below.
+dependencies = []
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+mvv = "mvv.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mvv*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

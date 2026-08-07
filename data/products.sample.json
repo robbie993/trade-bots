@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Fixture products for the Scout. These are illustrative examples, not a",
+    "curated winners list — the point of Phase 1 is that the system decides,",
+    "not that the list is good. Replace with products you actually found.",
+    "unit_cost and shipping_cost are what the supplier charges you; leave",
+    "selling_price at 0 to let the Economic Calculator suggest one."
+  ],
+  "products": [
+    {
+      "product_id": "ae-10050012",
+      "product_name": "Magnetic USB-C cable, 3-pack",
+      "source_platform": "aliexpress",
+      "supplier": "Shenzhen Yuxin Electronics",
+      "unit_cost": 3.10,
+      "shipping_cost": 1.40,
+      "selling_price": 0,
+      "url": "https://example.invalid/product/10050012"
+    },
+    {
+      "product_id": "ae-10050137",
+      "product_name": "Collapsible silicone travel kettle",
+      "source_platform": "aliexpress",
+      "supplier": "Ningbo Hongxin Housewares",
+      "unit_cost": 11.80,
+      "shipping_cost": 4.20,
+      "selling_price": 0,
+      "url": "https://example.invalid/product/10050137"
+    },
+    {
+      "product_id": "temu-88213",
+      "product_name": "LED sunset projector lamp",
+      "source_platform": "temu",
+      "supplier": "Guangzhou Lumi Trading",
+      "unit_cost": 6.40,
+      "shipping_cost": 2.00,
+      "selling_price": 0,
+      "url": "https://example.invalid/goods/88213"
+    },
+    {
+      "product_id": "temu-88450",
+      "product_name": "Stainless steel pet water fountain",
+      "source_platform": "temu",
+      "supplier": "Foshan Petcare Co",
+      "unit_cost": 14.90,
+      "shipping_cost": 6.10,
+      "selling_price": 0,
+      "url": "https://example.invalid/goods/88450"
+    },
+    {
+      "product_id": "ae-10051880",
+      "product_name": "Bulk phone case, unbranded",
+      "source_platform": "aliexpress",
+      "supplier": "Dongguan Kase",
+      "unit_cost": 1.20,
+      "shipping_cost": 3.90,
+      "selling_price": 5.50,
+      "url": "https://example.invalid/product/10051880",
+      "_note": "Deliberately unviable: at $5.50 there is no room for any ad spend. The calculator should reject it before a cent is at risk."
+    }
+  ]
+}

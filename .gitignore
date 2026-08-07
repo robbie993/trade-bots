@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Local state — never commit the ledger or the operator's secrets.
+.env
+data/*.db
+data/*.db-journal
+data/notifications.log
+data/metrics.json
+data/products.json
+
+# Keep the shipped fixture.
+!data/products.sample.json
+
+.pytest_cache/
+.coverage
+htmlcov/
