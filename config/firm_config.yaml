@@ -1,0 +1,92 @@
+# The firms — section 2.3 of the build document.
+#
+# Edit this file to add, retire or re-scope a firm, then run:
+#   python -m src.main trade init
+#
+# `init` never re-funds a firm that already exists: capital only moves through
+# the brokerage's allocator, and the allocator needs a human to raise it. What
+# `init` will update is the mandate — name, universe, analysts, genome.
+#
+# Every symbol here is resolved through the configured data source. The default
+# source is `synthetic`, a seeded random walk, so this file works out of the
+# box with no market data subscription. Point TRADE_DATA_SOURCE at `csv` or
+# `yahoo` when you want real prices; the symbols below are real tickers so the
+# switch needs no other change.
+
+firms:
+  firm_a_etf:
+    name: "ETF Specialist"
+    asset_class: "ETF"
+    strategy: "momentum_reversion"
+    venue: "paper"
+    risk_limit: 0.02          # fraction of allocation risked per new position
+    capital_allocation: 100000
+    universe:
+      - SPY
+      - QQQ
+      - IWM
+      - DIA
+      - EFA
+    analysts:
+      - fundamental
+      - technical
+      - sentiment
+    genome:
+      fast_window: 10
+      slow_window: 30
+      rsi_window: 14
+      trend_bias: 65          # 100 = pure momentum, 0 = pure mean reversion
+      value_window: 90
+      fair_band_pct: 8
+      calm_vol_pct: 35
+
+  firm_b_stocks:
+    name: "Stock Picker"
+    asset_class: "Equities"
+    strategy: "value_growth"
+    venue: "paper"
+    risk_limit: 0.03
+    capital_allocation: 100000
+    universe:
+      - AAPL
+      - MSFT
+      - NVDA
+      - JNJ
+      - XOM
+      - KO
+    analysts:
+      - fundamental
+      - technical
+      - macro
+    genome:
+      fast_window: 12
+      slow_window: 50
+      rsi_window: 14
+      trend_bias: 35          # this pod leans toward buying what is cheap
+      value_window: 120
+      fair_band_pct: 6
+      calm_vol_pct: 30
+
+  firm_c_crypto:
+    name: "Crypto Trader"
+    asset_class: "Cryptocurrency"
+    strategy: "momentum"
+    venue: "paper"
+    risk_limit: 0.05
+    capital_allocation: 50000
+    universe:
+      - BTC-USD
+      - ETH-USD
+      - SOL-USD
+    analysts:
+      - technical
+      - sentiment
+      - onchain
+    genome:
+      fast_window: 7
+      slow_window: 21
+      rsi_window: 10
+      trend_bias: 85          # crypto pod is almost pure momentum
+      value_window: 60
+      fair_band_pct: 15
+      calm_vol_pct: 70

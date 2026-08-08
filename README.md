@@ -111,9 +111,16 @@ src/
 │   ├── backends.py         one class per reviewer
 │   ├── file_court.py       escalation, verdicts, the docket
 │   └── watcher.py          uploads/ -> review -> processed/
+├── trading/                the Trading Edition — see TRADING.md
+│   ├── firms/              analysts, bull/bear, trader, risk, kill switch
+│   ├── brokerage/          reconcile, evaluate, allocate, rank, KILL_ALL
+│   ├── brain/              memory, genome evolution, lessons
+│   ├── heart/              six moral foundations, allow/warn/block
+│   ├── data/ execution/ gateway/ audit/
+│   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
-    └── migrations/         001-006, Postgres + a sqlite/ mirror
+    └── migrations/         001-006 products, 007-010 trading; Postgres + sqlite/
 ```
 
 Deliberately **not** built (spec §2.1): sharks, government, alliances, black
@@ -124,6 +131,20 @@ The **court system** was on that list and has since been built — see
 [VILLAGE.md](VILLAGE.md). It reviews files and writes to its own `file_cases`
 table. It does not touch experiments, budgets or approvals: every dollar still
 goes through the human gate of §6.
+
+The **Trading Edition** has since been built too — see [TRADING.md](TRADING.md).
+Competing trading firms under a brokerage that cuts the losers, with the same
+asymmetry in front of every decision: it may always close a position, pause a
+firm or take capital back on its own, and it may never open a live order or
+raise an allocation without an approved row in the same `human_approvals`
+table. It trades on a paper venue by default and shares nothing with the
+product village except the database, the gate and the principle.
+
+```bash
+python -m src.main trade init
+python -m src.main trade simulate --days 120
+python -m src.main trade leaderboard
+```
 
 ---
 

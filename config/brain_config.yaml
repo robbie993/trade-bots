@@ -1,0 +1,69 @@
+# The brain and the heart — sections 4.1 to 4.4 of the build document.
+#
+# As with brokerage_config.yaml, the code reads the environment; this file is
+# the annotated map of what each setting does and which variable sets it.
+
+# Evolution — src/trading/brain/evolver.py
+#
+# One generation mutates the incumbent genome, backtests every candidate on
+# identical bars, and promotes the winner only if it beat the incumbent on
+# that same data. The seed makes the whole thing replayable: same seed, same
+# data, same survivors, on any machine.
+brain:
+  population: 8             # export TRADE_EVO_POPULATION=8
+  mutation_rate: 0.25       # export TRADE_EVO_MUTATION_RATE=0.25
+  mutation_scale: 0.20      # export TRADE_EVO_MUTATION_SCALE=0.20
+  survivors: 3              # export TRADE_EVO_SURVIVORS=3
+  seed: 20260808            # export TRADE_EVO_SEED=20260808
+  promote_winners: true     # export TRADE_EVO_PROMOTE=1
+  memory_recall_limit: 20   # export TRADE_MEMORY_RECALL=20
+
+# The genes the evolver turns, with their ranges. Defined in
+# src/trading/brain/evolver.py:GENES; listed here so a firm's genome block in
+# firm_config.yaml can be written without reading the source.
+genes:
+  fast_window:    "3-30      short moving average"
+  slow_window:    "20-120    long moving average (always > fast)"
+  rsi_window:     "5-30      RSI lookback"
+  trend_bias:     "0-100     100 = pure momentum, 0 = pure mean reversion"
+  value_window:   "30-150    the 'fair value' anchor"
+  fair_band_pct:  "2-25      how far from the anchor still counts as fair"
+  calm_vol_pct:   "10-90     above this cross-sectional vol, macro sizes down"
+
+# The heart — src/trading/heart/conscience.py
+#
+# Six moral foundations, each returning allow / warn / block on every trade:
+#   care        don't destroy the capital you were entrusted with
+#   fairness    no wash trades, no churn
+#   loyalty     stay inside the firm's mandated universe
+#   authority   respect pauses, kills and venue approvals
+#   sanctity    keep out of what the operator declared off-limits
+#   liberty     never take a position that cannot be exited
+#
+# The build document points at lex-conscience for this. That repository is not
+# reachable, so the foundation model is implemented natively — which is the
+# better outcome anyway: every check is a pure function of the proposal, the
+# book and the market, so an ethics verdict can never be unavailable.
+heart:
+  block_on_warn: false          # export TRADE_ETHICS_STRICT=1  — warns become blocks
+  concentration_warn_pct: 40.0  # export TRADE_ETHICS_CONCENTRATION_PCT=40.0
+  max_round_trips_per_session: 4  # export TRADE_MAX_ROUND_TRIPS=4
+  restricted_symbols: []        # export TRADE_RESTRICTED_SYMBOLS=TSLA,GME
+
+# The gateway — src/trading/gateway/omniroute.py
+#
+# Off by default, and it only ever writes narration. No signal, no size, no
+# risk verdict and no score comes from a language model, so the loop runs at
+# full speed whether or not this is reachable.
+gateway:
+  enabled: false                        # export TRADE_GATEWAY_ENABLED=1
+  base_url: "http://localhost:20128/v1" # export TRADE_GATEWAY_URL=...
+  model: "claude-sonnet-5"              # export TRADE_GATEWAY_MODEL=...
+  timeout_s: 30                         # export TRADE_GATEWAY_TIMEOUT_S=30
+  max_tokens: 600                       # export TRADE_GATEWAY_MAX_TOKENS=600
+  # export TRADE_GATEWAY_KEY=...        (never written to the ledger or vault)
+
+# The audit trail — src/trading/audit/obsidian_logger.py
+# Plain Markdown with wiki-links: open vault/ in Obsidian, or read it with cat.
+audit:
+  vault: vault              # export TRADE_AUDIT_VAULT=vault

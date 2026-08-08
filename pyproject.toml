@@ -15,6 +15,10 @@ dependencies = []
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
+# The trading edition reads config/firm_config.yaml. PyYAML is used when it is
+# present; without it, src/trading/firms/spec.py parses the subset the file
+# actually uses, so adding a firm never requires a dependency.
+trading = ["PyYAML>=6.0"]
 web = ["fastapi>=0.100.0", "uvicorn>=0.23.0", "pydantic>=2.0.0", "python-multipart>=0.0.6"]
 analysis = ["pandas>=2.0.0", "numpy>=1.24.0"]
 dev = ["pytest>=7.4", "httpx>=0.24.0"]

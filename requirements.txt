@@ -33,3 +33,10 @@ numpy>=1.24.0
 # Tests.
 pytest>=7.4.0
 httpx>=0.24.0            # FastAPI TestClient transport
+
+# The Trading Edition (src/trading), see TRADING.md. Optional, like everything
+# else here: config/firm_config.yaml is parsed by PyYAML when it is installed
+# and by a small strict parser in src/trading/firms/spec.py when it is not, so
+# adding a trading firm never requires a dependency. Market data, execution,
+# scoring, ethics and the kill switches are all standard library.
+PyYAML>=6.0

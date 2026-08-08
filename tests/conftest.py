@@ -85,6 +85,116 @@ def healthy() -> Experiment:
     return make_experiment()
 
 
+# =========================================================================
+# Trading Edition (src/trading)
+# =========================================================================
+@pytest.fixture
+def trading_config(tmp_path):
+    """A trading config pinned to tmp_path, with a fixed data seed.
+
+    The seed matters: every trading test that touches prices must be
+    reproducible, so no test may depend on the ambient TRADE_* environment.
+    """
+    from src.trading.config import DataConfig, TradingConfig
+
+    return TradingConfig(
+        firms_config=tmp_path / "firms.yaml",
+        audit_vault=tmp_path / "vault",
+        vendor_dir=tmp_path / "vendor",
+        data=DataConfig(source="synthetic", seed=12345, history_days=180),
+    )
+
+
+@pytest.fixture
+def feed(trading_config):
+    from src.trading.data.feeds import SyntheticFeed
+
+    return SyntheticFeed(seed=trading_config.data.seed, days=trading_config.data.history_days)
+
+
+@pytest.fixture
+def market(feed):
+    from src.trading.data.market_data import MarketData
+
+    return MarketData(feed, ["SPY", "QQQ", "BTC-USD"])
+
+
+@pytest.fixture
+def store(db):
+    from src.trading.store import TradingStore
+
+    return TradingStore(db)
+
+
+@pytest.fixture
+def firm_record(store):
+    """One funded firm, saved, with a universe the market fixture covers."""
+    from src.trading.models import FirmRecord
+
+    return store.upsert_firm(
+        FirmRecord(
+            firm_key="test_firm",
+            name="Test Firm",
+            asset_class="ETF",
+            allocation=Decimal("100000.00"),
+            initial_allocation=Decimal("100000.00"),
+            cash=Decimal("100000.00"),
+            high_water_mark=Decimal("100000.00"),
+            risk_limit=Decimal("0.02"),
+            universe=["SPY", "QQQ"],
+            genome={"fast_window": 10, "slow_window": 30, "trend_bias": 60},
+        )
+    )
+
+
+@pytest.fixture
+def firms_yaml(tmp_path) -> Path:
+    path = tmp_path / "firms.yaml"
+    path.write_text(
+        "firms:\n"
+        "  alpha:\n"
+        "    name: \"Alpha\"\n"
+        "    asset_class: ETF\n"
+        "    risk_limit: 0.02\n"
+        "    capital_allocation: 50000\n"
+        "    universe:\n"
+        "      - SPY\n"
+        "      - QQQ\n"
+        "    analysts:\n"
+        "      - technical\n"
+        "      - sentiment\n"
+        "    genome:\n"
+        "      trend_bias: 70\n"
+        "  beta:\n"
+        "    name: \"Beta\"\n"
+        "    asset_class: Crypto\n"
+        "    capital_allocation: 25000\n"
+        "    universe: [BTC-USD]\n"
+        "    analysts: [technical]\n"
+    )
+    return path
+
+
+@pytest.fixture
+def ecosystem(db, tmp_path, firms_yaml, notifier):
+    """A fully wired ecosystem on a temp database, with firms created."""
+    from src.trading.config import DataConfig, TradingConfig
+    from src.trading.ecosystem import Ecosystem
+
+    config = TradingConfig(
+        firms_config=firms_yaml,
+        audit_vault=tmp_path / "vault",
+        vendor_dir=tmp_path / "vendor",
+        data=DataConfig(source="synthetic", seed=12345, history_days=180),
+    )
+    app_config = Config(
+        database_url=db.url, notification_log=tmp_path / "notifications.log"
+    )
+    eco = Ecosystem(db, config, app_config, notifier)
+    eco.init_firms()
+    return eco
+
+
 @pytest.fixture
 def fixture_file(tmp_path) -> Path:
     path = tmp_path / "products.json"
