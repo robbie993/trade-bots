@@ -20,3 +20,9 @@ data/products.json
 .pytest_cache/
 .coverage
 htmlcov/
+
+# File Court working directories and the third-party reviewer clone.
+uploads/
+processed/
+logs/
+CodeTribunal/

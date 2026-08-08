@@ -144,6 +144,84 @@ class StopConfig:
 
 
 @dataclass(frozen=True)
+class CourtConfig:
+    """The File Court — escalation thresholds and reviewer wiring.
+
+    The bands come from the deployment spec (>70 GUILTY, >40 MIXED). They are
+    Decimal for the same reason the money is: these numbers decide an outcome,
+    and a verdict that flips on binary rounding is not auditable.
+    """
+
+    # Where the CodeTribunal clone lives. It is a Hugging Face *Space*:
+    #   git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal
+    codetribunal_path: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("MVV_CODETRIBUNAL_PATH", str(REPO_ROOT / "CodeTribunal"))
+        )
+    )
+    # Empty = autodetect (src/code_tribunal/app.py, else main.py). Set this
+    # only to force a root-level script the detector would not pick.
+    codetribunal_entrypoint: str = field(
+        default_factory=lambda: os.environ.get("MVV_CODETRIBUNAL_ENTRYPOINT", "")
+    )
+    # Arguments after `--file <path>`. The Space's CLI may not accept
+    # `--output json`; blank the variable if it rejects them.
+    codetribunal_args: tuple = field(
+        default_factory=lambda: tuple(
+            a for a in os.environ.get(
+                "MVV_CODETRIBUNAL_ARGS", "--output json"
+            ).split() if a
+        )
+    )
+    uploads_dir: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("MVV_UPLOADS_DIR", str(REPO_ROOT / "uploads"))
+        )
+    )
+    processed_dir: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("MVV_PROCESSED_DIR", str(REPO_ROOT / "processed"))
+        )
+    )
+    log_path: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("MVV_COURT_LOG", str(REPO_ROOT / "logs" / "village.log"))
+        )
+    )
+    watch_extensions: tuple = field(
+        default_factory=lambda: tuple(
+            e.strip() if e.strip().startswith(".") else f".{e.strip()}"
+            for e in os.environ.get("MVV_COURT_EXTENSIONS", ".zip,.py,.js,.md").split(",")
+            if e.strip()
+        )
+    )
+    watch_interval_s: int = field(
+        default_factory=lambda: _env_int("MVV_COURT_INTERVAL_S", 60)
+    )
+    backend_timeout_s: int = field(
+        default_factory=lambda: _env_int("MVV_COURT_TIMEOUT_S", 600)
+    )
+    # Escalation: run the adversarial reviewer above this score, the full
+    # panel above the next one.
+    tribunal_above: Decimal = field(
+        default_factory=lambda: _env_decimal("MVV_COURT_TRIBUNAL_ABOVE", "30")
+    )
+    panel_above: Decimal = field(
+        default_factory=lambda: _env_decimal("MVV_COURT_PANEL_ABOVE", "50")
+    )
+    mixed_above: Decimal = field(
+        default_factory=lambda: _env_decimal("MVV_COURT_MIXED_ABOVE", "40")
+    )
+    guilty_above: Decimal = field(
+        default_factory=lambda: _env_decimal("MVV_COURT_GUILTY_ABOVE", "70")
+    )
+    # Yama (npm install -g @juspay/yama) is off until the operator opts in.
+    yama_enabled: bool = field(
+        default_factory=lambda: _env_bool("MVV_COURT_YAMA", False)
+    )
+
+
+@dataclass(frozen=True)
 class Config:
     database_url: str = field(
         default_factory=lambda: os.environ.get(
@@ -181,6 +259,7 @@ class Config:
     gate: GateConfig = field(default_factory=GateConfig)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
     stop: StopConfig = field(default_factory=StopConfig)
+    court: CourtConfig = field(default_factory=CourtConfig)
 
 
 def load_config() -> Config:

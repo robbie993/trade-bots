@@ -11,9 +11,17 @@ from src.db import Database, sum_decimal, to_datetime, to_iso
 
 
 def test_schema_creates_the_spec_tables(db):
-    assert db.table_names() >= [
-        "cash_flow", "experiment_events", "experiments", "human_approvals", "orders",
-    ]
+    # Superset, not `>=`: on lists that operator compares lexicographically,
+    # so it passed by accident and would break on any alphabetically-early
+    # table added later (`file_cases` is what caught it).
+    assert set(db.table_names()) >= {
+        "cash_flow",
+        "experiment_events",
+        "experiments",
+        "file_cases",
+        "human_approvals",
+        "orders",
+    }
 
 
 def test_init_schema_is_idempotent(db):
@@ -123,7 +131,7 @@ def test_postgres_migrations_match_the_sqlite_ones():
     pg_files = sorted(p.name for p in MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
     lite_files = sorted(p.name for p in (MIGRATIONS / "sqlite").glob("[0-9][0-9][0-9]_*.sql"))
     assert pg_files == lite_files
-    assert len(pg_files) == 5
+    assert len(pg_files) == 6
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())

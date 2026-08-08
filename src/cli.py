@@ -38,6 +38,7 @@ from .money import D, fmt_money, fmt_pct
 from .notifications import build_notifier
 from .agents.orchestrator import Orchestrator, TickReport
 from .agents.scout import build_scout
+from .court.file_court import FileCourt
 
 
 def _context(args) -> tuple[Config, Database]:
@@ -484,6 +485,100 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_court_review(args) -> int:
+    config, db = _context(args)
+    court = FileCourt(db, config.court)
+    case = court.process_file(args.file)
+    score = case.risk_score if case.risk_score is not None else "n/a"
+    print(f"{case.file_name}: {case.verdict}  (risk {score})")
+    print(f"  {case.summary}")
+    for outcome in case.outcomes:
+        mark = "ok  " if outcome.counted else "SKIP"
+        detail = str(outcome.score) if outcome.counted else outcome.error
+        print(f"  [{mark}] {outcome.backend}: {detail}")
+    if case.unreviewed:
+        print("\nNo reviewer ran. This file is UNREVIEWED, not cleared —")
+        print("run `court doctor` to see what is missing.")
+    return 0
+
+
+def cmd_court_docket(args) -> int:
+    config, db = _context(args)
+    rows = FileCourt(db, config.court).cases(args.limit)
+    print(
+        _table(
+            [
+                {
+                    "id": r["id"],
+                    "file": str(r["file_name"])[:36],
+                    "verdict": r["verdict"],
+                    "risk": r["risk_score"] if r["risk_score"] is not None else "-",
+                }
+                for r in rows
+            ],
+            ["id", "file", "verdict", "risk"],
+        )
+    )
+    return 0
+
+
+def cmd_court_pending(args) -> int:
+    config, db = _context(args)
+    rows = FileCourt(db, config.court).pending(args.limit)
+    if not rows:
+        print("nothing pending")
+        return 0
+    print(
+        _table(
+            [
+                {"id": r["id"], "file": str(r["file_name"])[:40], "summary": str(r["summary"])[:48]}
+                for r in rows
+            ],
+            ["id", "file", "summary"],
+        )
+    )
+    print("\nThese need a reviewer you have to trigger yourself, in Claude Code:")
+    print("  /tribunal                        adversarial review")
+    print("  /roundtable:agent-review-panel   multi-agent jury")
+    return 0
+
+
+def cmd_court_watch(args) -> int:
+    from .court.watcher import Watcher
+
+    config, db = _context(args)
+    watcher = Watcher(FileCourt(db, config.court), config.court)
+    if args.once:
+        cases = watcher.process_once()
+        print(f"{len(cases)} file(s) processed")
+        return 0
+    watcher.run_forever()  # pragma: no cover - long-running
+    return 0
+
+
+def cmd_court_doctor(args) -> int:
+    """Say plainly which reviewers can actually run. No silent defaults."""
+    from .court.backends import build_backends
+
+    config, _ = _context(args)
+    backends = build_backends(config.court)
+    usable = 0
+    for tier in ("tier1", "tier2", "tier3"):
+        for backend in backends.get(tier, []):
+            ok, why = backend.is_available()
+            usable += 1 if ok else 0
+            print(f"[{'OK ' if ok else '   '}] {tier} {backend.name}: {why or 'ready'}")
+    print()
+    if usable:
+        print(f"{usable} reviewer(s) can score a file.")
+    else:
+        print("No reviewer can score a file — every case will come back")
+        print("UNREVIEWED until you install one. Start with CodeTribunal:")
+        print("  git clone https://huggingface.co/amine-yagoub/CodeTribunal")
+        print(f"  (expected at {config.court.codetribunal_path})")
+    return 0
+
+
 def cmd_serve(args) -> int:  # pragma: no cover - long-running server
     """Serve the web approval gate (spec component 4, section 4.4)."""
     try:
@@ -628,6 +723,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--out", default="export.csv")
     p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("court", help="File Court — review a file, or the docket")
+    court_sub = p.add_subparsers(dest="court_command", required=True)
+    c = court_sub.add_parser("review", help="put one file through the court")
+    c.add_argument("file")
+    c.set_defaults(func=cmd_court_review)
+    c = court_sub.add_parser("docket", help="recent cases")
+    c.add_argument("--limit", type=int, default=20)
+    c.set_defaults(func=cmd_court_docket)
+    c = court_sub.add_parser("pending", help="cases still awaiting a reviewer")
+    c.add_argument("--limit", type=int, default=20)
+    c.set_defaults(func=cmd_court_pending)
+    c = court_sub.add_parser("watch", help="watch uploads/ and review what lands")
+    c.add_argument("--once", action="store_true", help="one sweep, then exit")
+    c.set_defaults(func=cmd_court_watch)
+    c = court_sub.add_parser("doctor", help="report which reviewers are installed")
+    c.set_defaults(func=cmd_court_doctor)
 
     p = sub.add_parser("serve", help="serve the web approval gate")
     p.add_argument("--host", default="127.0.0.1")
