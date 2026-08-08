@@ -78,10 +78,25 @@ else
     fi
 fi
 
-if [ -f "$CT_PATH/requirements.txt" ]; then
+# CodeTribunal ships a pyproject.toml (hatchling), not a requirements.txt.
+if [ -f "$CT_PATH/pyproject.toml" ]; then
+    say "Installing CodeTribunal (pip install -e .)"
+    python3 -m pip install -e "$CT_PATH" \
+        || { warn "pip install failed"; FAILED+=("codetribunal-deps"); }
+elif [ -f "$CT_PATH/requirements.txt" ]; then
     say "Installing CodeTribunal dependencies"
     python3 -m pip install -r "$CT_PATH/requirements.txt" \
         || { warn "pip install failed"; FAILED+=("codetribunal-deps"); }
+fi
+
+# Phase 1 of the tribunal shells out to the `grit` binary. Without it every
+# GritQL scan raises FileNotFoundError and the evidence phase finds nothing,
+# so the verdict would be built on an empty record.
+if [ -d "$CT_PATH" ] && ! command -v grit >/dev/null 2>&1; then
+    say "Installing GritQL CLI (CodeTribunal's evidence phase needs it)"
+    npm install -g @getgrit/cli \
+        || { warn "grit install failed — evidence phase will find nothing"
+             FAILED+=("gritql"); }
 fi
 
 for envfile in "$CT_PATH/.env.example" "$CT_PATH/.env.template"; do

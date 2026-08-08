@@ -138,24 +138,61 @@ Verdict bands: `> 70` GUILTY, `> 40` MIXED, else NOT_GUILTY, and `UNREVIEWED`
 when nothing scored it. All five thresholds are `Decimal` and configurable —
 see `CourtConfig` in `src/config.py`.
 
-### How CodeTribunal is invoked
+### How CodeTribunal is actually invoked
 
-The Space's layout is detected rather than assumed, so a restructure upstream
-does not silently break the tier:
+Read from the real source. Almost none of it is what the deployment prompt
+implied:
+
+| Assumption | Reality |
+|------------|---------|
+| `python -m code_tribunal.app` | `app.py` is a Gradio shim that imports `code_tribunal.ui.app`, a package the Space does not ship. **`code_tribunal.cli` is the headless entrypoint.** |
+| `--file <path>` | **`--path <path>`** |
+| `--output json` selects a format | **`--output` names a destination file.** `--output json` writes a file called `json`. |
+| JSON arrives on stdout | stdout is human-readable `click.echo` text; the JSON is written to the `--output` file |
+| there is a `risk_score` key | there is not. The shape is `{evidence, investigation, transcript, verdict, report, stats}` |
+
+So the score has to be read out of the `verdict` prose, which is whatever the
+Judge agent wrote — its task asks for a ruling plus a "Reputational Risk Score
+(0-100)". The adapter matches both, and `NOT GUILTY` is tested before `GUILTY`
+because the second is a substring of the first. A verdict with no readable
+score is reported unavailable, not guessed at.
+
+Layout detection, best first:
 
 | Found in the clone | Invocation |
 |--------------------|------------|
-| `src/code_tribunal/app.py` | `python -m code_tribunal.app`, with `src/` on `PYTHONPATH` |
+| `src/code_tribunal/cli.py` | `python -m code_tribunal.cli`, `src/` on `PYTHONPATH` |
+| `src/code_tribunal/app.py` | `python -m code_tribunal.app` (Gradio shim; likely to fail) |
 | `main.py` at the root | `python main.py` |
 | neither | unavailable, with the reason — never a score |
 
-Because it is a Gradio Space, its CLI path can print banners and warnings
-around the payload. The adapter takes the last JSON object it can parse out of
-stdout, so log noise is tolerated — but output with no parseable object at all
-is reported as unavailable rather than guessed at.
+`MVV_CODETRIBUNAL_ARGS` is for extra flags only (`--parallel`,
+`--evidence-only`); `--path` and `--output` are always supplied.
 
-If the Space's CLI does not accept `--output json`, clear
-`MVV_CODETRIBUNAL_ARGS` and it will be invoked with `--file <path>` alone.
+### Two things CodeTribunal needs that are easy to miss
+
+1. **The `grit` binary.** Phase 1 shells out to `grit apply --dry-run`. Without
+   it every scan raises `FileNotFoundError`, the evidence phase finds nothing,
+   and the trial proceeds on an empty record — a confident verdict over no
+   evidence. `npm install -g @getgrit/cli`.
+2. **It installs from `pyproject.toml`, not `requirements.txt`** — there is no
+   requirements file. Use `pip install -e .`.
+
+### Bugs in CodeTribunal itself
+
+Reproduced locally from the published source, in the order they would bite.
+All three stop the pipeline before a verdict exists, so the adapter reports
+`exit 1` and scores nothing rather than inventing a number.
+
+| File | Problem |
+|------|---------|
+| `pipeline.py` | `PipelineEvent` and `PipelineState` declare fields but carry no `@dataclass` decorator. `PipelineEvent(Phase.EVIDENCE, "…")` raises `TypeError: takes no arguments`, and every phase begins by yielding one. `asdict(self.state)` in `_save` needs a dataclass too. |
+| `cli.py` | `main()` has no `@click.command()` / `@click.option()` decorators, so `python -m code_tribunal.cli` and the `code-tribunal` console script both call it with no arguments: `TypeError: missing 4 required positional arguments`. |
+| `phases.py` | `run_verdict` does `judge_agent = judge_agent(config)`. Assigning that name makes it local for the whole function, so the read on the right-hand side raises `UnboundLocalError`. |
+
+`Courtroom.run()` also never calls `pipeline.create_run()`, so `pipeline.state`
+stays `None`; every `pipeline.update(...)` returns early and `cli.py`'s
+`if state and state.verdict` writes no report even on a clean run.
 
 ### The two interactive reviewers
 

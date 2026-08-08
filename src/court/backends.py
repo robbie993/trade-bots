@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -143,27 +146,67 @@ def extract_json(text: str) -> Optional[dict]:
     return found
 
 
+# "Reputational Risk Score: 82", "**Risk Score**: 82/100", "risk score - 82".
+_RISK_RE = re.compile(
+    r"(?:reputational\s+)?risk\s*score\W{0,8}(\d{1,3})(?!\s*%?\d)", re.IGNORECASE
+)
+# NOT GUILTY must be tested before GUILTY — the latter is a substring of it.
+_RULING_RE = re.compile(r"\b(NOT\s+GUILTY|GUILTY|MIXED)\b", re.IGNORECASE)
+
+
+def parse_verdict_text(text: str) -> tuple:
+    """(risk_score, ruling) pulled out of the Judge's free-text verdict.
+
+    CodeTribunal's JSON has no ``risk_score`` field. Its `verdict` value is
+    whatever the Judge agent wrote, which by its task spec contains a ruling
+    and a "Reputational Risk Score (0-100)". So the number has to be read out
+    of prose. Anything unreadable comes back as None rather than a guess.
+    """
+    if not text:
+        return None, ""
+
+    score = None
+    for match in _RISK_RE.finditer(text):
+        candidate = risk(match.group(1))
+        if candidate is not None:
+            score = candidate  # last mention wins: summaries restate it
+    ruling_match = _RULING_RE.search(text)
+    ruling = ""
+    if ruling_match:
+        ruling = "_".join(ruling_match.group(1).upper().split())
+    return score, ruling
+
+
 class CodeTribunalBackend(ReviewBackend):
     """CodeTribunal — forensic evidence, investigation, trial, verdict.
 
-    It is a Hugging Face **Space**, not a GitHub repo and not a model repo:
+    A Hugging Face **Space**, not a GitHub repo::
 
         git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal
-        cd CodeTribunal && pip install -r requirements.txt
-        cp .env.example .env      # then set ZAI_API_KEY
+        cd CodeTribunal && pip install -e . && cp .env.example .env
+        npm install -g @getgrit/cli      # phase 1 needs the grit binary
 
-    Point MVV_CODETRIBUNAL_PATH at the clone. Two layouts are recognised, so
-    this keeps working if the Space is restructured:
+    Its real CLI contract, which is not the obvious one:
 
-    * ``src/code_tribunal/app.py``  -> ``python -m code_tribunal.app``
-      (the current layout, run with src/ on PYTHONPATH)
-    * ``main.py`` at the root       -> ``python main.py``
+    * the headless entrypoint is ``code_tribunal.cli``. ``code_tribunal.app``
+      is a Gradio shim that imports ``code_tribunal.ui.app``;
+    * the argument is ``--path``, not ``--file``;
+    * ``--output`` names a **destination file**, not a format — passing
+      ``--output json`` writes a file called "json";
+    * stdout is human-readable click output, so the JSON has to be read back
+      from that destination file;
+    * the JSON has no ``risk_score`` key. Its shape is ``{evidence,
+      investigation, transcript, verdict, report, stats}`` and the score lives
+      in the ``verdict`` prose.
 
-    Until one of them is found the backend reports unavailable and scores
+    Until an entrypoint is found the backend reports unavailable and scores
     nothing.
     """
 
     name = "codetribunal"
+
+    #: candidate module entrypoints, best first
+    MODULES = ("code_tribunal.cli", "code_tribunal.app")
 
     def __init__(
         self,
@@ -175,39 +218,41 @@ class CodeTribunalBackend(ReviewBackend):
         self.path = Path(path)
         self.timeout_s = timeout_s
         self.entrypoint = entrypoint  # "" = autodetect
-        # `is not None`, not a truthiness check: an empty list means "pass no
-        # extra arguments", which a falsy test would silently override with
-        # the default and make --output json impossible to remove.
-        self.extra_args = (
-            list(extra_args) if extra_args is not None else ["--output", "json"]
-        )
+        # `is not None`, not a truthiness check: [] means "no extra arguments",
+        # which a falsy test would silently replace with the default.
+        self.extra_args = list(extra_args) if extra_args is not None else []
 
     # -- layout detection -------------------------------------------------
-    def _module_pkg(self) -> Optional[Path]:
-        candidate = self.path / "src" / "code_tribunal" / "app.py"
-        return candidate if candidate.exists() else None
+    def _package_dir(self) -> Optional[Path]:
+        candidate = self.path / "src" / "code_tribunal"
+        return candidate if candidate.is_dir() else None
+
+    def _module(self) -> Optional[str]:
+        pkg = self._package_dir()
+        if pkg is None:
+            return None
+        for dotted in self.MODULES:
+            if (pkg / f"{dotted.split('.')[-1]}.py").exists():
+                return dotted
+        return None
 
     def _root_script(self) -> Optional[Path]:
-        name = self.entrypoint or "main.py"
-        candidate = self.path / name
+        candidate = self.path / (self.entrypoint or "main.py")
         return candidate if candidate.exists() else None
 
     def invocation(self) -> Optional[tuple]:
         """(argv_prefix, env_overrides) for the detected layout, or None."""
         if self.entrypoint:
             script = self._root_script()
-            if script:
-                return ["python", str(script)], {}
-            return None
-        if self._module_pkg():
+            return ([sys.executable, str(script)], {}) if script else None
+        module = self._module()
+        if module:
             return (
-                ["python", "-m", "code_tribunal.app"],
+                [sys.executable, "-m", module],
                 {"PYTHONPATH": str((self.path / "src").resolve())},
             )
         script = self._root_script()
-        if script:
-            return ["python", str(script)], {}
-        return None
+        return ([sys.executable, str(script)], {}) if script else None
 
     def is_available(self) -> tuple[bool, str]:
         if not self.path.exists():
@@ -216,7 +261,7 @@ class CodeTribunalBackend(ReviewBackend):
             return (
                 False,
                 f"no entrypoint under {self.path} "
-                "(expected src/code_tribunal/app.py or main.py)",
+                "(expected src/code_tribunal/cli.py or main.py)",
             )
         return True, ""
 
@@ -226,56 +271,85 @@ class CodeTribunalBackend(ReviewBackend):
             return ReviewOutcome.unavailable(self.name, why)
 
         argv, env_overrides = self.invocation()
-        cmd = argv + ["--file", str(Path(file_path).resolve())] + self.extra_args
-        env = None
-        if env_overrides:
-            env = dict(os.environ)
-            env.update(env_overrides)
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_s,
-                cwd=str(self.path),
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            return ReviewOutcome.unavailable(
-                self.name, f"timed out after {self.timeout_s}s"
-            )
-        except OSError as exc:
-            return ReviewOutcome.unavailable(self.name, f"could not start: {exc}")
+        env = dict(os.environ)
+        env.update(env_overrides)
 
-        if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-            tail = detail[-1] if detail else "no output"
-            return ReviewOutcome.unavailable(
-                self.name, f"exit {proc.returncode}: {tail}"
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "verdict.json"
+            cmd = (
+                argv
+                + ["--path", str(Path(file_path).resolve())]
+                + ["--output", str(report_path)]
+                + self.extra_args
             )
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_s,
+                    cwd=str(self.path),
+                    env=env,
+                )
+            except subprocess.TimeoutExpired:
+                return ReviewOutcome.unavailable(
+                    self.name, f"timed out after {self.timeout_s}s"
+                )
+            except OSError as exc:
+                return ReviewOutcome.unavailable(self.name, f"could not start: {exc}")
 
-        if not (proc.stdout or "").strip():
-            # The bug this class exists to not have.
-            return ReviewOutcome.unavailable(self.name, "produced no output")
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+                tail = detail[-1] if detail else "no output"
+                return ReviewOutcome.unavailable(
+                    self.name, f"exit {proc.returncode}: {tail}"
+                )
 
-        payload = extract_json(proc.stdout)
-        if payload is None:
-            return ReviewOutcome.unavailable(
-                self.name, "unparseable output: no JSON object found"
-            )
+            payload = None
+            if report_path.exists():
+                try:
+                    payload = json.loads(report_path.read_text())
+                except (OSError, json.JSONDecodeError) as exc:
+                    return ReviewOutcome.unavailable(
+                        self.name, f"unreadable report file: {exc}"
+                    )
+            if not isinstance(payload, dict):
+                # Fall back to stdout in case a future version prints JSON.
+                payload = extract_json(proc.stdout)
+            if payload is None:
+                return ReviewOutcome.unavailable(
+                    self.name, "wrote no report and printed no JSON"
+                )
 
-        score = risk(payload.get("risk_score"))
+        return self._outcome_from(payload)
+
+    def _outcome_from(self, payload: dict) -> ReviewOutcome:
+        verdict_text = str(payload.get("verdict") or "")
+        score, ruling = parse_verdict_text(verdict_text)
+
+        # A future version might expose the score directly; prefer that.
+        explicit = risk(payload.get("risk_score"))
+        if explicit is not None:
+            score = explicit
+
         if score is None:
-            return ReviewOutcome.unavailable(
-                self.name, "no risk_score in CodeTribunal output"
+            hint = "verdict had no readable risk score" if verdict_text else "no verdict in report"
+            return ReviewOutcome.unavailable(self.name, hint)
+
+        stats = payload.get("stats") or {}
+        summary = "CodeTribunal"
+        if isinstance(stats, dict) and stats:
+            summary = (
+                f"{stats.get('total_findings', '?')} findings across "
+                f"{stats.get('files_scanned', '?')} files"
             )
 
         return ReviewOutcome(
             backend=self.name,
             available=True,
             score=score,
-            verdict=str(payload.get("verdict", "")).upper(),
-            summary=str(payload.get("summary", "")),
+            verdict=ruling,
+            summary=summary,
             raw=payload,
         )
 
