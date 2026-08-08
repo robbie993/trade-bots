@@ -1,0 +1,71 @@
+# The brokerage — section 3 of the build document.
+#
+# This file documents the oversight layer's settings and the environment
+# variable behind each one. The code reads the environment, not this file, so
+# that there is exactly one answer to "what is this system's risk surface?" —
+# `python -m src.main trade status` and `src/trading/config.py`. Copy the
+# `export` lines into your .env, or set them however you deploy.
+#
+# The one setting worth reading twice is `approve_increases`. Leave it on.
+
+brokerage:
+  # Score bands (0-100, computed by src/trading/brokerage/evaluator.py).
+  good_score: 60.0        # export TRADE_GOOD_SCORE=60.0        — at or above: more capital
+  poor_score: 40.0        # export TRADE_POOR_SCORE=40.0        — at or below: less capital
+  kill_score: 20.0        # export TRADE_KILL_SCORE=20.0
+
+  # Allocation steps, applied per evaluation.
+  increase_step: 1.10     # export TRADE_ALLOCATION_INCREASE=1.10
+  decrease_step: 0.90     # export TRADE_ALLOCATION_DECREASE=0.90
+  max_allocation_multiple: 3.0   # export TRADE_MAX_ALLOCATION_MULTIPLE=3.0
+  min_allocation: 1000.00        # export TRADE_MIN_ALLOCATION=1000.00
+  total_capital: 250000.00       # export TRADE_TOTAL_CAPITAL=250000.00
+
+  # THE asymmetry. True: the brokerage may cut capital by itself and must ask
+  # a human before adding any. Setting this false lets an automated score move
+  # real money upward with no person in the loop. Don't.
+  approve_increases: true  # export TRADE_APPROVE_INCREASES=1
+
+  # Reconciliation. The books must balance before any of the above happens;
+  # the allowance grows by a cent per fill to absorb price quantisation.
+  reconcile_tolerance: 0.05      # export TRADE_RECONCILE_TOLERANCE=0.05
+
+  # KILL_ALL: the whole ecosystem stops here.
+  ecosystem_max_drawdown_pct: 25.0  # export TRADE_ECOSYSTEM_MAX_DRAWDOWN_PCT=25.0
+
+# Per-firm kill switch — src/trading/firms/kill_switch.py.
+# Drawdown, single-trade loss and losing streaks fire immediately. Win rate
+# and Sharpe wait for `minimum_trades`, because below that they are noise.
+kill:
+  minimum_trades: 20            # export TRADE_MIN_TRADES=20
+  max_drawdown_pct: 20.0        # export TRADE_MAX_DRAWDOWN_PCT=20.0
+  min_win_rate_pct: 30.0        # export TRADE_MIN_WIN_RATE_PCT=30.0
+  min_sharpe: 0.5               # export TRADE_MIN_SHARPE=0.5
+  max_single_loss_pct: 10.0     # export TRADE_MAX_SINGLE_LOSS_PCT=10.0
+  max_consecutive_losses: 5     # export TRADE_MAX_CONSECUTIVE_LOSSES=5
+
+# Per-firm limits applied to every proposal — src/trading/firms/risk_manager.py.
+firm:
+  risk_limit: 0.02          # export TRADE_RISK_LIMIT=0.02        — per new position
+  max_position_pct: 0.25    # export TRADE_MAX_POSITION_PCT=0.25  — one name vs equity
+  max_positions: 8          # export TRADE_MAX_POSITIONS=8
+  cash_floor_pct: 0.05      # export TRADE_CASH_FLOOR_PCT=0.05    — never spent
+  min_confidence: 55.0      # export TRADE_MIN_CONFIDENCE=55.0    — to open risk
+  venue: paper              # export TRADE_VENUE=paper            — see below
+
+# Execution. `paper` is the only venue that trades without a human. Any other
+# value routes through src/trading/execution/live.py, which refuses to send an
+# order until a live_trading approval exists for that specific venue:
+#   python -m src.main trade live-request --venue alpaca
+#   python -m src.main approve <id> --by you
+execution:
+  slippage_bps: 5           # export TRADE_SLIPPAGE_BPS=5   — always against you
+  fee_bps: 2                # export TRADE_FEE_BPS=2
+
+# Market data. `synthetic` is a seeded random walk: no keys, no network, and
+# byte-identical on every machine. Switch to csv or yahoo for real prices.
+data:
+  source: synthetic         # export TRADE_DATA_SOURCE=synthetic|csv|yahoo
+  seed: 20260808            # export TRADE_DATA_SEED=20260808
+  history_days: 180         # export TRADE_HISTORY_DAYS=180
+  csv_dir: data/market      # export TRADE_DATA_DIR=data/market

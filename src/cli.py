@@ -39,6 +39,7 @@ from .notifications import build_notifier
 from .agents.orchestrator import Orchestrator, TickReport
 from .agents.scout import ProductCandidate, build_scout
 from .court.file_court import FileCourt
+from .trading.cli import add_trade_parser
 
 
 def _context(args) -> tuple[Config, Database]:
@@ -865,6 +866,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--metrics-source", default="manual", choices=["manual", "file"])
     p.add_argument("--metrics-file")
     p.set_defaults(func=cmd_run)
+
+    # The Trading Edition (src/trading). Same database, same approvals table,
+    # same asymmetry: `mvv approve` is still the only place permission is
+    # granted, whether the subject is a product or a firm.
+    add_trade_parser(sub)
 
     return parser
 

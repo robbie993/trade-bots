@@ -38,6 +38,12 @@ class ApprovalAction(str, Enum):
     SCALE_AD_SPEND = "scale"
     ADD_PLATFORM = "add_platform"
     KILL_ALL = "kill_all"
+    # Trading Edition (src/trading). Same gate, same table, same asymmetry:
+    # capital may always be taken back, and may never be handed out, without
+    # one of these being approved first.
+    ALLOCATE_CAPITAL = "allocate_capital"
+    KILL_FIRM = "kill_firm"
+    LIVE_TRADING = "live_trading"
 
 
 class ApprovalStatus(str, Enum):
@@ -157,11 +163,25 @@ class HumanGate:
         amount=None,
         details: Optional[dict] = None,
         notify: bool = True,
+        dedupe_key: Optional[str] = None,
     ) -> Approval:
-        """Record a pending request and tell the human. Spends nothing."""
-        existing = self.find_pending(action, experiment_id)
+        """Record a pending request and tell the human. Spends nothing.
+
+        Requests with no experiment behind them collapse onto one pending row
+        per action, which is right for KILL_ALL and wrong for anything that
+        can be pending for several *subjects* at once — three firms each
+        wanting more capital are three decisions, not one. Those callers pass
+        a ``dedupe_key`` (the firm, the venue) and get one pending row each.
+        """
+        existing = (
+            self.find_pending_by_key(action, dedupe_key)
+            if dedupe_key is not None
+            else self.find_pending(action, experiment_id)
+        )
         if existing is not None:
             return existing  # never spam the operator with duplicates
+        if dedupe_key is not None:
+            details = {**(details or {}), "dedupe_key": dedupe_key}
 
         approval_id = self.db.insert(
             "human_approvals",
@@ -293,6 +313,18 @@ class HumanGate:
                 (action, experiment_id, ApprovalStatus.PENDING.value),
             )
         return Approval.from_row(row) if row else None
+
+    def find_pending_by_key(self, action: str, dedupe_key: str) -> Optional[Approval]:
+        """The pending request for this action *and this subject*, if any."""
+        rows = self.db.query(
+            "SELECT * FROM human_approvals WHERE action = ? AND status = ? ORDER BY id DESC",
+            (action, ApprovalStatus.PENDING.value),
+        )
+        for row in rows:
+            approval = Approval.from_row(row)
+            if approval.details.get("dedupe_key") == dedupe_key:
+                return approval
+        return None
 
     def pending(self) -> list[Approval]:
         rows = self.db.query(

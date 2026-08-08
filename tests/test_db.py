@@ -21,6 +21,15 @@ def test_schema_creates_the_spec_tables(db):
         "file_cases",
         "human_approvals",
         "orders",
+        # Trading Edition — one schema, one database, one approvals table.
+        "brokerage_events",
+        "fills",
+        "firm_performance",
+        "firms",
+        "positions",
+        "strategy_genomes",
+        "trade_memory",
+        "trade_proposals",
     }
 
 
@@ -131,7 +140,8 @@ def test_postgres_migrations_match_the_sqlite_ones():
     pg_files = sorted(p.name for p in MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql"))
     lite_files = sorted(p.name for p in (MIGRATIONS / "sqlite").glob("[0-9][0-9][0-9]_*.sql"))
     assert pg_files == lite_files
-    assert len(pg_files) == 6
+    # 001-006 the product village, 007-010 the trading edition.
+    assert len(pg_files) == 10
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())

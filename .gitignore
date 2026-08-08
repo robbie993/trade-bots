@@ -26,3 +26,9 @@ uploads/
 processed/
 logs/
 CodeTribunal/
+
+# Trading Edition — the audit vault is this operator's trading record, and
+# vendor/ is other people's code. Neither belongs in this repository's history.
+vault/
+vendor/
+data/market/
