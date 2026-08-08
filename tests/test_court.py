@@ -396,6 +396,16 @@ def test_interactive_skills_never_fabricate_a_score(sample_file):
     assert "/tribunal" in outcome.error
 
 
+def test_tribunal_is_described_by_what_it_actually_reviews(court_config, sample_file):
+    """The real SKILL.md reviews a branch diff, not one file — say so."""
+    tribunal = build_backends(court_config)["tier2"][0]
+    error = tribunal.review(sample_file).error
+
+    assert "/tribunal" in error
+    assert "branch diff" in error
+    assert "suspect.py" not in error  # it never reviews a lone file
+
+
 def test_build_backends_wires_three_tiers(court_config):
     backends = build_backends(court_config)
     assert [b.name for b in backends["tier1"]] == ["codetribunal"]

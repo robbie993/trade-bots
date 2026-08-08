@@ -361,16 +361,21 @@ class InteractiveSkillBackend(ReviewBackend):
 
     name = "interactive"
 
-    def __init__(self, name: str, command: str):
+    def __init__(self, name: str, command: str, scope: str = ""):
         self.name = name
         self.command = command
+        # What the skill actually reviews. /tribunal works on the current
+        # branch's diff against a base branch, not on one file, so telling the
+        # operator to "run /tribunal on nasty.py" would misdescribe it.
+        self.scope = scope
 
     def is_available(self) -> tuple[bool, str]:
         return False, f"{self.command} is interactive — run it in Claude Code"
 
     def review(self, file_path: Path) -> ReviewOutcome:
+        where = f" ({self.scope})" if self.scope else f" on {Path(file_path).name}"
         return ReviewOutcome.unavailable(
-            self.name, f"awaiting operator: run {self.command} on {Path(file_path).name}"
+            self.name, f"awaiting operator: run {self.command}{where}"
         )
 
 
@@ -382,7 +387,11 @@ def build_backends(court_config) -> dict:
         entrypoint=court_config.codetribunal_entrypoint,
         extra_args=court_config.codetribunal_args,
     )
-    tier2 = InteractiveSkillBackend("tribunal", "/tribunal")
+    tier2 = InteractiveSkillBackend(
+        "tribunal",
+        "/tribunal",
+        scope="reviews the branch diff, not a single file",
+    )
     tier3 = InteractiveSkillBackend(
         "agent_review_panel", "/roundtable:agent-review-panel"
     )

@@ -574,7 +574,7 @@ def cmd_court_doctor(args) -> int:
     else:
         print("No reviewer can score a file — every case will come back")
         print("UNREVIEWED until you install one. Start with CodeTribunal:")
-        print("  git clone https://huggingface.co/amine-yagoub/CodeTribunal")
+        print("  git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal")
         print(f"  (expected at {config.court.codetribunal_path})")
     return 0
 
