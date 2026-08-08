@@ -152,11 +152,25 @@ class CourtConfig:
     and a verdict that flips on binary rounding is not auditable.
     """
 
-    # Where the CodeTribunal clone lives. It is a Hugging Face repo:
-    #   git clone https://huggingface.co/amine-yagoub/CodeTribunal
+    # Where the CodeTribunal clone lives. It is a Hugging Face *Space*:
+    #   git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal
     codetribunal_path: Path = field(
         default_factory=lambda: Path(
             os.environ.get("MVV_CODETRIBUNAL_PATH", str(REPO_ROOT / "CodeTribunal"))
+        )
+    )
+    # Empty = autodetect (src/code_tribunal/app.py, else main.py). Set this
+    # only to force a root-level script the detector would not pick.
+    codetribunal_entrypoint: str = field(
+        default_factory=lambda: os.environ.get("MVV_CODETRIBUNAL_ENTRYPOINT", "")
+    )
+    # Arguments after `--file <path>`. The Space's CLI may not accept
+    # `--output json`; blank the variable if it rejects them.
+    codetribunal_args: tuple = field(
+        default_factory=lambda: tuple(
+            a for a in os.environ.get(
+                "MVV_CODETRIBUNAL_ARGS", "--output json"
+            ).split() if a
         )
     )
     uploads_dir: Path = field(

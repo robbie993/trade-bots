@@ -98,34 +98,126 @@ class ReviewBackend:
         raise NotImplementedError
 
 
+def extract_json(text: str) -> Optional[dict]:
+    """Pull a JSON object out of output that may also contain log noise.
+
+    CodeTribunal is packaged as a Gradio Space, so its CLI path can emit
+    banners, download progress and warnings around the payload. Parsing the
+    whole of stdout is tried first; failing that, the last balanced ``{...}``
+    span that parses as an object wins, since the verdict is printed last.
+
+    Returns None rather than a guess when nothing parses — a reviewer whose
+    output cannot be read has not produced a score.
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        whole = json.loads(text)
+        if isinstance(whole, dict):
+            return whole
+    except json.JSONDecodeError:
+        pass
+
+    # Try to decode an object at each "{", keeping the last one that works.
+    #
+    # raw_decode does the brace matching, which matters more than it looks:
+    # a hand-rolled depth counter is derailed by an unbalanced brace in log
+    # noise ("Loading weights... {corrupt"), because the counter never returns
+    # to zero and every later object looks nested inside the garbage. Here a
+    # span that does not parse is simply skipped.
+    decoder = json.JSONDecoder()
+    found = None
+    i = text.find("{")
+    while i != -1:
+        try:
+            candidate, end = decoder.raw_decode(text, i)
+        except ValueError:
+            i = text.find("{", i + 1)
+            continue
+        if isinstance(candidate, dict):
+            found = candidate
+            i = text.find("{", max(end, i + 1))
+        else:
+            i = text.find("{", i + 1)
+    return found
+
+
 class CodeTribunalBackend(ReviewBackend):
     """CodeTribunal — forensic evidence, investigation, trial, verdict.
 
-    Lives at huggingface.co/amine-yagoub/CodeTribunal (a Hugging Face repo,
-    not GitHub):
+    It is a Hugging Face **Space**, not a GitHub repo and not a model repo:
 
-        git clone https://huggingface.co/amine-yagoub/CodeTribunal
+        git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal
         cd CodeTribunal && pip install -r requirements.txt
+        cp .env.example .env      # then set ZAI_API_KEY
 
-    Point MVV_CODETRIBUNAL_PATH at the clone. Until that directory exists this
-    backend reports unavailable and scores nothing.
+    Point MVV_CODETRIBUNAL_PATH at the clone. Two layouts are recognised, so
+    this keeps working if the Space is restructured:
+
+    * ``src/code_tribunal/app.py``  -> ``python -m code_tribunal.app``
+      (the current layout, run with src/ on PYTHONPATH)
+    * ``main.py`` at the root       -> ``python main.py``
+
+    Until one of them is found the backend reports unavailable and scores
+    nothing.
     """
 
     name = "codetribunal"
 
-    def __init__(self, path: Path, timeout_s: int = 600, entrypoint: str = "main.py"):
+    def __init__(
+        self,
+        path: Path,
+        timeout_s: int = 600,
+        entrypoint: str = "",
+        extra_args: Optional[list] = None,
+    ):
         self.path = Path(path)
         self.timeout_s = timeout_s
-        self.entrypoint = entrypoint
+        self.entrypoint = entrypoint  # "" = autodetect
+        # `is not None`, not a truthiness check: an empty list means "pass no
+        # extra arguments", which a falsy test would silently override with
+        # the default and make --output json impossible to remove.
+        self.extra_args = (
+            list(extra_args) if extra_args is not None else ["--output", "json"]
+        )
 
-    def _script(self) -> Path:
-        return self.path / self.entrypoint
+    # -- layout detection -------------------------------------------------
+    def _module_pkg(self) -> Optional[Path]:
+        candidate = self.path / "src" / "code_tribunal" / "app.py"
+        return candidate if candidate.exists() else None
+
+    def _root_script(self) -> Optional[Path]:
+        name = self.entrypoint or "main.py"
+        candidate = self.path / name
+        return candidate if candidate.exists() else None
+
+    def invocation(self) -> Optional[tuple]:
+        """(argv_prefix, env_overrides) for the detected layout, or None."""
+        if self.entrypoint:
+            script = self._root_script()
+            if script:
+                return ["python", str(script)], {}
+            return None
+        if self._module_pkg():
+            return (
+                ["python", "-m", "code_tribunal.app"],
+                {"PYTHONPATH": str((self.path / "src").resolve())},
+            )
+        script = self._root_script()
+        if script:
+            return ["python", str(script)], {}
+        return None
 
     def is_available(self) -> tuple[bool, str]:
         if not self.path.exists():
             return False, f"CodeTribunal not cloned at {self.path}"
-        if not self._script().exists():
-            return False, f"{self._script()} missing"
+        if self.invocation() is None:
+            return (
+                False,
+                f"no entrypoint under {self.path} "
+                "(expected src/code_tribunal/app.py or main.py)",
+            )
         return True, ""
 
     def review(self, file_path: Path) -> ReviewOutcome:
@@ -133,14 +225,12 @@ class CodeTribunalBackend(ReviewBackend):
         if not ok:
             return ReviewOutcome.unavailable(self.name, why)
 
-        cmd = [
-            "python",
-            str(self._script()),
-            "--file",
-            str(Path(file_path).resolve()),
-            "--output",
-            "json",
-        ]
+        argv, env_overrides = self.invocation()
+        cmd = argv + ["--file", str(Path(file_path).resolve())] + self.extra_args
+        env = None
+        if env_overrides:
+            env = dict(os.environ)
+            env.update(env_overrides)
         try:
             proc = subprocess.run(
                 cmd,
@@ -148,6 +238,7 @@ class CodeTribunalBackend(ReviewBackend):
                 text=True,
                 timeout=self.timeout_s,
                 cwd=str(self.path),
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return ReviewOutcome.unavailable(
@@ -167,13 +258,11 @@ class CodeTribunalBackend(ReviewBackend):
             # The bug this class exists to not have.
             return ReviewOutcome.unavailable(self.name, "produced no output")
 
-        try:
-            payload = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            return ReviewOutcome.unavailable(self.name, f"unparseable JSON: {exc}")
-
-        if not isinstance(payload, dict):
-            return ReviewOutcome.unavailable(self.name, "JSON was not an object")
+        payload = extract_json(proc.stdout)
+        if payload is None:
+            return ReviewOutcome.unavailable(
+                self.name, "unparseable output: no JSON object found"
+            )
 
         score = risk(payload.get("risk_score"))
         if score is None:
@@ -238,12 +327,11 @@ class CommandBackend(ReviewBackend):
         if proc.returncode != 0:
             return ReviewOutcome.unavailable(self.name, f"exit {proc.returncode}")
 
-        try:
-            payload = json.loads(proc.stdout or "")
-        except json.JSONDecodeError:
+        payload = extract_json(proc.stdout)
+        if payload is None:
             return ReviewOutcome.unavailable(self.name, "did not print JSON")
 
-        score = risk(payload.get(self.score_key) if isinstance(payload, dict) else None)
+        score = risk(payload.get(self.score_key))
         if score is None:
             return ReviewOutcome.unavailable(self.name, f"no {self.score_key} in output")
 
@@ -291,6 +379,8 @@ def build_backends(court_config) -> dict:
     tier1 = CodeTribunalBackend(
         path=court_config.codetribunal_path,
         timeout_s=court_config.backend_timeout_s,
+        entrypoint=court_config.codetribunal_entrypoint,
+        extra_args=court_config.codetribunal_args,
     )
     tier2 = InteractiveSkillBackend("tribunal", "/tribunal")
     tier3 = InteractiveSkillBackend(

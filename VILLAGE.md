@@ -15,7 +15,8 @@ Five defects, all of which would have bitten on the first run.
 
 | Phase | Problem | Status |
 |-------|---------|--------|
-| 2.1 | CodeTribunal is on **Hugging Face**, not GitHub. `git clone https://github.com/amine-yagoub/CodeTribunal.git` 404s. | Fixed — correct URL below |
+| 2.1 | CodeTribunal is a **Hugging Face Space**, not a GitHub repo. `git clone https://github.com/amine-yagoub/CodeTribunal.git` 404s. | Fixed — correct URL below |
+| 2.1 | Its entrypoint is `src/code_tribunal/app.py`, run as `python -m code_tribunal.app` — not `main.py` at the root | Fixed — the adapter detects both layouts |
 | 4.2 | `Experiment.kill_if_necessary()` reads `self.chargeback_rate`, which is never defined → `AttributeError` | Not applied; this repo's `Experiment` is already correct |
 | 4.2 | Money as `float` | Not applied; this repo uses `Decimal` deliberately |
 | 4.3 | `run_codetribunal()` returns `{"risk_score": 50}` when the subprocess prints nothing | Fixed — see "The silent-MIXED bug" |
@@ -58,7 +59,7 @@ Probed on 2026-08-08.
 
 | Tool | Where it really is | Install |
 |------|--------------------|---------|
-| CodeTribunal | **huggingface.co**/amine-yagoub/CodeTribunal | `git clone https://huggingface.co/amine-yagoub/CodeTribunal` |
+| CodeTribunal | **huggingface.co/spaces**/amine-yagoub/CodeTribunal | `git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal` |
 | Tribunal skill | github.com/hekman316/claude-skill-tribunal | `SKILL.md` → `~/.claude/skills/tribunal/` |
 | Agent Review Panel | github.com/wan-huiyan/agent-review-panel | `/plugin install roundtable@agent-review-panel` |
 | Yama | github.com/**juspay**/yama | `npm install -g @juspay/yama` (v3.0.4) |
@@ -105,8 +106,9 @@ python -m src.main init-db
 # 2. What can actually review a file right now?
 python -m src.main court doctor
 
-# 3. Install the one reviewer that runs headless
-git clone https://huggingface.co/amine-yagoub/CodeTribunal
+# 3. Install the one reviewer that runs headless.
+#    Note /spaces/ in the path — it is a Space, not a model repo.
+git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal
 cd CodeTribunal && pip install -r requirements.txt && cp .env.example .env
 #   set ZAI_API_KEY and ZAI_API_BASE in that .env
 cd ..
@@ -136,6 +138,25 @@ Verdict bands: `> 70` GUILTY, `> 40` MIXED, else NOT_GUILTY, and `UNREVIEWED`
 when nothing scored it. All five thresholds are `Decimal` and configurable —
 see `CourtConfig` in `src/config.py`.
 
+### How CodeTribunal is invoked
+
+The Space's layout is detected rather than assumed, so a restructure upstream
+does not silently break the tier:
+
+| Found in the clone | Invocation |
+|--------------------|------------|
+| `src/code_tribunal/app.py` | `python -m code_tribunal.app`, with `src/` on `PYTHONPATH` |
+| `main.py` at the root | `python main.py` |
+| neither | unavailable, with the reason — never a score |
+
+Because it is a Gradio Space, its CLI path can print banners and warnings
+around the payload. The adapter takes the last JSON object it can parse out of
+stdout, so log noise is tolerated — but output with no parseable object at all
+is reported as unavailable rather than guessed at.
+
+If the Space's CLI does not accept `--output json`, clear
+`MVV_CODETRIBUNAL_ARGS` and it will be invoked with `--file <path>` alone.
+
 ### The two interactive reviewers
 
 `/tribunal` and `/roundtable:agent-review-panel` are prompts that run inside a
@@ -158,6 +179,8 @@ All environment-overridable, all in `src/config.py`:
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `MVV_CODETRIBUNAL_PATH` | `./CodeTribunal` | where the clone lives |
+| `MVV_CODETRIBUNAL_ENTRYPOINT` | *(autodetect)* | force a root script instead |
+| `MVV_CODETRIBUNAL_ARGS` | `--output json` | args after `--file`; blank it if the CLI rejects them |
 | `MVV_UPLOADS_DIR` | `./uploads` | watched directory |
 | `MVV_PROCESSED_DIR` | `./processed` | archive after review |
 | `MVV_COURT_LOG` | `./logs/village.log` | watcher log |

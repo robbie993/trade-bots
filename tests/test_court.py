@@ -269,6 +269,107 @@ def test_codetribunal_garbage_output_is_not_a_score(tmp_path, sample_file):
     assert "unparseable" in outcome.error
 
 
+# -- the real Space layout: src/code_tribunal/app.py -----------------------
+def make_space(tmp_path, body):
+    """A clone shaped like the actual Hugging Face Space."""
+    pkg = tmp_path / "CodeTribunal" / "src" / "code_tribunal"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "app.py").write_text(body)
+    return tmp_path / "CodeTribunal"
+
+
+def test_the_space_layout_is_detected_and_run_as_a_module(tmp_path, sample_file):
+    ct = make_space(
+        tmp_path,
+        "import json\nprint(json.dumps({'risk_score': 64, 'verdict': 'mixed'}))\n",
+    )
+    backend = CodeTribunalBackend(ct)
+
+    argv, env = backend.invocation()
+    assert argv == ["python", "-m", "code_tribunal.app"]
+    assert env["PYTHONPATH"].endswith("src")
+
+    outcome = backend.review(sample_file)
+    assert outcome.available
+    assert outcome.score == Decimal("64.00")
+
+
+def test_root_script_layout_still_works(tmp_path, sample_file):
+    ct = tmp_path / "CodeTribunal"
+    ct.mkdir()
+    (ct / "main.py").write_text("import json\nprint(json.dumps({'risk_score': 5}))\n")
+
+    argv, env = CodeTribunalBackend(ct).invocation()
+    assert argv[1].endswith("main.py")
+    assert env == {}
+
+
+def test_the_space_layout_wins_when_both_exist(tmp_path):
+    ct = make_space(tmp_path, "print('{}')\n")
+    (ct / "main.py").write_text("print('{}')\n")
+    argv, _ = CodeTribunalBackend(ct).invocation()
+    assert argv == ["python", "-m", "code_tribunal.app"]
+
+
+def test_an_explicit_entrypoint_overrides_detection(tmp_path):
+    ct = make_space(tmp_path, "print('{}')\n")
+    (ct / "cli.py").write_text("print('{}')\n")
+    argv, _ = CodeTribunalBackend(ct, entrypoint="cli.py").invocation()
+    assert argv[1].endswith("cli.py")
+
+
+def test_a_clone_with_no_entrypoint_is_unavailable(tmp_path, sample_file):
+    ct = tmp_path / "CodeTribunal"
+    (ct / "docs").mkdir(parents=True)
+    ok, why = CodeTribunalBackend(ct).is_available()
+    assert not ok
+    assert "no entrypoint" in why
+    assert CodeTribunalBackend(ct).review(sample_file).score is None
+
+
+def test_extra_args_are_configurable(tmp_path, sample_file):
+    """The Space's CLI may not accept --output json; it must be removable."""
+    ct = make_space(
+        tmp_path,
+        "import sys, json\n"
+        "if '--output' in sys.argv:\n"
+        "    sys.exit('this CLI rejects --output')\n"
+        "print(json.dumps({'risk_score': 20}))\n",
+    )
+    assert not CodeTribunalBackend(ct).review(sample_file).available
+    assert CodeTribunalBackend(ct, extra_args=[]).review(sample_file).score == Decimal("20.00")
+
+
+def test_a_verdict_is_found_among_gradio_log_noise(tmp_path, sample_file):
+    """It is a Gradio Space, so banners and warnings share stdout."""
+    ct = make_space(
+        tmp_path,
+        "import json\n"
+        "print('Loading weights... {corrupt not json')\n"
+        "print('WARNING: cache miss')\n"
+        "print(json.dumps({'risk_score': 77, 'verdict': 'guilty'}))\n"
+        "print('Done in 4.2s')\n",
+    )
+    outcome = CodeTribunalBackend(ct).review(sample_file)
+
+    assert outcome.available
+    assert outcome.score == Decimal("77.00")
+    assert outcome.verdict == "GUILTY"
+
+
+def test_extract_json_picks_the_last_object(tmp_path):
+    from src.court.backends import extract_json
+
+    assert extract_json('{"a": 1}\n{"risk_score": 9}')["risk_score"] == 9
+    assert extract_json('noise {"nested": {"deep": 2}} tail')["nested"] == {"deep": 2}
+    assert extract_json('a string with { an unbalanced brace') is None
+    assert extract_json("[1, 2, 3]") is None      # arrays are not verdicts
+    assert extract_json("") is None
+    # braces inside strings must not confuse the scanner
+    assert extract_json('{"msg": "a } brace", "risk_score": 3}')["risk_score"] == 3
+
+
 def test_codetribunal_nonzero_exit_is_not_a_score(tmp_path, sample_file):
     ct = tmp_path / "CodeTribunal"
     ct.mkdir()

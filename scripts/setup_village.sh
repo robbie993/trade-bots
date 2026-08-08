@@ -19,7 +19,7 @@ if [ -d "$CT_PATH" ]; then
     echo "==> CodeTribunal already present at $CT_PATH"
 else
     echo "==> Cloning CodeTribunal (Hugging Face, not GitHub)"
-    if ! git clone https://huggingface.co/amine-yagoub/CodeTribunal "$CT_PATH"; then
+    if ! git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal "$CT_PATH"; then
         echo "    Clone failed. If this is a sandbox, huggingface.co may be"
         echo "    blocked by egress policy — run this on your own machine."
         echo "    The court still works; every case will read UNREVIEWED"
