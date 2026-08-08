@@ -159,18 +159,16 @@ class CourtConfig:
             os.environ.get("MVV_CODETRIBUNAL_PATH", str(REPO_ROOT / "CodeTribunal"))
         )
     )
-    # Empty = autodetect (src/code_tribunal/app.py, else main.py). Set this
+    # Empty = autodetect (src/code_tribunal/cli.py, else main.py). Set this
     # only to force a root-level script the detector would not pick.
     codetribunal_entrypoint: str = field(
         default_factory=lambda: os.environ.get("MVV_CODETRIBUNAL_ENTRYPOINT", "")
     )
-    # Arguments after `--file <path>`. The Space's CLI may not accept
-    # `--output json`; blank the variable if it rejects them.
+    # Extra flags only. `--path` and `--output` are always supplied by the
+    # adapter, so this is for things like `--parallel` or `--evidence-only`.
     codetribunal_args: tuple = field(
         default_factory=lambda: tuple(
-            a for a in os.environ.get(
-                "MVV_CODETRIBUNAL_ARGS", "--output json"
-            ).split() if a
+            a for a in os.environ.get("MVV_CODETRIBUNAL_ARGS", "").split() if a
         )
     )
     uploads_dir: Path = field(

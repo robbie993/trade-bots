@@ -234,29 +234,15 @@ def test_codetribunal_reports_unavailable_when_not_cloned(court_config, sample_f
     assert outcome.score is None  # emphatically not 50
 
 
-def test_codetribunal_parses_a_real_verdict(tmp_path, sample_file):
-    ct = tmp_path / "CodeTribunal"
-    ct.mkdir()
-    (ct / "main.py").write_text(
-        "import json\n"
-        "print(json.dumps({'risk_score': 82, 'verdict': 'guilty', 'summary': 'bad'}))\n"
-    )
-    outcome = CodeTribunalBackend(ct).review(sample_file)
-
-    assert outcome.available
-    assert outcome.score == Decimal("82.00")
-    assert outcome.verdict == "GUILTY"
-
-
 def test_codetribunal_silence_is_not_a_score(tmp_path, sample_file):
     ct = tmp_path / "CodeTribunal"
     ct.mkdir()
-    (ct / "main.py").write_text("pass\n")  # exits 0, prints nothing
+    (ct / "main.py").write_text("pass\n")  # exits 0, writes nothing
     outcome = CodeTribunalBackend(ct).review(sample_file)
 
     assert not outcome.available
     assert outcome.score is None
-    assert "no output" in outcome.error
+    assert "no report" in outcome.error
 
 
 def test_codetribunal_garbage_output_is_not_a_score(tmp_path, sample_file):
@@ -266,57 +252,108 @@ def test_codetribunal_garbage_output_is_not_a_score(tmp_path, sample_file):
     outcome = CodeTribunalBackend(ct).review(sample_file)
 
     assert not outcome.available
-    assert "unparseable" in outcome.error
+    assert outcome.score is None
 
 
-# -- the real Space layout: src/code_tribunal/app.py -----------------------
-def make_space(tmp_path, body):
+# -- the real Space: src/code_tribunal/cli.py, --path/--output ------------
+#
+# The real CLI writes its JSON to the file named by --output; stdout is
+# human-readable click output. The stub below mimics that exactly.
+CLI_STUB = """\
+import json, sys
+args = sys.argv[1:]
+path = args[args.index("--path") + 1]
+out = args[args.index("--output") + 1]
+print("=" * 60)
+print(" CODETRIBUNAL - THE AI COURTROOM")
+print("  [evidence] Scanning with GritQL forensic patterns...")
+json.dump({VERDICT}, open(out, "w"))
+print("Full report saved to " + out)
+"""
+
+
+def make_space(tmp_path, module="cli", verdict_payload=None, body=None):
     """A clone shaped like the actual Hugging Face Space."""
     pkg = tmp_path / "CodeTribunal" / "src" / "code_tribunal"
-    pkg.mkdir(parents=True)
+    pkg.mkdir(parents=True, exist_ok=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "app.py").write_text(body)
+    if body is None:
+        body = CLI_STUB.replace("{VERDICT}", repr(verdict_payload or {}))
+    (pkg / f"{module}.py").write_text(body)
     return tmp_path / "CodeTribunal"
 
 
-def test_the_space_layout_is_detected_and_run_as_a_module(tmp_path, sample_file):
-    ct = make_space(
-        tmp_path,
-        "import json\nprint(json.dumps({'risk_score': 64, 'verdict': 'mixed'}))\n",
-    )
-    backend = CodeTribunalBackend(ct)
+def test_the_cli_module_is_preferred_over_the_gradio_shim(tmp_path):
+    """app.py imports code_tribunal.ui.app, which is not shipped — cli.py is
+    the only headless entrypoint."""
+    ct = make_space(tmp_path, module="cli", verdict_payload={})
+    make_space(tmp_path, module="app", body="raise ImportError('no ui package')\n")
 
-    argv, env = backend.invocation()
-    assert argv == ["python", "-m", "code_tribunal.app"]
+    argv, env = CodeTribunalBackend(ct).invocation()
+    assert argv[1:] == ["-m", "code_tribunal.cli"]
     assert env["PYTHONPATH"].endswith("src")
 
-    outcome = backend.review(sample_file)
+
+def test_a_real_shaped_verdict_is_read_from_the_output_file(tmp_path, sample_file):
+    ct = make_space(
+        tmp_path,
+        verdict_payload={
+            "evidence": {"total_findings": 12},
+            "investigation": {"security": "hardcoded key"},
+            "transcript": "PROSECUTION: ...",
+            "verdict": (
+                "## RULING\n\nRuling: GUILTY\n\n"
+                "Reputational Risk Score: 82/100\n\n"
+                "Key findings: hardcoded AWS credentials at config.py:14."
+            ),
+            "report": "full report",
+            "stats": {"files_scanned": 37, "total_findings": 12},
+        },
+    )
+    outcome = CodeTribunalBackend(ct).review(sample_file)
+
     assert outcome.available
-    assert outcome.score == Decimal("64.00")
+    assert outcome.score == Decimal("82.00")
+    assert outcome.verdict == "GUILTY"
+    assert outcome.summary == "12 findings across 37 files"
 
 
-def test_root_script_layout_still_works(tmp_path, sample_file):
+def test_a_verdict_with_no_readable_score_is_not_scored(tmp_path, sample_file):
+    """The Judge is an LLM; it may not phrase the score as asked."""
+    ct = make_space(
+        tmp_path,
+        verdict_payload={"verdict": "This code is a bit sloppy but broadly fine."},
+    )
+    outcome = CodeTribunalBackend(ct).review(sample_file)
+
+    assert not outcome.available
+    assert outcome.score is None
+    assert "no readable risk score" in outcome.error
+
+
+def test_an_explicit_risk_score_key_wins_if_a_future_version_adds_one(tmp_path, sample_file):
+    ct = make_space(
+        tmp_path,
+        verdict_payload={"risk_score": 30, "verdict": "Risk Score: 90 GUILTY"},
+    )
+    assert CodeTribunalBackend(ct).review(sample_file).score == Decimal("30.00")
+
+
+def test_root_script_layout_still_works(tmp_path):
     ct = tmp_path / "CodeTribunal"
     ct.mkdir()
-    (ct / "main.py").write_text("import json\nprint(json.dumps({'risk_score': 5}))\n")
+    (ct / "main.py").write_text("pass\n")
 
     argv, env = CodeTribunalBackend(ct).invocation()
     assert argv[1].endswith("main.py")
     assert env == {}
 
 
-def test_the_space_layout_wins_when_both_exist(tmp_path):
-    ct = make_space(tmp_path, "print('{}')\n")
-    (ct / "main.py").write_text("print('{}')\n")
-    argv, _ = CodeTribunalBackend(ct).invocation()
-    assert argv == ["python", "-m", "code_tribunal.app"]
-
-
 def test_an_explicit_entrypoint_overrides_detection(tmp_path):
-    ct = make_space(tmp_path, "print('{}')\n")
-    (ct / "cli.py").write_text("print('{}')\n")
-    argv, _ = CodeTribunalBackend(ct, entrypoint="cli.py").invocation()
-    assert argv[1].endswith("cli.py")
+    ct = make_space(tmp_path, verdict_payload={})
+    (ct / "run.py").write_text("pass\n")
+    argv, _ = CodeTribunalBackend(ct, entrypoint="run.py").invocation()
+    assert argv[1].endswith("run.py")
 
 
 def test_a_clone_with_no_entrypoint_is_unavailable(tmp_path, sample_file):
@@ -328,34 +365,55 @@ def test_a_clone_with_no_entrypoint_is_unavailable(tmp_path, sample_file):
     assert CodeTribunalBackend(ct).review(sample_file).score is None
 
 
-def test_extra_args_are_configurable(tmp_path, sample_file):
-    """The Space's CLI may not accept --output json; it must be removable."""
+def test_extra_args_are_passed_through(tmp_path, sample_file):
+    """--path and --output are always supplied; extras are for --parallel etc."""
     ct = make_space(
         tmp_path,
-        "import sys, json\n"
-        "if '--output' in sys.argv:\n"
-        "    sys.exit('this CLI rejects --output')\n"
-        "print(json.dumps({'risk_score': 20}))\n",
+        body=(
+            "import json, sys\n"
+            "args = sys.argv[1:]\n"
+            "assert '--parallel' in args, 'extra arg not forwarded'\n"
+            "out = args[args.index('--output') + 1]\n"
+            "json.dump({'verdict': 'Risk Score: 15 NOT GUILTY'}, open(out, 'w'))\n"
+        ),
     )
-    assert not CodeTribunalBackend(ct).review(sample_file).available
-    assert CodeTribunalBackend(ct, extra_args=[]).review(sample_file).score == Decimal("20.00")
-
-
-def test_a_verdict_is_found_among_gradio_log_noise(tmp_path, sample_file):
-    """It is a Gradio Space, so banners and warnings share stdout."""
-    ct = make_space(
-        tmp_path,
-        "import json\n"
-        "print('Loading weights... {corrupt not json')\n"
-        "print('WARNING: cache miss')\n"
-        "print(json.dumps({'risk_score': 77, 'verdict': 'guilty'}))\n"
-        "print('Done in 4.2s')\n",
-    )
-    outcome = CodeTribunalBackend(ct).review(sample_file)
-
+    outcome = CodeTribunalBackend(ct, extra_args=["--parallel"]).review(sample_file)
     assert outcome.available
-    assert outcome.score == Decimal("77.00")
-    assert outcome.verdict == "GUILTY"
+    assert outcome.score == Decimal("15.00")
+
+
+# -- reading a score out of the Judge's prose -----------------------------
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Reputational Risk Score: 82", Decimal("82.00")),
+        ("**Risk Score**: 47/100", Decimal("47.00")),
+        ("risk score - 5", Decimal("5.00")),
+        ("RISK SCORE 100", Decimal("100.00")),
+        ("no score mentioned here", None),
+        ("", None),
+    ],
+)
+def test_risk_score_is_read_from_prose(text, expected):
+    from src.court.backends import parse_verdict_text
+
+    assert parse_verdict_text(text)[0] == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Ruling: NOT GUILTY", "NOT_GUILTY"),
+        ("Ruling: GUILTY", "GUILTY"),
+        ("Ruling: MIXED", "MIXED"),
+        ("the jury is out", ""),
+    ],
+)
+def test_ruling_is_read_from_prose(text, expected):
+    """NOT GUILTY must not be truncated to GUILTY — it contains it."""
+    from src.court.backends import parse_verdict_text
+
+    assert parse_verdict_text(text)[1] == expected
 
 
 def test_extract_json_picks_the_last_object(tmp_path):
@@ -394,6 +452,16 @@ def test_interactive_skills_never_fabricate_a_score(sample_file):
     assert not outcome.available
     assert outcome.score is None
     assert "/tribunal" in outcome.error
+
+
+def test_tribunal_is_described_by_what_it_actually_reviews(court_config, sample_file):
+    """The real SKILL.md reviews a branch diff, not one file — say so."""
+    tribunal = build_backends(court_config)["tier2"][0]
+    error = tribunal.review(sample_file).error
+
+    assert "/tribunal" in error
+    assert "branch diff" in error
+    assert "suspect.py" not in error  # it never reviews a lone file
 
 
 def test_build_backends_wires_three_tiers(court_config):

@@ -32,12 +32,12 @@ from .agents.human_gate import ApprovalAction, HumanGate
 from .kill_criteria import should_kill_experiment
 from .agents.experiment_ledger import ExperimentLedger, LedgerError
 from .agents.metrics import build_metrics_provider
-from .models import CashCategory, Order
+from .models import CashCategory, Experiment, Order, Status
 from .agents.monitoring import HealthMonitor, format_alerts, format_weekly_summary
-from .money import D, fmt_money, fmt_pct
+from .money import D, ZERO, fmt_money, fmt_pct
 from .notifications import build_notifier
 from .agents.orchestrator import Orchestrator, TickReport
-from .agents.scout import build_scout
+from .agents.scout import ProductCandidate, build_scout
 from .court.file_court import FileCourt
 
 
@@ -98,6 +98,102 @@ def cmd_scout(args) -> int:
         )
     print(_table(rows, list(rows[0].keys())))
     print("\nNothing has been written. Run `tick` to create experiments.")
+    return 0
+
+
+def _slug(text: str, limit: int = 24) -> str:
+    kept = [c.lower() if c.isalnum() else "-" for c in text]
+    slug = "".join(kept).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug[:limit] or "product"
+
+
+def cmd_experiment_add(args) -> int:
+    """Enter a real product by hand — spec section 5.1, the manual Scout.
+
+    This is the same path `tick` takes for a scouted candidate, in the same
+    order and with the same refusals: platform gate, duplicate check, then the
+    economic filter. It exists because a source connector needs API
+    credentials, and the business question does not: 20 products typed in by
+    hand answer it exactly as well as 20 pulled from an API.
+
+    It creates a `discovered` row and nothing else. No money moves here — the
+    sample order and the ad budget are still separate human approvals.
+    """
+    config, db = _context(args)
+    ledger = ExperimentLedger(db)
+    econ = EconomicCalculator(config.cash, config.discovery)
+
+    platform = (args.platform or "").strip().lower()
+    if platform not in config.gate.approved_platforms:
+        # Adding a platform is a human decision (spec section 6) — the same
+        # rule the orchestrator applies to scouted candidates.
+        gate = HumanGate(db, build_notifier(config), config.gate, config)
+        approval = gate.request_platform(platform)
+        print(f"platform {platform!r} is not approved — nothing was written.")
+        print(f"approval {approval.id} requested; approve it then run this again.")
+        print(f"approved today: {', '.join(config.gate.approved_platforms)}")
+        return 1
+
+    product_id = args.product_id or f"manual-{platform}-{_slug(args.name)}"
+    if ledger.exists(product_id):
+        existing = ledger.get_by_product_id(product_id)
+        print(f"experiment {existing.id} already exists for product_id {product_id!r}")
+        print("pass --product-id to record a genuinely different product")
+        return 1
+
+    candidate = ProductCandidate(
+        product_id=product_id,
+        product_name=args.name,
+        source_platform=platform,
+        supplier=args.supplier or platform,
+        unit_cost=D(args.cost),
+        shipping_cost=D(args.shipping),
+        selling_price=D(args.price) if args.price else ZERO,
+        url=args.url or "",
+    )
+
+    worth_it, why = econ.is_worth_testing(candidate)
+    if not worth_it and not args.force:
+        print(f"not worth testing: {why}")
+        print("nothing was written. Re-run with --force to record it anyway.")
+        return 1
+
+    price = candidate.selling_price or econ.suggest_price(
+        candidate.unit_cost, candidate.shipping_cost
+    )
+    unit = econ.unit_economics(candidate.unit_cost, price, candidate.shipping_cost)
+
+    experiment = Experiment(
+        product_id=candidate.product_id,
+        product_name=candidate.product_name,
+        source_platform=candidate.source_platform,
+        supplier=candidate.supplier,
+        product_url=candidate.url,
+        # Landed cost is the COGS the kill logic must use; shipping is not
+        # free just because the supplier lists it separately.
+        unit_cost=econ.landed_cost(candidate.unit_cost, candidate.shipping_cost),
+        selling_price=price,
+        status=Status.DISCOVERED.value,
+    )
+    note = why if worth_it else f"FORCED past the economic filter: {why}"
+    stored = ledger.create_experiment(experiment, note=f"manual entry — {note}")
+
+    print(f"experiment {stored.id} created: {stored.product_name}")
+    print(f"  product_id     {stored.product_id}")
+    print(f"  landed cost    {fmt_money(unit.landed_cost)}  "
+          f"(unit {fmt_money(unit.unit_cost)} + shipping {fmt_money(unit.shipping_cost)})")
+    print(f"  selling price  {fmt_money(price)}" + ("" if args.price else "  (suggested)"))
+    print(f"  gross margin   {fmt_money(unit.gross_margin_abs)}  "
+          f"({fmt_pct(unit.gross_margin_pct)})")
+    print(f"  breakeven CAC  {fmt_money(unit.breakeven_cac)}  "
+          f"— ad cost per order above this loses money")
+    if not worth_it:
+        print(f"  ⚠ forced past the economic filter: {why}")
+    print("\nnothing has been spent. Next:")
+    print(f"  tick                      request the sample order for {stored.id}")
+    print("  approvals                 see what it is waiting on")
     return 0
 
 
@@ -574,7 +670,7 @@ def cmd_court_doctor(args) -> int:
     else:
         print("No reviewer can score a file — every case will come back")
         print("UNREVIEWED until you install one. Start with CodeTribunal:")
-        print("  git clone https://huggingface.co/amine-yagoub/CodeTribunal")
+        print("  git clone https://huggingface.co/spaces/amine-yagoub/CodeTribunal")
         print(f"  (expected at {config.court.codetribunal_path})")
     return 0
 
@@ -629,6 +725,24 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("scout", help="discover products (writes nothing)")
     p.add_argument("--limit", type=int, default=20)
     p.set_defaults(func=cmd_scout)
+
+    p = sub.add_parser("experiment", help="enter products by hand")
+    exp_sub = p.add_subparsers(dest="experiment_command", required=True)
+    c = exp_sub.add_parser("add", help="record a real product you found yourself")
+    c.add_argument("--name", required=True, help="product name")
+    c.add_argument("--cost", required=True, help="supplier unit cost, e.g. 12.50")
+    c.add_argument("--price", help="your selling price (omit to get a suggestion)")
+    c.add_argument("--shipping", default="0", help="per-unit shipping cost")
+    c.add_argument("--supplier", help="supplier name (defaults to the platform)")
+    c.add_argument("--platform", required=True, help="source platform, e.g. temu")
+    c.add_argument("--url", help="listing URL, for the audit trail")
+    c.add_argument("--product-id", dest="product_id", help="override the generated id")
+    c.add_argument(
+        "--force",
+        action="store_true",
+        help="record it even if the economic filter says it is not worth testing",
+    )
+    c.set_defaults(func=cmd_experiment_add)
 
     p = sub.add_parser("list", help="list experiments")
     p.add_argument("--status", nargs="*", default=None)
