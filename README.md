@@ -45,10 +45,20 @@ export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
 ./scripts/reset_db.sh
 ```
 
+The File Court (spec v7.0) — review files, not spending:
+
+```bash
+python -m src.main court doctor         # which reviewers are installed?
+python -m src.main court review f.py    # one file through the tiers
+python -m src.main court watch          # or watch uploads/
+```
+
+Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
+
 Tests:
 
 ```bash
-python -m pytest            # 225 tests, no database server, no network
+python -m pytest            # 252 tests, no database server, no network
 ```
 
 ---
@@ -75,15 +85,23 @@ src/
 │   ├── monitoring.py       §8 alerts, §14 scorecard and stop conditions
 │   ├── metrics.py          §5.4 ingestion
 │   └── sources/            platform adapters
+├── court/                  the File Court — see VILLAGE.md
+│   ├── backends.py         one class per reviewer
+│   ├── file_court.py       escalation, verdicts, the docket
+│   └── watcher.py          uploads/ -> review -> processed/
 └── db/
     ├── connection.py
-    └── migrations/         001-005, Postgres + a sqlite/ mirror
+    └── migrations/         001-006, Postgres + a sqlite/ mirror
 ```
 
-Deliberately **not** built (spec §2.1): court system, sharks, government,
-alliances, black market, marketing team, territory, gamification, risk
-management beyond kill criteria, backup/recovery beyond retries, and any agent
-beyond the five.
+Deliberately **not** built (spec §2.1): sharks, government, alliances, black
+market, marketing team, territory, gamification, risk management beyond kill
+criteria, backup/recovery beyond retries, and any agent beyond the five.
+
+The **court system** was on that list and has since been built — see
+[VILLAGE.md](VILLAGE.md). It reviews files and writes to its own `file_cases`
+table. It does not touch experiments, budgets or approvals: every dollar still
+goes through the human gate of §6.
 
 ---
 
