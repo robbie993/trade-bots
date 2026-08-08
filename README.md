@@ -45,6 +45,28 @@ export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
 ./scripts/reset_db.sh
 ```
 
+Running it on **real products**, with no API credentials — enter them by hand:
+
+```bash
+export MVV_SCOUT_SOURCE=manual          # stop the fixture inventing products
+python -m src.main experiment add \
+    --name "Wireless Earbuds Pro" \
+    --cost 12.50 --price 39.99 \
+    --shipping 0.00 \
+    --platform temu --url https://temu.com/...
+
+python -m src.main tick                 # asks permission to order a sample
+python -m src.main approvals
+```
+
+`experiment add` takes the same path `tick` takes for a scouted candidate —
+platform gate, duplicate check, economic filter, in that order — and writes a
+`discovered` row. It never moves money: the sample order and the ad budget are
+still separate approvals. Omit `--price` to get a suggested one; add `--force`
+to record a product the economic filter rejected (it is logged as forced).
+
+Twenty of these answer the question the whole system exists for.
+
 The File Court (spec v7.0) — review files, not spending:
 
 ```bash

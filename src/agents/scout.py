@@ -92,6 +92,12 @@ def build_scout(config=None) -> Scout:
     cfg = config or Config()
     scout = Scout()
     for name in (n.strip().lower() for n in cfg.scout_source.split(",") if n.strip()):
+        if name in {"manual", "none"}:
+            # No automated discovery: the operator enters products with
+            # `experiment add`. Without this, a real run would keep pulling
+            # sample products out of the fixture on every tick and spend the
+            # 20-experiment stop condition (spec section 14) on fake data.
+            continue
         if name == "fixture":
             scout.add_source(FixtureSource(Path(cfg.scout_fixture_path)))
         elif name in SOURCES:
