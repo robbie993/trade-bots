@@ -119,7 +119,13 @@ class Allocator:
                 # rest taken on a later pass, as its positions close. Taking
                 # more would push cash negative, which would then block the
                 # very sells that free the money.
-                withdrawable = money(min(current - target, D(firm.cash)))
+                #
+                # Note `withdrawable`, not `available`: the reserve floor is a
+                # fraction of the allocation, so returning capital lowers the
+                # floor by the same step and cannot breach it. The risk manager
+                # is the one that may not touch the reserve.
+                purse = self.store.cash_view(firm)
+                withdrawable = money(min(current - target, purse.withdrawable))
                 if withdrawable <= 0:
                     self.store.record_event(
                         "allocation_deferred",

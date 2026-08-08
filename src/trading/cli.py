@@ -135,10 +135,19 @@ def cmd_show(args) -> int:
     market = eco.market()
     card = eco.brokerage.evaluator.evaluate(firm, market)
 
+    purse = eco.store.cash_view(firm, market, eco.config.firm.cash_floor_pct)
     print(f"{firm.firm_key} — {firm.name} [{firm.status}]")
     print(f"  asset class : {firm.asset_class or '-'}   strategy: {firm.strategy or '-'}")
     print(f"  venue       : {firm.venue}")
-    print(f"  allocation  : {fmt_money(firm.allocation)}   cash: {fmt_money(firm.cash)}")
+    print(f"  allocation  : {fmt_money(firm.allocation)}")
+    # Two different questions, two different answers: what the risk manager
+    # may deploy, and what the brokerage may take back.
+    print(
+        f"  cash        : {fmt_money(purse.cash)} "
+        f"(available {fmt_money(purse.available)}, reserve {fmt_money(purse.reserve)}, "
+        f"withdrawable {fmt_money(purse.withdrawable)})"
+    )
+    print(f"  in positions: {fmt_money(purse.in_positions)}")
     print(f"  equity      : {fmt_money(card.equity)}   return: {fmt_pct(card.return_pct)}")
     print(f"  score       : {card.score}" + ("" if card.sufficient_data else "  (below sample gate)"))
     print(f"  genome      : {firm.genome}")
@@ -257,6 +266,10 @@ def cmd_allocations(args) -> int:
             "allocation": fmt_money(f.allocation),
             "returned": fmt_money(max(D(0), D(f.initial_allocation) - D(f.allocation))),
             "cash": fmt_money(f.cash),
+            # What the brokerage could take back on the next pass.
+            "withdrawable": fmt_money(
+                eco.store.cash_view(f, cash_floor_pct=eco.config.firm.cash_floor_pct).withdrawable
+            ),
             "vs initial": fmt_pct(
                 (D(f.allocation) - D(f.initial_allocation))
                 / D(f.initial_allocation)

@@ -362,6 +362,58 @@ class Position:
         return cls(**{k: v for k, v in row.items() if k in known})
 
 
+@dataclass(frozen=True)
+class CashView:
+    """A firm's capital, split into the buckets that behave differently.
+
+    The single ``cash`` column has always been the truth; what it hid is that
+    two different questions have two different answers:
+
+        available    what the *risk manager* may deploy into a new position.
+                     Excludes the reserve floor, which is never spent.
+        withdrawable what the *brokerage* may take back. Includes the reserve,
+                     because a withdrawal lowers the allocation the floor is a
+                     fraction of — handing capital back never breaches it.
+
+    Conflating those two is what drove cash negative in the first long
+    simulation, so they are named here rather than recomputed at each call
+    site. Every field is derived from the ledger; nothing new is stored, and
+    the reconciliation identities are untouched.
+    """
+
+    cash: Decimal = ZERO
+    reserve: Decimal = ZERO
+    in_positions: Decimal = ZERO
+
+    @property
+    def available(self) -> Decimal:
+        """Deployable into a new position. Never negative."""
+        return max(ZERO, money(self.cash - self.reserve))
+
+    @property
+    def withdrawable(self) -> Decimal:
+        """Returnable to the brokerage — the reserve included."""
+        return max(ZERO, money(self.cash))
+
+    @property
+    def equity(self) -> Decimal:
+        return money(self.cash + self.in_positions)
+
+    @property
+    def at_floor(self) -> bool:
+        return self.available <= 0
+
+    def to_dict(self) -> dict:
+        return {
+            "cash": str(money(self.cash)),
+            "reserve": str(money(self.reserve)),
+            "in_positions": str(money(self.in_positions)),
+            "available": str(self.available),
+            "withdrawable": str(self.withdrawable),
+            "equity": str(self.equity),
+        }
+
+
 @dataclass
 class FirmRecord:
     """The firm row itself — capital, limits, and whether it is still alive."""
@@ -440,6 +492,7 @@ def _loads(raw, default):
 
 __all__ = [
     "Bar",
+    "CashView",
     "EthicsVerdict",
     "Fill",
     "FirmRecord",

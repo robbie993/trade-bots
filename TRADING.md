@@ -219,6 +219,21 @@ is limited to the firm's uninvested cash; the rest is taken on a later pass as
 positions close, because pushing cash negative would block the very sells that
 free the money.
 
+A firm's capital splits into buckets that behave differently, named once in
+`models.CashView` rather than recomputed at each call site:
+
+| Bucket | Meaning |
+|---|---|
+| `in_positions` | mark-to-market of what is open |
+| `reserve` | `cash_floor_pct` × allocation — never spent |
+| `available` | cash − reserve: what the **risk manager** may deploy |
+| `withdrawable` | cash including the reserve: what the **brokerage** may take back |
+
+`available` and `withdrawable` differ on purpose. Returning capital lowers the
+allocation the floor is a fraction of, so a withdrawal cannot breach the
+reserve; only the risk manager is bound by it. Conflating those two is what
+drove cash negative in the first long simulation, so they now have names.
+
 ---
 
 ## The heart
@@ -232,7 +247,7 @@ market, each returning allow / warn / block:
 | fairness | wash trades and churn |
 | loyalty | symbols outside the firm's mandated universe |
 | authority | buying while paused, killed, or on an unapproved venue |
-| sanctity | anything on the operator's restricted list |
+| sanctity | the operator's restricted symbols, and restricted *categories* |
 | liberty | a position too large to exit against typical volume |
 
 The build document points at `lex-conscience` for this. That repository is not
@@ -240,6 +255,20 @@ reachable (the GitHub path 404s), so the foundation model is implemented
 natively — which is the better outcome here anyway: an ethics check that can
 be *unavailable* is not an ethics check. Set `TRADE_ETHICS_STRICT=1` to turn
 every warning into a block.
+
+Sanctity works in two layers. `TRADE_RESTRICTED_SYMBOLS` refuses individual
+tickers; `config/restricted_assets.yaml` plus `TRADE_RESTRICTED_CATEGORIES`
+refuses whole categories — "I will not hold weapons manufacturers" is a rule
+about a category, and restating it as a ticker list you have to keep current
+is how it quietly stops being enforced.
+
+The mapping is yours. This system ships **no** classification of what any
+company does: the file is empty, and inferring an industry from a ticker would
+produce refusals nobody could justify and, worse, silent approvals for
+something listed under another symbol. With categories enabled, a symbol you
+have not classified is recorded on the proposal as *unclassified — category
+rules cannot be applied to it*, so the gap shows up in the audit trail instead
+of looking like a pass.
 
 Verdicts are stamped onto the proposal row, including on trades that were
 blocked. "Why did this firm buy that?" — and "why didn't it?" — are both
@@ -396,7 +425,7 @@ src/trading/
 ├── firms/               analysts, researchers, trader, risk, kill switch, spec
 ├── brokerage/           reconciliation, evaluator, allocator, leaderboard, kill
 ├── brain/               memory, evolver, learning
-├── heart/               conscience, compliance, ethics
+├── heart/               conscience, restrictions, compliance, ethics
 ├── gateway/             OmniRoute, with an offline fallback
 ├── execution/           paper (default) and the live venues that refuse
 └── audit/               the Obsidian vault
