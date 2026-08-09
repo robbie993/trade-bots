@@ -49,6 +49,12 @@ heart:
   concentration_warn_pct: 40.0  # export TRADE_ETHICS_CONCENTRATION_PCT=40.0
   max_round_trips_per_session: 4  # export TRADE_MAX_ROUND_TRIPS=4
   restricted_symbols: []        # export TRADE_RESTRICTED_SYMBOLS=TSLA,GME
+  # Categories are the second layer of sanctity. The symbol -> category
+  # mapping is yours and lives in config/restricted_assets.yaml; nothing is
+  # bundled, and a symbol you have not classified is reported as unclassified
+  # on the proposal rather than as clean.
+  restricted_categories: []     # export TRADE_RESTRICTED_CATEGORIES=weapons
+  restrictions_file: config/restricted_assets.yaml  # export TRADE_RESTRICTIONS_FILE=...
 
 # The gateway — src/trading/gateway/omniroute.py
 #

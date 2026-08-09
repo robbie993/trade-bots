@@ -20,7 +20,7 @@ from typing import Optional, Sequence
 
 from ...money import D, ZERO, money, percent
 from ..config import FirmDefaults
-from ..models import FirmRecord, Position, RiskVerdict, Side, qty
+from ..models import CashView, FirmRecord, Position, RiskVerdict, Side, qty
 
 
 @dataclass(frozen=True)
@@ -113,13 +113,18 @@ class RiskManager:
             quantity = qty(room / reference_price)
             reasons.append(f"position cap {percent(self.limits.max_position_pct * 100)}% of equity")
 
-        # 3. Cash floor: never spend the firm's last reserve.
-        floor = money(self.limits.cash_floor_pct * firm.allocation)
-        spendable = money(firm.cash - floor)
-        if spendable <= 0:
+        # 3. Cash floor: never spend the firm's last reserve. `available` is
+        # the shared definition (models.CashView) — the allocator withdraws
+        # against `withdrawable`, which deliberately differs.
+        purse = CashView(
+            cash=money(firm.cash),
+            reserve=money(self.limits.cash_floor_pct * firm.allocation),
+        )
+        spendable = purse.available
+        if purse.at_floor:
             return RiskDecision(
                 RiskVerdict.BLOCK.value,
-                f"cash {money(firm.cash)} is at or below the reserve floor {floor}",
+                f"cash {money(firm.cash)} is at or below the reserve floor {purse.reserve}",
                 ZERO,
             )
         if money(quantity * reference_price) > spendable:

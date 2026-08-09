@@ -1,0 +1,46 @@
+# Asset restrictions, by category — read by src/trading/heart/restrictions.py.
+#
+# The sanctity foundation refuses individual symbols via TRADE_RESTRICTED_SYMBOLS.
+# This file adds the question underneath that one: *what is this instrument?*
+# An operator who will not hold weapons manufacturers is stating a rule about a
+# category, and restating it as a list of tickers they have to keep current is
+# how the rule quietly stops being enforced.
+#
+# Turn a category on with the environment variable:
+#
+#   export TRADE_RESTRICTED_CATEGORIES=weapons,sanctioned
+#
+# A category listed here but not in that variable is recorded and not enforced,
+# which is what you want while you are still building the list.
+#
+# TWO THINGS THIS FILE DOES NOT DO
+#
+# 1. It ships no classifications. Every mapping below is a commented-out
+#    example. This system has no bundled view of what any company does, and
+#    inferring one from a ticker would produce refusals nobody could justify
+#    and — worse — silent approvals for something listed under another symbol.
+#    You classify what you care about; you own what that list says.
+#
+# 2. It never reports an unclassified symbol as clean. With categories enabled,
+#    a symbol you have not classified gets an explicit "unclassified — category
+#    rules cannot be applied to it" on the proposal row, so the gap is visible
+#    in the audit trail instead of looking like a pass.
+#
+# With no file here at all, no category is restricted and sanctity behaves
+# exactly as it did before: symbol list only.
+
+categories:
+  # weapons:
+  #   - LMT
+  #   - RTX
+  #   - NOC
+  # tobacco:
+  #   - MO
+  #   - PM
+  # fossil_fuels:
+  #   - XOM
+  #   - CVX
+  # sanctioned:
+  #   - EXAMPLE
+  # gambling:
+  #   - DKNG

@@ -37,6 +37,15 @@ principle:
 │  GATEWAY optional LLM narration — never a decision                        │
 │  AUDIT   an Obsidian vault of plain Markdown                              │
 └──────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ABOVE THE LEDGER — none of it on the tick's critical path                │
+│                                                                          │
+│  COURT    drop a strategy file · twelve deterministic jurors · a ruling   │
+│  ARENA    tokens, titles, bouts — points, never capital                   │
+│  MARKET   genome licences for tokens · capital only via an approval       │
+│  SANDBOX  alliances, betrayal, espionage — read-only over the ledger      │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -92,7 +101,9 @@ runs — including the parts that would look like progress.
 | **Cut** a firm's allocation | Kill a firm for good |
 | Pause a firm that trips its kill switch | Un-pause a firm |
 | Close positions, hand cash back | Add a new live venue |
-| Halt the entire ecosystem | — |
+| Halt the entire ecosystem | Transfer capital between firms |
+| Try a strategy file and rule on it | Deploy a genome the court accepted |
+| Award tokens, run bouts, plot and betray | — |
 
 Every entry in the right-hand column writes a row in `human_approvals` — the
 same table, the same `mvv approve` command, as the product village. A pending
@@ -219,6 +230,21 @@ is limited to the firm's uninvested cash; the rest is taken on a later pass as
 positions close, because pushing cash negative would block the very sells that
 free the money.
 
+A firm's capital splits into buckets that behave differently, named once in
+`models.CashView` rather than recomputed at each call site:
+
+| Bucket | Meaning |
+|---|---|
+| `in_positions` | mark-to-market of what is open |
+| `reserve` | `cash_floor_pct` × allocation — never spent |
+| `available` | cash − reserve: what the **risk manager** may deploy |
+| `withdrawable` | cash including the reserve: what the **brokerage** may take back |
+
+`available` and `withdrawable` differ on purpose. Returning capital lowers the
+allocation the floor is a fraction of, so a withdrawal cannot breach the
+reserve; only the risk manager is bound by it. Conflating those two is what
+drove cash negative in the first long simulation, so they now have names.
+
 ---
 
 ## The heart
@@ -232,7 +258,7 @@ market, each returning allow / warn / block:
 | fairness | wash trades and churn |
 | loyalty | symbols outside the firm's mandated universe |
 | authority | buying while paused, killed, or on an unapproved venue |
-| sanctity | anything on the operator's restricted list |
+| sanctity | the operator's restricted symbols, and restricted *categories* |
 | liberty | a position too large to exit against typical volume |
 
 The build document points at `lex-conscience` for this. That repository is not
@@ -240,6 +266,20 @@ reachable (the GitHub path 404s), so the foundation model is implemented
 natively — which is the better outcome here anyway: an ethics check that can
 be *unavailable* is not an ethics check. Set `TRADE_ETHICS_STRICT=1` to turn
 every warning into a block.
+
+Sanctity works in two layers. `TRADE_RESTRICTED_SYMBOLS` refuses individual
+tickers; `config/restricted_assets.yaml` plus `TRADE_RESTRICTED_CATEGORIES`
+refuses whole categories — "I will not hold weapons manufacturers" is a rule
+about a category, and restating it as a ticker list you have to keep current
+is how it quietly stops being enforced.
+
+The mapping is yours. This system ships **no** classification of what any
+company does: the file is empty, and inferring an industry from a ticker would
+produce refusals nobody could justify and, worse, silent approvals for
+something listed under another symbol. With categories enabled, a symbol you
+have not classified is recorded on the proposal as *unclassified — category
+rules cannot be applied to it*, so the gap shows up in the audit trail instead
+of looking like a pass.
 
 Verdicts are stamped onto the proposal row, including on trades that were
 blocked. "Why did this firm buy that?" — and "why didn't it?" — are both
@@ -270,6 +310,203 @@ produced it. They never change behaviour on their own — only a promoted
 genome, an allocation change, or a human does that. A system that silently
 rewrote its own strategy from its own conclusions is exactly what a kill
 switch cannot see coming.
+
+---
+
+## Mission Control
+
+Everything above on one page, at `/village`:
+
+```bash
+python -m src.main serve          # gate on /, Mission Control on /village
+```
+
+Six panels — ecosystem health and reconciliation, firms, brokerage and
+allocations, the court docket, the token standings, the market and the
+sandbox — plus a firm page with its live kill table, positions and recent
+proposals, and a case page showing every juror's finding.
+
+The buttons do what the equivalent CLI command does and **no more**: run a
+tick, run a season, drop a strategy file in, list and buy with tokens, form an
+alliance, betray one. Anything that would move capital writes an approval
+request and stops, exactly as it does from a terminal. The page has no
+privileged path into the ledger, and the two places a decision is granted are
+still the gate at `/` and `mvv approve`.
+
+Server-rendered HTML, no build step, no framework, no external service. Every
+number is a `SELECT` away in the same database the CLI reads. It is worth
+saying why that matters rather than treating it as a style preference: a
+dashboard that needs a gateway, a WebSocket bus and an npm install to render a
+table is three more things that can be down at the moment you want to know
+whether a firm is bleeding.
+
+Uploaded strategy files go through exactly the same court as the CLI — read
+with `ast`, never executed. There is a test that uploads a file which would
+write a marker on import and asserts the marker never appears.
+
+### The flow
+
+`/village/flow` animates the tick as it runs. Eleven stages, and a dot for
+every proposal, fill and refusal that actually happened:
+
+```
+market → firms → heart → venue → ledger → brain
+                   ↓        ↓
+                blocked  blocked        brokerage → audit
+                                        brokerage → human gate
+                                        brokerage → KILL_ALL
+```
+
+Three things make it worth looking at rather than decorative:
+
+**The dots are real.** Each one is a row `Ecosystem.tick()` wrote as it
+happened, read back from `flow_events`. Nothing loops on a timer — if the
+village is idle, the diagram is still, and that is information.
+
+**Blocked things leave the flow.** A proposal the risk manager or the
+conscience refused travels to *Blocked* and stops. It does not glide on to the
+venue in a different colour. Kills and capital raises travel to the *Human
+gate*, which is where they wait for you. An animation where everything reaches
+the end is an expensive way to learn nothing.
+
+**Telemetry can never break a tick.** `FlowRecorder.emit` swallows its own
+errors, and there is a test that drops the `flow_events` table mid-run and
+asserts the tick still completes with no errors. The ledger does not read this
+table and the recorder never checks whether its write succeeded.
+
+It goes through the database rather than an in-process queue, because the
+usual arrangement is `trade run` in one terminal and the dashboard in another
+— two processes. A queue inside the web server would render an empty diagram
+in exactly the case the diagram exists for. The page polls; the table keeps
+its most recent 400 rows and prunes itself.
+
+There is no authentication. Bind it to localhost.
+
+---
+
+## The strategy court
+
+Drop a strategy file in and get a verdict you can check:
+
+```bash
+python -m src.main trade court-submit strategies/new_idea.yaml
+python -m src.main trade court-docket
+python -m src.main trade court-case 3     # juror by juror
+```
+
+**The file is read, never run.** `evidence.py` parses it with `ast` and
+`json`/YAML; nothing in the package imports, execs or evaluates a submission.
+That is not caution about crashes — it is code an outsider wrote arriving at a
+system that moves money, and "run it and see" would hand it the process before
+the court had said anything.
+
+Twelve jurors, each a deterministic function of the file and one backtest, so
+every line of a ruling can be re-derived from the stored case row. They split
+into two kinds, and the split is what keeps the verdict honest:
+
+| Kind | Jurors | Can vote |
+|---|---|---|
+| Hygiene | parses, imports, calls, genome_present, gene_ranges, universe, determinism | **against only** — a clean result abstains |
+| Performance | return, drawdown, sample_size, kill_criteria, costs | either way |
+
+"Imports nothing dangerous" is a prerequisite, not a merit. The first
+calibration of the jury counted it for the defence, and a strategy that lost
+4% was admitted on the strength of having tidy imports; hygiene jurors now
+abstain when clean. Three of them are vetoes: a file that reaches for the
+network, evaluates strings at runtime, or does not parse is refused however
+well it backtests.
+
+**ACCEPT is admission, not deployment.** An accepted strategy is written to
+`strategy_genomes` *unselected*. It reaches a firm only by beating that firm's
+incumbent in the evolver, on the same data, or by you deploying it. A file
+that arrived this morning has no track record, and a ruling is not one.
+
+---
+
+## Competition: tokens, titles, bouts
+
+```bash
+python -m src.main trade season            # every bout, plus milestones
+python -m src.main trade bout alpha beta --metric return
+python -m src.main trade tokens
+```
+
+Firms earn tokens for winning bouts and hitting milestones, and climb from
+Novice to Trading God. A bout below the sample gate is **no contest** — the
+standings would otherwise be a record of who got lucky first, which is the
+same mistake the allocator refuses to make.
+
+Tokens are points. They live in their own tables, nothing in `brokerage/`
+reads them, and there is no function anywhere that converts a balance into an
+allocation. A currency the firms can award themselves must never become a
+second route to the money.
+
+---
+
+## The black market
+
+```bash
+python -m src.main trade market-sell alpha --asset genome --price 100
+python -m src.main trade market-buy beta 1
+python -m src.main trade market
+```
+
+Two kinds of listing, and the difference is the safety story:
+
+**Genomes, data and compute** are priced in tokens and settle in the market.
+A genome licence is delivered as a *forced mutation* of what was bought, and
+lands unselected. Two costs, both deliberate: the mutation stops the pods
+converging (three firms running one strategy is one strategy with three names,
+and their drawdowns arrive on the same day), and the candidate status means a
+bought genome earns its place like every other one.
+
+**Capital does not settle here.** A capital sale is a cut on the seller and a
+raise on the buyer — and a raise needs a human. So the market writes an
+approval request and stops; once approved, `market-settle` applies both legs
+in one transaction. The reconciler's identity still holds on both firms, and
+the market cannot become a route around the only gate that stops capital
+growing without a person signing for it. A firm can only list capital it is
+not currently using.
+
+---
+
+## The sandbox: alliances, betrayal, espionage
+
+```bash
+python -m src.main trade sandbox-form "The Pact" alpha beta gamma
+python -m src.main trade sandbox-spy beta alpha
+python -m src.main trade sandbox-betray alpha "The Pact"
+python -m src.main trade sandbox-sabotage gamma beta
+python -m src.main trade sandbox
+```
+
+The adversarial layer is real as a game and inert as far as the money is
+concerned. It is handed two objects and nothing else:
+
+* `ReadOnlyStore` — the ledger, reads only. Every write method raises
+  `SandboxViolation`, and so does any attribute not on the allow-list,
+  including `db`, so nobody can reach around it to raw SQL.
+* `SandboxWriter` — inserts and updates restricted to `alliances` and
+  `sandbox_events`.
+
+Both are enforced by `__getattr__`, not by convention, so a future edit that
+tries to write through the sandbox fails at the first call.
+
+What each move actually does, stated plainly rather than sold:
+
+| Move | Reach |
+|---|---|
+| **Betrayal** | fully real — reward, reputation collapse, alliance broken |
+| **Espionage** | copies a rival's genome into the sandbox record. It installs nothing: a stolen genome enters the real system only through the strategy court, like any other submission |
+| **Sabotage** | moves `shadow_equity`, the sandbox's own scoreboard, and never the target's books |
+
+Sabotage is deliberately weaker than the fiction, and here is why. The
+brokerage cuts capital on a score, and the kill switch's reason has to be
+reproducible from stored metrics. If one firm could move another's equity,
+"Drawdown 22% exceeds 20%" would stop being a fact about that firm's strategy,
+the allocator would start punishing victims, and every kill reason would
+become a guess. A saboteur can win the tournament; a saboteur cannot cost the
+operator a cent.
 
 ---
 
@@ -373,6 +610,19 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade audit [--write]` | the full audit report |
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
+| `/village/flow` | the tick, animated as it runs |
+| `trade court-submit <f>` | put a strategy file on trial |
+| `trade court-docket` | recent strategy cases |
+| `trade court-case <id>` | one case in full, juror by juror |
+| `trade court-watch --dir D` | try every strategy file in a directory |
+| `trade tokens` | the token standings (points, not capital) |
+| `trade season` | run every bout, award milestones |
+| `trade bout <a> <b>` | one head-to-head |
+| `trade market` | what firms have for sale |
+| `trade market-sell/buy` | list or buy; capital needs an approval |
+| `trade market-settle <id>` | apply an approved capital transfer |
+| `trade sandbox` | alliances, intrigue, shadow scoreboard |
+| `trade sandbox-form/betray/spy/sabotage` | play the adversarial game |
 | `trade frameworks` | which external frameworks are installed |
 | `trade live-request --venue V` | ask to trade live; sends no order |
 | `trade apply-approvals` | carry out what a human approved |
@@ -396,7 +646,11 @@ src/trading/
 ├── firms/               analysts, researchers, trader, risk, kill switch, spec
 ├── brokerage/           reconciliation, evaluator, allocator, leaderboard, kill
 ├── brain/               memory, evolver, learning
-├── heart/               conscience, compliance, ethics
+├── heart/               conscience, restrictions, compliance, ethics
+├── court/               strategy trials: evidence, jury, advocates, judge
+├── competition/         tokens, titles, bouts, milestones
+├── black_market/        listings, escrow, licences, capital transfers
+├── sandbox/             alliances, betrayal, espionage — read-only guard
 ├── gateway/             OmniRoute, with an offline fallback
 ├── execution/           paper (default) and the live venues that refuse
 └── audit/               the Obsidian vault

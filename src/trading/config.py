@@ -164,6 +164,23 @@ class HeartConfig:
             if s.strip()
         )
     )
+    # Whole categories the operator will not hold. Enforced only for symbols
+    # the operator has themselves classified in `restrictions_file` — this
+    # system ships no opinion about what any company does.
+    restricted_categories: tuple = field(
+        default_factory=lambda: tuple(
+            c.strip().lower()
+            for c in os.environ.get("TRADE_RESTRICTED_CATEGORIES", "").split(",")
+            if c.strip()
+        )
+    )
+    restrictions_file: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get(
+                "TRADE_RESTRICTIONS_FILE", str(REPO_ROOT / "config" / "restricted_assets.yaml")
+            )
+        )
+    )
     # Round-trips in the same name inside one session that start to look like
     # churn rather than trading.
     max_round_trips_per_session: int = field(

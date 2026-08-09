@@ -689,7 +689,9 @@ def cmd_serve(args) -> int:  # pragma: no cover - long-running server
         return 1
 
     config, _ = _context(args)
-    print(f"Approval gate on http://{args.host}:{args.port}  (db: {config.database_url})")
+    print(f"Approval gate    http://{args.host}:{args.port}/")
+    print(f"Mission Control  http://{args.host}:{args.port}/village")
+    print(f"  (db: {config.database_url})")
     if args.host not in ("127.0.0.1", "localhost"):
         print(
             "WARNING: this page has no authentication and anyone who can reach it can "

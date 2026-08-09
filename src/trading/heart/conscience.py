@@ -33,6 +33,7 @@ from ...money import D, ZERO, fmt_money, money, percent
 from ..config import HeartConfig
 from ..data.market_data import MarketData
 from ..models import EthicsVerdict, FirmRecord, Position, Side, TradeProposal
+from .restrictions import AssetRestrictions
 
 FOUNDATIONS = ("care", "fairness", "loyalty", "authority", "sanctity", "liberty")
 
@@ -76,8 +77,17 @@ class EthicsReview:
 
 
 class Conscience:
-    def __init__(self, config: Optional[HeartConfig] = None):
+    def __init__(
+        self,
+        config: Optional[HeartConfig] = None,
+        restrictions: Optional[AssetRestrictions] = None,
+    ):
         self.config = config or HeartConfig()
+        self.restrictions = (
+            restrictions
+            if restrictions is not None
+            else AssetRestrictions.load(self.config.restrictions_file)
+        )
 
     def review(
         self,
@@ -209,13 +219,35 @@ class Conscience:
         return _ok("authority", "no gate stands in the way of this order")
 
     def _sanctity(self, proposal: TradeProposal) -> FoundationFinding:
-        """What the operator has declared off-limits, for whatever reason."""
-        restricted = set(self.config.restricted_symbols)
-        if proposal.symbol.upper() in restricted:
+        """What the operator has declared off-limits, for whatever reason.
+
+        Two layers: the symbol list, then the categories the operator has
+        classified this symbol into. Both come from the operator — nothing
+        here knows what any company does, and a symbol with no classification
+        is reported as unclassified rather than as clean.
+        """
+        symbol = proposal.symbol.upper()
+        if symbol in set(self.config.restricted_symbols):
+            return _block("sanctity", f"{proposal.symbol} is on the operator's restricted list")
+
+        violations = self.restrictions.violations(symbol, self.config.restricted_categories)
+        if violations:
             return _block(
-                "sanctity", f"{proposal.symbol} is on the operator's restricted list"
+                "sanctity",
+                f"{proposal.symbol} is classified {', '.join(violations)}, which the "
+                "operator has restricted",
             )
-        return _ok("sanctity", "not on the restricted list")
+
+        if not self.config.restricted_categories:
+            return _ok("sanctity", "not on the restricted list")
+        known = self.restrictions.categories_for(symbol)
+        if known:
+            return _ok("sanctity", f"classified {', '.join(known)}; none restricted")
+        return _ok(
+            "sanctity",
+            f"not on the restricted list ({proposal.symbol} is unclassified — category "
+            "rules cannot be applied to it)",
+        )
 
     def _liberty(self, proposal: TradeProposal, market: MarketData) -> FoundationFinding:
         """A position the operator cannot exit is a position that owns them."""

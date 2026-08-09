@@ -20,6 +20,7 @@ from typing import Optional
 from ..db.connection import Database, sum_decimal, utcnow_iso
 from ..money import D, ZERO, money
 from .models import (
+    CashView,
     Fill,
     FirmRecord,
     FirmStatus,
@@ -135,6 +136,30 @@ class TradingStore:
         )
         out = [Position.from_row(r) for r in rows]
         return [p for p in out if p.is_open] if open_only else out
+
+    def cash_view(self, firm: FirmRecord, market=None, cash_floor_pct=None) -> "CashView":
+        """Split a firm's capital into available / withdrawable / in-positions.
+
+        The one place those buckets are computed. The risk manager sizes
+        against ``available`` and the allocator withdraws against
+        ``withdrawable``; if they ever disagreed about what the floor means,
+        one of them would be writing cheques the other refuses to cash.
+        """
+        from .config import FirmDefaults
+
+        floor_pct = (
+            D(cash_floor_pct) if cash_floor_pct is not None else FirmDefaults().cash_floor_pct
+        )
+        in_positions = ZERO
+        if market is not None and firm.id is not None:
+            in_positions = sum(
+                (p.market_value(market.mark(p.symbol)) for p in self.positions(firm.id)), ZERO
+            )
+        return CashView(
+            cash=money(firm.cash),
+            reserve=money(floor_pct * D(firm.allocation)),
+            in_positions=money(in_positions),
+        )
 
     def get_position(self, firm_id: int, symbol: str) -> Optional[Position]:
         row = self.db.query_one(
