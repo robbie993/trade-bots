@@ -159,3 +159,25 @@ firms:
       value_window: 110
       fair_band_pct: 9
       calm_vol_pct: 35
+
+  firm_i_memecoins:
+    name: "Meme Desk"
+    asset_class: "Cryptocurrency"
+    strategy: "momentum"
+    # The riskiest mandate in the village, and the limits say so: a third of
+    # the risk per trade of the crypto desk, and a kill switch it will trip
+    # long before the others would. A meme coin is not a small equity; it is a
+    # different distribution, and pretending otherwise is how a book gets
+    # emptied by one name.
+    risk_limit: 0.015
+    capital_allocation: 30000
+    universe: [DOGE-USD, SHIB-USD, PEPE-USD, WIF-USD]
+    analysts: [technical, sentiment, onchain]
+    genome:
+      fast_window: 4
+      slow_window: 18
+      rsi_window: 8
+      trend_bias: 92          # almost pure momentum; these do not mean-revert
+      value_window: 35
+      fair_band_pct: 24       # "fair value" is close to meaningless here
+      calm_vol_pct: 85        # nothing about this is calm
