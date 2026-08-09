@@ -825,8 +825,17 @@ the part you can verify by reading `src/deploy.py`.
 Serverless filesystems are read-only apart from a per-instance `/tmp` that
 disappears between requests, so the default SQLite file cannot work: every
 tick, approval and fill would be written to storage that is about to vanish.
-Attach Postgres. If you do not, the page says so rather than half-working, and
-the audit vault is off there for the same reason.
+Attach Postgres. If you do not, **every page answers 503 with the reason**
+before the handler runs — checked up front rather than after, because every
+page opens the database to render, so a handler on a host with no writable
+disk raises while connecting and there is no response left to put a banner in.
+That is what `FUNCTION_INVOCATION_FAILED` was. The audit vault is off there for
+the same reason.
+
+Whether the database works is *probed*, not inferred from the URL. Deciding
+from the scheme alone was wrong in both directions: it refused a perfectly
+good SQLite file when previewing the mirror locally, and it would have served
+pages against a Postgres URL that does not answer.
 
 You do not have to name it `DATABASE_URL`. Managed add-ons each invent their
 own variable and none of them is that one — Vercel Postgres and Neon set

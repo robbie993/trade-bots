@@ -163,6 +163,72 @@ def test_an_ephemeral_database_is_called_out(village, monkeypatch):
 
 
 # =========================================================================
+# a database it cannot open
+#
+# The build went green and then every request returned
+# FUNCTION_INVOCATION_FAILED. The handler opens the database before rendering
+# anything, so on a host with no writable disk it raised while connecting —
+# and a banner rendered *after* the handler never got written, because there
+# was no response to write it into.
+# =========================================================================
+@pytest.fixture
+def unopenable(monkeypatch, tmp_path):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////proc/nonexistent/mvv.db")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    return TestClient(web.app, raise_server_exceptions=False)
+
+
+def test_an_unopenable_database_explains_itself_instead_of_crashing(unopenable):
+    for path in ("/", "/village", "/village/flow"):
+        response = unopenable.get(path)
+        assert response.status_code == 503, path
+        assert "No database" in response.text, path
+
+
+def test_the_api_says_it_in_json(unopenable):
+    response = unopenable.get("/api/status")
+    assert response.status_code == 503
+    assert response.json()["ok"] is False
+    assert response.json()["read_only"] is True
+
+
+def test_writes_are_still_refused_before_anything_else(unopenable):
+    """The 403 does not depend on the database being readable."""
+    assert unopenable.post("/village/actions/tick").status_code == 403
+
+
+def test_a_reachable_database_is_served_even_in_public_mode(village, monkeypatch):
+    """Previewing the mirror locally must not report a missing database.
+
+    The first version decided from the URL scheme alone, which refused a
+    perfectly good SQLite file and would have served pages against a Postgres
+    URL that does not answer. It is probed now.
+    """
+    monkeypatch.setenv("MVV_PUBLIC", "1")
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert village().get("/village").status_code == 200
+
+
+def test_an_unreachable_postgres_is_named_as_such(monkeypatch, tmp_path):
+    monkeypatch.setenv("MVV_PUBLIC", "1")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nope")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    response = TestClient(web.app, raise_server_exceptions=False).get("/village")
+    assert response.status_code == 503
+    assert "did not answer" in response.text
+
+
+# =========================================================================
 # local: nothing changes
 # =========================================================================
 def test_nothing_is_blocked_locally(village, monkeypatch):

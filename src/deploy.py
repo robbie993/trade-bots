@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Optional
 
 # Set by the platform, not by us. Any of these means "you are not on a laptop".
 HOSTED_MARKERS = ("VERCEL", "AWS_LAMBDA_FUNCTION_NAME", "FUNCTIONS_WORKER_RUNTIME",
@@ -68,6 +69,13 @@ NO_DATABASE = (
 )
 
 
+UNREACHABLE = (
+    "<div class='card alarm'><strong>The database did not answer.</strong> "
+    "A database is configured but the connection failed — wrong host, wrong "
+    "credentials, or it is not reachable from this deployment.</div>"
+)
+
+
 def is_public() -> bool:
     """Whether this process should refuse to change anything."""
     forced = os.environ.get("MVV_PUBLIC", "").strip().lower()
@@ -79,16 +87,56 @@ def is_public() -> bool:
 
 
 def storage_is_durable() -> bool:
-    """Postgres, or a SQLite file on a disk that will still be there.
+    """Whether the configured URL points at storage that outlives a request.
 
-    Asks Config rather than reading DATABASE_URL directly, so a database
-    attached under a host's own name (POSTGRES_URL and friends) counts.
+    A judgement about the *URL*, used to word the message: SQLite on a
+    serverless host is not durable however writable it looks, because the disk
+    is gone by the next invocation.
     """
     from .config import Config
 
     if Config().database_url.startswith(("postgres://", "postgresql://")):
         return True
     return not is_public()
+
+
+_REACHABLE: Optional[bool] = None
+
+
+def database_ok(force: bool = False) -> bool:
+    """Whether the database can actually be opened.
+
+    Probed rather than inferred from the URL. The first version decided from
+    the scheme alone, which was wrong in both directions: it refused a
+    perfectly good SQLite file when previewing the mirror locally, and it would
+    have happily served pages against a Postgres URL that does not answer.
+
+    Cached for the life of the process. A serverless invocation is short and a
+    connection check per request would cost more than it tells you.
+    """
+    global _REACHABLE
+    if _REACHABLE is not None and not force:
+        return _REACHABLE
+    try:
+        from .config import Config
+        from .db.connection import Database
+
+        db = Database.from_url(Config().database_url)
+        try:
+            db.table_names()
+        finally:
+            db.close()
+        _REACHABLE = True
+    except Exception:  # noqa: BLE001 - any failure is the same answer here
+        _REACHABLE = False
+    return _REACHABLE
+
+
+def unavailable_notice() -> str:
+    """Why there is nothing to show, in the terms that actually apply."""
+    if not storage_is_durable():
+        return NO_DATABASE
+    return UNREACHABLE
 
 
 def strip_controls(html: str) -> str:
@@ -105,6 +153,27 @@ def announce(html: str) -> str:
     if "<body>" in html:
         return html.replace("<body>", "<body>" + notice, 1)
     return notice + html
+
+
+def _explain(request, html: str, status: int, detail: str):
+    """The same answer in whichever dialect the caller asked in."""
+    from fastapi.responses import HTMLResponse, JSONResponse
+
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"ok": False, "error": detail, "read_only": True},
+                            status_code=status)
+    return HTMLResponse(
+        "<!doctype html><html lang=en><head><meta charset=utf-8>"
+        "<title>The Village</title>"
+        "<style>body{font:15px/1.5 system-ui,sans-serif;max-width:44rem;"
+        "margin:3rem auto;padding:0 1.5rem;color:#111;background:#fff}"
+        "@media(prefers-color-scheme:dark){body{color:#e7e7e7;background:#111}}"
+        ".card{border:1px solid #8884;border-left:4px solid #b91c1c;"
+        "border-radius:8px;padding:1rem;margin:.75rem 0}"
+        "pre{white-space:pre-wrap;font-size:.85rem}</style></head><body>"
+        f"<h1>The Village</h1>{html}</body></html>",
+        status_code=status,
+    )
 
 
 def install(app) -> None:
@@ -131,7 +200,31 @@ def install(app) -> None:
                 "Run `python -m src.main serve` on your own machine to use it.\n",
                 status_code=403,
             )
-        response = await call_next(request)
+
+        # Answered before the handler runs, not after. Every page opens the
+        # database, so on a host with no writable disk and no Postgres attached
+        # the handler raises while connecting — and a banner rendered *after*
+        # the handler never gets written, because there is no response to write
+        # it into. The platform shows FUNCTION_INVOCATION_FAILED and the reason
+        # is in a log nobody reads.
+        if not database_ok():
+            return _explain(request, unavailable_notice() + BANNER, 503,
+                            "the database is not reachable")
+
+        try:
+            response = await call_next(request)
+        except Exception as exc:  # noqa: BLE001
+            # A readable page beats the platform's generic crash screen. Only
+            # in public mode: locally an exception should reach the terminal.
+            return _explain(
+                request,
+                "<div class='card alarm'><strong>The village could not be "
+                f"read.</strong><pre>{type(exc).__name__}: {exc}</pre></div>"
+                + BANNER,
+                500,
+                f"{type(exc).__name__}: {exc}",
+            )
+
         if not response.headers.get("content-type", "").startswith("text/html"):
             return response
         body = b"".join([chunk async for chunk in response.body_iterator])
@@ -144,6 +237,9 @@ def install(app) -> None:
 __all__ = [
     "BANNER",
     "NO_DATABASE",
+    "UNREACHABLE",
+    "database_ok",
+    "unavailable_notice",
     "install",
     "is_public",
     "storage_is_durable",
