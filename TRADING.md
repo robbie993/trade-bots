@@ -415,6 +415,46 @@ its most recent 400 rows and prunes itself.
 
 There is no authentication. Bind it to localhost.
 
+### Taking a copy of it
+
+```bash
+python -m src.main trade dashboard --out dashboard/village.html
+```
+
+That freezes Mission Control and the village map into **one self-contained
+HTML file** — no server, no build step, no network, no CDN. Open it by
+double-clicking it, email it, put it in a bucket, commit it.
+
+It is the same code that renders the live pages, run once, which is the only
+reason it is worth having: a second dashboard written by hand would be a
+second set of numbers to keep true, and this one cannot drift from `/village`
+because it *is* `/village`.
+
+Freezing costs two things, and the file says both out loud:
+
+**The buttons are gone — removed, not disabled.** A snapshot with a "Run a
+tick" button that silently does nothing is worse than one with no button,
+because it invites you to believe the page is live. Every form, button and
+outbound link is stripped, and the banner says where the working controls
+are. There is nothing in the file that could grant an approval, because there
+is nothing in the file to grant it with.
+
+**The villagers are a recording.** The live page asks the database what has
+happened since the last poll; a file has nothing to ask, so the events travel
+inside it and replay on load. They are still real — every one is a row the
+tick wrote — but they are a recording of a moment, which is why the banner
+carries the timestamp, the database and the data source. A number without its
+as-of is a rumour.
+
+`dashboard/` is in `.gitignore`. A snapshot of your own book is yours, not the
+repository's.
+
+There is a workflow, `.github/workflows/add-village-dashboard.yml`, that runs
+the same command on GitHub and opens a PR with the result. The runner cannot
+see your database, so it seeds one and simulates against the deterministic
+synthetic feed: what it produces is a **demo**, labelled as one in the banner.
+For your own numbers, run the command locally.
+
 ---
 
 ## The strategy court
@@ -644,6 +684,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
 | `/village/flow` | the village map, walked as the tick runs |
+| `trade dashboard` | freeze it all into one self-contained HTML file |
 | `trade court-submit <f>` | put a strategy file on trial |
 | `trade court-docket` | recent strategy cases |
 | `trade court-case <id>` | one case in full, juror by juror |

@@ -1,7 +1,25 @@
 name: ✨ Add Village Dashboard PR
 
+# Renders the village into one self-contained HTML file and opens a PR with it.
+#
+# The page is not written here. It is rendered by `trade dashboard`, which is
+# the same code that serves /village, so this workflow cannot drift away from
+# the real dashboard — there is only one of them.
+#
+# The runner has no access to your database, so it seeds a fresh one and runs a
+# simulation against the deterministic synthetic feed. The result is a **demo**,
+# and the banner in the file says so. For a snapshot of your own book, run the
+# same command locally against your own DATABASE_URL:
+#
+#     python -m src.main trade dashboard --out dashboard/village.html
+
 on:
   workflow_dispatch:
+    inputs:
+      days:
+        description: How many days to simulate before taking the snapshot
+        required: false
+        default: "120"
 
 permissions:
   contents: write
@@ -11,45 +29,72 @@ jobs:
   add-dashboard:
     runs-on: ubuntu-latest
     steps:
+      # No `ref:` — the default checkout is this repository's default branch,
+      # whatever it is called. An earlier draft pinned `main`, which does not
+      # exist here, and the job died at the first step.
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          ref: main
+          python-version: "3.11"
 
-      - name: 📁 Create dashboard folder and HTML file
-        run: |
-          mkdir -p dashboard
-          cat > dashboard/village.html << 'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>🏛️ AI Village — Mission Control</title>
-              <style>
-                  /* ... full styles as provided above ... */
-              </style>
-          </head>
-          <body>
-              <!-- ... full HTML structure ... -->
-              <script>
-                  // ... full JavaScript ... 
-              </script>
-          </body>
-          </html>
-          EOF
+      - name: 📦 Install
+        run: pip install -r requirements.txt
 
-      - name: 📋 Commit and create PR
+      - name: 🏗️ Seed a demo village and render it
+        env:
+          DATABASE_URL: sqlite:///./demo.db
+          TRADE_DATA_SEED: "12345"
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b add-village-dashboard
-          git add dashboard/village.html
-          git commit -m "✨ Add visual AI Village dashboard"
-          git push --set-upstream origin add-village-dashboard
-          gh pr create \
-            --title "✨ Add Village Dashboard" \
-            --body "This PR adds a beautiful visual dashboard for the AI Village. Open 'dashboard/village.html' in your browser to see agents, tokens, P&L, and a drag-and-drop file zone." \
-            --base main \
-            --head add-village-dashboard
+          python -m src.main init-db
+          python -m src.main trade init
+          python -m src.main trade simulate --days "${{ inputs.days || 120 }}"
+          python -m src.main trade dashboard \
+            --out dashboard/village.html \
+            --note "Demo data — synthetic feed, seed 12345, generated in CI. Not a real book."
+
+      - name: 📋 Commit and open a PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b add-village-dashboard
+          git add -f dashboard/village.html
+          # A snapshot that changed nothing is not worth a pull request.
+          if git diff --cached --quiet; then
+            echo "dashboard unchanged — nothing to open a PR for"
+            exit 0
+          fi
+          git commit -m "Add a village dashboard snapshot"
+          git push --force --set-upstream origin add-village-dashboard
+          if gh pr view add-village-dashboard --json number >/dev/null 2>&1; then
+            echo "PR already open; the push updated it"
+          else
+            gh pr create \
+              --title "✨ Add Village Dashboard" \
+              --base "$BASE" \
+              --head add-village-dashboard \
+              --body "$(cat <<'BODY'
+          A self-contained snapshot of the village at `dashboard/village.html` —
+          open it in a browser, no server needed.
+
+          Rendered by `trade dashboard`, the same code that serves `/village`,
+          so the panels and the map are the real ones rather than a second
+          hand-written copy that would need keeping in step.
+
+          **This is demo data.** CI has no access to a real database, so the job
+          seeds one and simulates against the deterministic synthetic feed. The
+          banner at the top of the file says as much, along with the timestamp
+          and the data source. For your own numbers, run the same command
+          locally against your own `DATABASE_URL`.
+
+          The file has no working controls — every form and button is stripped
+          rather than disabled, because a dead button that looks live is worse
+          than no button. The approval gate stays where it has always been:
+          on the running server.
+          BODY
+          )"
+          fi

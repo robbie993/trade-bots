@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 674 tests, no database server, no network
+python -m pytest            # 689 tests, no database server, no network
 ```
 
 ---
@@ -123,6 +123,7 @@ src/
 │   ├── data/ execution/ gateway/ audit/
 │   ├── web.py              Mission Control, mounted at /village
 │   ├── flow.py             the village map, and the tick's telemetry
+│   ├── snapshot.py         the same village, frozen into one HTML file
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
@@ -151,6 +152,7 @@ python -m src.main trade init
 python -m src.main trade simulate --days 120
 python -m src.main trade leaderboard
 python -m src.main serve          # gate on /, Mission Control on /village
+python -m src.main trade dashboard  # or freeze it into one shareable file
 ```
 
 ---

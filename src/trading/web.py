@@ -159,9 +159,17 @@ def _render(eco: Ecosystem, said: str) -> str:
         _arena_panel(eco),
         _market_panel(eco),
         _sandbox_panel(eco),
-        "<p><a href='/'>&larr; approval gate</a> · "
-        "<span class=muted>nothing on this page grants an approval</span></p>",
+        MISSION_FOOTER,
     ])
+
+
+# The line that closes Mission Control. Named because the snapshot exporter
+# removes it by identity rather than by guessing at a regex: in a file with no
+# server behind it, a link back to the approval gate goes nowhere.
+MISSION_FOOTER = (
+    "<p><a href='/'>&larr; approval gate</a> · "
+    "<span class=muted>nothing on this page grants an approval</span></p>"
+)
 
 
 # =========================================================================
@@ -655,13 +663,14 @@ def action_sandbox(
 # travelled. If nothing is running, nobody walks — which is the point: an
 # animation that always loops tells you only that the animation works.
 # =========================================================================
-FLOW_SCRIPT = """
+# The animation is one piece of code with two drivers behind it. The live page
+# polls the database; the exported snapshot replays a recording embedded in the
+# file. Both feed the same `show()`, so a villager means the same thing in a
+# file you emailed as it does on the running server.
+FLOW_CORE = """
 const NS = 'http://www.w3.org/2000/svg';
 const KIND = {ok:'var(--good)', blocked:'var(--warn)',
               refused:'var(--warn)', alarm:'var(--bad)'};
-let after = Number(document.body.dataset.after || 0);
-let paused = false;
-
 function lamp(nodeId, kind) {
   const el = document.getElementById('node-' + nodeId);
   if (!el) return;
@@ -728,6 +737,18 @@ function show(ev, delay) {
   }, delay);
 }
 
+function say(text) {
+  const status = document.getElementById('flow-status');
+  if (status) status.textContent = text;
+}
+"""
+
+
+# The live driver: ask the database what has happened since last time.
+FLOW_LIVE = """
+let after = Number(document.body.dataset.after || 0);
+let paused = false;
+
 async function poll() {
   if (paused) return;
   try {
@@ -737,10 +758,9 @@ async function poll() {
     // after another rather than a single flash.
     data.events.forEach((ev, i) => show(ev, i * 260));
     if (data.events.length) after = data.events[data.events.length - 1].id;
-    const status = document.getElementById('flow-status');
-    if (status) status.textContent = data.events.length
+    say(data.events.length
       ? data.events.length + ' villager(s) on the roads'
-      : 'quiet — run a tick, or start `trade run`';
+      : 'quiet — run a tick, or start `trade run`');
   } catch (err) { /* a dropped poll is not an error; the page keeps trying */ }
 }
 setInterval(poll, 900);
@@ -750,6 +770,22 @@ document.getElementById('flow-pause')?.addEventListener('click', (ev) => {
   paused = !paused;
   ev.target.textContent = paused ? 'Resume' : 'Pause';
 });
+"""
+
+
+# The snapshot driver: there is no server to ask, so the events travel inside
+# the file. It plays once on load and then waits — a recording that looped
+# forever would look like a village that never stops working.
+FLOW_REPLAY = """
+function replay() {
+  EVENTS.forEach((ev, i) => show(ev, i * 260));
+  say(EVENTS.length
+    ? 'replaying ' + EVENTS.length + ' recorded event(s)'
+    : 'nothing was recorded — the village was quiet');
+}
+
+document.getElementById('flow-replay')?.addEventListener('click', replay);
+replay();
 """
 
 
@@ -954,7 +990,7 @@ def flow_page() -> HTMLResponse:
         "where they wait for you. The courthouse, arena, bazaar and tavern sit off "
         "the main road because none of them is on the tick's critical path.</p>",
         "<p><a href='/village'>&larr; Mission Control</a></p>",
-        f"<script>{FLOW_SCRIPT}</script>",
+        f"<script>{FLOW_CORE}{FLOW_LIVE}</script>",
     ])
     html_page = page("The flow — the Village", body)
     # `after` rides on <body> so the first poll does not replay history.

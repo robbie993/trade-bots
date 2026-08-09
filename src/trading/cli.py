@@ -659,6 +659,24 @@ def cmd_sandbox_action(args) -> int:
     return 0
 
 
+def cmd_dashboard(args) -> int:
+    """Freeze the village into one file you can send to somebody."""
+    from pathlib import Path
+
+    from . import snapshot
+
+    eco = _ecosystem(args)
+    path = snapshot.write(
+        eco, Path(args.out), events=args.events, note=args.note or ""
+    )
+    size = path.stat().st_size
+    print(f"wrote {path} ({size:,} bytes)")
+    print("self-contained: open it in a browser, or attach it to an email.")
+    print("It is a snapshot — the buttons and the approval gate live on "
+          "`python -m src.main serve`.")
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -819,6 +837,13 @@ def add_trade_parser(subparsers) -> None:
     p.add_argument("actor")
     p.add_argument("target")
     p.set_defaults(sandbox_action="sabotage")
+
+    p = add("dashboard", "freeze the village into one self-contained HTML file",
+            cmd_dashboard)
+    p.add_argument("--out", default="dashboard/village.html")
+    p.add_argument("--events", type=int, default=120,
+                   help="how many recorded events to embed")
+    p.add_argument("--note", help="a line for the banner, e.g. what this is")
 
     add("frameworks", "which external frameworks are installed", cmd_frameworks)
 
