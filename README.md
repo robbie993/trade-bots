@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 790 tests, no database server, no network
+python -m pytest            # 812 tests, no database server, no network
 ```
 
 ---
@@ -128,6 +128,7 @@ src/
 │   ├── flow.py             the village map, and the tick's telemetry
 │   ├── snapshot.py         the same village, frozen into one HTML file
 │   ├── recruit.py          drop a bot in; a cleared file becomes a firm
+│   ├── importer.py         adapt bots written for something else
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py

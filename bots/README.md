@@ -22,6 +22,19 @@ python -m src.main approve <id> --by you
 python -m src.main trade apply-approvals   # funds it and sets it trading
 ```
 
+## Bringing in a bot written for something else
+
+If your file does not already have `GENOME` and `UNIVERSE`, adapt it first:
+
+```bash
+python -m src.main trade import ~/my-bots --dry-run   # read it, write nothing
+python -m src.main trade import ~/my-bots             # writes into bots/
+```
+
+It reads `FAST_MA`, `TICKERS`, `params: {...}` and the other names people
+actually use, and prints exactly what it mapped, guessed, defaulted, ignored
+and could not carry. Read that before recruiting the result.
+
 ## What a bot has to declare
 
 Two module-level names. Both must be literals — the court reads the syntax

@@ -736,6 +736,51 @@ analyst roster needs to grow to cover what they do.
 `bots/*` is gitignored apart from the examples: a strategy you wrote is yours,
 and the drop box should not be a way to commit it by accident.
 
+### Importing bots written for something else
+
+`recruit` needs a file that already speaks the dialect. A bot you wrote last
+year does not: it has `FAST_MA = 12`, `TICKERS = [...]`, and its edge in a
+function called `should_buy`. So there is an adapter:
+
+```bash
+python -m src.main trade import ~/my-bots --dry-run   # read it, write nothing
+python -m src.main trade import ~/my-bots             # writes into bots/
+python -m src.main trade recruit-watch --dir bots
+```
+
+It never runs your code — parsed with `ast`, same as the court — and it prints
+what it did with every value:
+
+```
+meme_sniper.py -> meme_sniper
+  symbols   : DOGE-USD, SHIB-USD, PEPE-USD, BONK-USD
+  guessed   : fast_window     <- FAST_MA   (alias — check it)
+  guessed   : slow_window     <- SLOW_MA   (alias — check it)
+  defaulted : fair_band_pct, trend_bias
+  NOT CARRIED: 3 function(s)/class(es) — fetch_ohlcv, should_buy, MemeSniper
+  ignored   : MIN_LIQUIDITY_USD, TAKE_PROFIT_PCT, STOP_LOSS_PCT
+```
+
+Four things it will not do:
+
+**It will not pretend your logic came across.** A firm here is a genome. If the
+edge lived in `should_buy`, that function is named under `NOT CARRIED` and it
+is not here. An importer that emitted a plausible genome and let you believe
+the strategy had been ported would be worse than one that refuses.
+
+**It will not invent a number.** A gene the file never mentions is left at the
+village default and listed under `defaulted`. A name matched by alias rather
+than exactly is listed under `guessed`, for you to check.
+
+**It will not copy a credential.** A file that looks like it holds an API key
+is reported and nothing is written.
+
+**It will tell you when the bot does something the village does not.** Options,
+shorting, leverage and intraday bars each get a line. Those warnings match on
+parameter *names* rather than the file text, because matching the text found
+"short" inside `short_window` and "tick" inside `TICKERS` — and a confident
+wrong warning teaches you to ignore the section that matters.
+
 ---
 
 ## The strategy court
@@ -965,6 +1010,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
 | `/village/flow` | the village map, walked as the tick runs |
+| `trade import <path>` | adapt bots written for something else |
 | `trade recruit <f>` | drop a bot in; a cleared file becomes a firm |
 | `trade recruit-watch --dir D` | try every bot in a directory |
 | `trade recruits` | recruited firms waiting to be funded |

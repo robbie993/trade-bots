@@ -816,6 +816,42 @@ def cmd_recruits(args) -> int:
     return 0
 
 
+def cmd_import(args) -> int:
+    """Read a bot that was never written for this village, and adapt it."""
+    from pathlib import Path
+
+    from .importer import scan, scan_all, write
+
+    target = Path(args.path)
+    reports = scan_all(target) if target.is_dir() else [scan(target)]
+    if not reports:
+        print(f"nothing to import in {target}")
+        return 0
+
+    written = 0
+    for report in reports:
+        print(report.summary())
+        if args.dry_run:
+            print()
+            continue
+        path = write(report, args.out)
+        if path is not None:
+            written += 1
+            print(f"  written   : {path}")
+        elif not report.error and not report.secrets:
+            print("  not written: no symbols found — add a UNIVERSE by hand")
+        print()
+
+    if args.dry_run:
+        print("dry run: nothing written.")
+        return 0
+    print(f"{written} of {len(reports)} written to {args.out}/")
+    if written:
+        print("Read them, then:")
+        print(f"  python -m src.main trade recruit-watch --dir {args.out}")
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -991,6 +1027,11 @@ def add_trade_parser(subparsers) -> None:
 
     p = add("council-case", "one ruling, juror by juror", cmd_council_case)
     p.add_argument("id", type=int)
+
+    p = add("import", "adapt a bot written for something else", cmd_import)
+    p.add_argument("path", help="a file or a directory of them")
+    p.add_argument("--out", default="bots", help="where to write village-format files")
+    p.add_argument("--dry-run", action="store_true", help="report only, write nothing")
 
     p = add("recruit", "drop a bot file in; a cleared file becomes a firm", cmd_recruit)
     p.add_argument("file")
