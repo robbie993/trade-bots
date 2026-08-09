@@ -140,7 +140,12 @@ def _read_mapping(raw, evidence: Evidence) -> None:
     """A declarative strategy: the genome is simply in the file."""
     if not isinstance(raw, dict):
         raise EvidenceError(f"{evidence.name} does not parse to a mapping")
-    body = raw.get("strategy", raw)
+    # `strategy:` is allowed to be either a nested block holding the genome, or
+    # a plain name — which is how config/firm_config.yaml uses it. Descending
+    # into a string produced an AttributeError from inside the parser instead
+    # of a readable refusal, so the type is checked rather than assumed.
+    nested = raw.get("strategy")
+    body = nested if isinstance(nested, dict) else raw
     genome = body.get("genome", {})
     if not isinstance(genome, dict):
         raise EvidenceError(f"{evidence.name}: `genome` must be a mapping")

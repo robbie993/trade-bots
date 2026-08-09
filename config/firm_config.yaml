@@ -21,16 +21,8 @@ firms:
     venue: "paper"
     risk_limit: 0.02          # fraction of allocation risked per new position
     capital_allocation: 100000
-    universe:
-      - SPY
-      - QQQ
-      - IWM
-      - DIA
-      - EFA
-    analysts:
-      - fundamental
-      - technical
-      - sentiment
+    universe: [SPY, QQQ, IWM, DIA, EFA]
+    analysts: [fundamental, technical, sentiment]
     genome:
       fast_window: 10
       slow_window: 30
@@ -43,50 +35,127 @@ firms:
   firm_b_stocks:
     name: "Stock Picker"
     asset_class: "Equities"
-    strategy: "value_growth"
-    venue: "paper"
+    strategy: "fundamental_momentum"
     risk_limit: 0.03
     capital_allocation: 100000
-    universe:
-      - AAPL
-      - MSFT
-      - NVDA
-      - JNJ
-      - XOM
-      - KO
-    analysts:
-      - fundamental
-      - technical
-      - macro
+    universe: [AAPL, MSFT, NVDA, JNJ, XOM, KO]
+    analysts: [fundamental, technical, sentiment]
     genome:
       fast_window: 12
-      slow_window: 50
+      slow_window: 40
       rsi_window: 14
-      trend_bias: 35          # this pod leans toward buying what is cheap
+      trend_bias: 55
       value_window: 120
-      fair_band_pct: 6
+      fair_band_pct: 10
       calm_vol_pct: 30
 
   firm_c_crypto:
     name: "Crypto Trader"
     asset_class: "Cryptocurrency"
-    strategy: "momentum"
-    venue: "paper"
+    strategy: "trend_following"
     risk_limit: 0.05
     capital_allocation: 50000
-    universe:
-      - BTC-USD
-      - ETH-USD
-      - SOL-USD
-    analysts:
-      - technical
-      - sentiment
-      - onchain
+    universe: [BTC-USD, ETH-USD, SOL-USD]
+    analysts: [technical, sentiment, onchain]
     genome:
-      fast_window: 7
+      fast_window: 6
       slow_window: 21
       rsi_window: 10
-      trend_bias: 85          # crypto pod is almost pure momentum
-      value_window: 60
+      trend_bias: 85
+      value_window: 45
       fair_band_pct: 15
+      calm_vol_pct: 60
+
+  # ---------------------------------------------------------------------
+  # Five more, so the village is a village rather than a trio — and so the
+  # leaderboard, the arena and the solar system have something to rank.
+  #
+  # They differ in *genome*, not in code: the analysts are the same, and what
+  # separates them is how they read the same bars. That is the point of the
+  # comparison — same data, same rules, different parameters, and the ledger
+  # decides which was right.
+  # ---------------------------------------------------------------------
+  firm_d_value:
+    name: "Value Desk"
+    asset_class: "Equities"
+    strategy: "mean_reversion"
+    risk_limit: 0.02
+    capital_allocation: 80000
+    universe: [JNJ, KO, XOM, PG, VZ]
+    analysts: [fundamental, technical]
+    genome:
+      fast_window: 20
+      slow_window: 90
+      rsi_window: 21
+      trend_bias: 15          # buys weakness rather than strength
+      value_window: 140
+      fair_band_pct: 14
+      calm_vol_pct: 20
+
+  firm_e_momentum:
+    name: "Momentum Desk"
+    asset_class: "Equities"
+    strategy: "breakout"
+    risk_limit: 0.04
+    capital_allocation: 80000
+    universe: [NVDA, TSLA, AMD, META, AMZN]
+    analysts: [technical, sentiment]
+    genome:
+      fast_window: 5
+      slow_window: 20
+      rsi_window: 9
+      trend_bias: 95          # nearly pure momentum
+      value_window: 40
+      fair_band_pct: 20
       calm_vol_pct: 70
+
+  firm_f_bonds:
+    name: "Rates Desk"
+    asset_class: "Fixed income"
+    strategy: "carry"
+    risk_limit: 0.01          # the quiet one
+    capital_allocation: 60000
+    universe: [TLT, IEF, SHY, LQD]
+    analysts: [fundamental, macro]
+    genome:
+      fast_window: 25
+      slow_window: 110
+      rsi_window: 28
+      trend_bias: 40
+      value_window: 150
+      fair_band_pct: 4
+      calm_vol_pct: 15
+
+  firm_g_commodities:
+    name: "Commodities Desk"
+    asset_class: "Commodities"
+    strategy: "trend_following"
+    risk_limit: 0.03
+    capital_allocation: 70000
+    universe: [GLD, SLV, USO, DBA]
+    analysts: [technical, macro]
+    genome:
+      fast_window: 9
+      slow_window: 45
+      rsi_window: 14
+      trend_bias: 75
+      value_window: 100
+      fair_band_pct: 11
+      calm_vol_pct: 50
+
+  firm_h_global:
+    name: "Global Macro"
+    asset_class: "Multi-asset"
+    strategy: "macro"
+    risk_limit: 0.025
+    capital_allocation: 60000
+    universe: [EFA, EEM, FXI, EWJ, VGK]
+    analysts: [macro, fundamental, sentiment]
+    genome:
+      fast_window: 15
+      slow_window: 70
+      rsi_window: 18
+      trend_bias: 50          # no opinion; lets the evidence decide
+      value_window: 110
+      fair_band_pct: 9
+      calm_vol_pct: 35

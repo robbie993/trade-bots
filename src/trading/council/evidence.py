@@ -155,8 +155,41 @@ def gather(eco, approval, market=None) -> CouncilEvidence:
                 seller, cash_floor_pct=eco.config.firm.cash_floor_pct
             ).withdrawable
 
+    if evidence.kind == "recruit":
+        _gather_trial(eco, details, evidence)
+
     evidence.recent_council_grants = _recent_grants(eco.db, evidence.firm_key, approval.action)
     return evidence
+
+
+def _gather_trial(eco, details: dict, evidence: CouncilEvidence) -> None:
+    """A recruit's evidence is its court case, read back from the ledger.
+
+    Not from the approval's own text: the request says the court accepted the
+    file, and a request is exactly the thing this module refuses to take a
+    firm's word for. The case is a row in `strategy_cases`, so it is read from
+    there.
+    """
+    evidence.notes["universe"] = list(evidence_universe(eco, evidence.firm_key))
+    case_id = details.get("case")
+    if case_id is None:
+        return
+    try:
+        row = eco.db.query_one("SELECT * FROM strategy_cases WHERE id = ?", (case_id,))
+    except Exception:  # noqa: BLE001
+        return
+    if not row:
+        return
+    evidence.notes["court_verdict"] = row.get("ruling") or ""
+    evidence.notes["court_confidence"] = str(row.get("confidence") or 0)
+    if row.get("fitness") is not None:
+        evidence.notes["fitness"] = str(row.get("fitness"))
+    evidence.notes["file"] = details.get("file") or ""
+
+
+def evidence_universe(eco, firm_key: str) -> tuple:
+    firm = eco.store.get_firm(firm_key) if firm_key else None
+    return tuple(firm.universe or ()) if firm is not None else ()
 
 
 def _recent_grants(db, firm_key: str, action: str, window: int = 5) -> int:

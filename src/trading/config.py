@@ -108,8 +108,14 @@ class BrokerageConfig:
         default_factory=lambda: _env_bool("TRADE_APPROVE_INCREASES", True)
     )
     # Total capital the brokerage is allowed to have deployed across all firms.
+    #
+    # Deliberately larger than the sum of the firms in config/firm_config.yaml.
+    # When the cap equals what is already deployed there is no headroom, and a
+    # cap with no headroom silently disables two things that are supposed to
+    # work: the allocator can never raise a winner, and no recruited bot can
+    # ever be funded. The gap is the room the village has to grow into.
     total_capital: Decimal = field(
-        default_factory=lambda: _env_decimal("TRADE_TOTAL_CAPITAL", "250000.00")
+        default_factory=lambda: _env_decimal("TRADE_TOTAL_CAPITAL", "1000000.00")
     )
     # Reconciliation tolerance. Not zero because prices carry 8 decimals and
     # cash carries 2; one cent of quantisation per fill is expected.

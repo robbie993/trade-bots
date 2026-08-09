@@ -267,6 +267,80 @@ def transfer_is_internal(evidence) -> Finding:
     return _abstain("transfer_is_internal", "not a transfer")
 
 
+# =========================================================================
+# funding a recruit
+#
+# A brand-new firm has no track record — that is what "new" means — so the
+# sample gate is the wrong question and the RAISE panel would veto every
+# recruit forever. The evidence for a recruit is its *trial*: what the court
+# ruled, how the backtest went, and whether there is room for it.
+# =========================================================================
+def court_accepted(evidence) -> Finding:
+    verdict = str(evidence.notes.get("court_verdict") or "")
+    if verdict != "accept":
+        return _against(
+            "court_accepted", 100,
+            f"the court returned {verdict.upper() or 'nothing'}; only an "
+            "ACCEPT admits a firm",
+            veto=True,
+        )
+    return _for("court_accepted", HEAVY, "the court accepted the file")
+
+
+def trial_fitness(evidence) -> Finding:
+    fitness = evidence.notes.get("fitness")
+    if fitness is None:
+        return _against("trial_fitness", MEDIUM,
+                        "no backtest fitness — the file could not be measured")
+    value = D(str(fitness))
+    if value > ZERO:
+        return _for("trial_fitness", MEDIUM, f"backtest fitness {value}")
+    return _against("trial_fitness", HEAVY,
+                    f"backtest fitness {value} — it lost money on its own trial")
+
+
+def trial_confidence(evidence) -> Finding:
+    confidence = evidence.notes.get("court_confidence")
+    if confidence is None:
+        return _abstain("trial_confidence", "the court recorded no confidence")
+    value = D(str(confidence))
+    if value >= D("60"):
+        return _for("trial_confidence", LIGHT, f"the court was {value}% confident")
+    return _abstain("trial_confidence", f"the court was only {value}% confident")
+
+
+def has_a_universe(evidence) -> Finding:
+    if not evidence.notes.get("universe"):
+        return _against("has_a_universe", 100,
+                        "the file names no symbols; a firm with nothing to "
+                        "trade is not a firm", veto=True)
+    return _abstain("has_a_universe",
+                    f"{len(evidence.notes['universe'])} symbol(s) to trade")
+
+
+def stake_is_modest(evidence) -> Finding:
+    """A recruit gets a starter stake, not the run of the brokerage."""
+    if evidence.headroom <= ZERO:
+        return _against("stake_is_modest", 100,
+                        "no capital left under the brokerage's total", veto=True)
+    if evidence.new_allocation > evidence.headroom:
+        return _against("stake_is_modest", 100,
+                        f"{evidence.new_allocation} asked, {evidence.headroom} left",
+                        veto=True)
+    share = (evidence.new_allocation / evidence.headroom) * D("100") \
+        if evidence.headroom else D("100")
+    if share > D("50"):
+        # A veto rather than a heavy vote: handing more than half of what is
+        # left to a firm with no track record is not a trade-off a good
+        # backtest can win, it is a category error. A human can still do it.
+        return _against("stake_is_modest", 100,
+                        f"the stake is {share.quantize(D('1'))}% of everything "
+                        "left; an untried firm does not get that without you",
+                        veto=True)
+    return _for("stake_is_modest", LIGHT, f"a starter stake of "
+                f"{evidence.new_allocation}")
+
+
 # The panel, per action. Order is the order they are read in.
 RAISE = (books, firm_exists, sample_gate, headroom, ceiling, compounding,
          score, performance, drawdown, win_rate)
@@ -275,6 +349,8 @@ KILL = (books, firm_exists, sample_gate_for_kill, kill_condition, sustained,
 RESUME = (books, firm_exists, condition_cleared, recovered, solvent)
 TRANSFER = (books, firm_exists, seller_can_pay, headroom, transfer_is_internal,
             score, drawdown)
+RECRUIT = (books, firm_exists, court_accepted, has_a_universe, stake_is_modest,
+           trial_fitness, trial_confidence)
 
 
-__all__ = ["KILL", "RAISE", "RESUME", "TRANSFER"]
+__all__ = ["KILL", "RAISE", "RECRUIT", "RESUME", "TRANSFER"]

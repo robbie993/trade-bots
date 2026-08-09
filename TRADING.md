@@ -663,6 +663,79 @@ It is served by the app rather than opened as a file, so the fetch is
 same-origin — a `file://` page polling localhost is a CORS request, and the
 fixes for that are a browser flag or opening the API to arbitrary origins.
 
+## Bringing your own bots
+
+Drop a file in `bots/` and run:
+
+```bash
+python -m src.main trade recruit-watch --dir bots
+```
+
+A file the court clears becomes a **firm of its own** — its own capital, its
+own kill switch, its own planet at `/village/solar`, its own resident in the
+village map, its own line on the leaderboard. There is also
+`trade recruit <file>` for one, and a **Recruit it as a firm** button on
+Mission Control.
+
+Three things hold, and they are the same three that hold everywhere else here.
+
+**The trial is not optional.** A recruit goes through the same strategy court
+as `court-submit`: parsed with `ast`, never imported, never executed. A file
+that reaches for `socket`, evals at runtime, or cannot be parsed is refused
+with reasons. There is no trusted flag that skips the jury, including for
+files you wrote.
+
+**A recruit is born paused and holding nothing.** Creating a funded, trading
+firm from a file would be starting the bleeding. So the firm is created at
+`paused` with an allocation of zero, and its capital is one
+`ALLOCATE_CAPITAL` approval:
+
+```bash
+python -m src.main trade recruits          # who is waiting, and for how much
+python -m src.main approve <id> --by you
+python -m src.main trade apply-approvals   # funds it and sets it trading
+```
+
+**MODIFY does not recruit.** The court's middle verdict means it could not
+tell. A body that reads "I don't know" as a yes is not worth having.
+
+### When the council is sitting
+
+It rules on recruits too, on a panel of its own — because a brand-new firm has
+no track record, so the sample gate is the wrong question and would veto every
+recruit forever. **The evidence for a recruit is its trial**: what the court
+ruled, the backtest fitness, whether it named symbols, and whether the stake is
+modest. Asking for more than half of the remaining capital is a veto: an
+untried firm does not get that without you.
+
+### What a bot has to declare
+
+Two module-level literals. The court reads the syntax tree, so anything
+computed at import time is invisible to it — and the file is refused rather
+than run.
+
+```python
+GENOME = {
+    "fast_window": 8, "slow_window": 60, "rsi_window": 14,
+    "trend_bias": 88,        # 100 = pure momentum, 0 = pure mean reversion
+    "value_window": 60, "fair_band_pct": 6, "calm_vol_pct": 30,
+}
+UNIVERSE = ["SPY", "QQQ"]
+```
+
+YAML and JSON work too, with `genome:` and `universe:` keys. `bots/` ships one
+of each as a template, and `bots/README.md` has the full contract.
+
+**One limit worth being plain about.** A firm here *is* a genome — the
+parameters the built-in analysts read — not arbitrary code. The court will not
+execute your file, so a bot whose edge lives in its own Python functions cannot
+be run as-is; what carries over is the configuration. If your bots have real
+logic you want in the village, either express the behaviour as a genome, or the
+analyst roster needs to grow to cover what they do.
+
+`bots/*` is gitignored apart from the examples: a strategy you wrote is yours,
+and the drop box should not be a way to commit it by accident.
+
 ---
 
 ## The strategy court
@@ -892,6 +965,9 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
 | `/village/flow` | the village map, walked as the tick runs |
+| `trade recruit <f>` | drop a bot in; a cleared file becomes a firm |
+| `trade recruit-watch --dir D` | try every bot in a directory |
+| `trade recruits` | recruited firms waiting to be funded |
 | `trade dashboard` | freeze it all into one self-contained HTML file |
 | `trade autonomy` | what the village decides for itself |
 | `trade council` | the council's rulings |

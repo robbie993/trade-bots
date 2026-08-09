@@ -752,6 +752,70 @@ def cmd_council_case(args) -> int:
     return 0
 
 
+def cmd_recruit(args) -> int:
+    """Drop a bot file in; the court rules, and a cleared file becomes a firm."""
+    from ..money import D
+
+    eco = _ecosystem(args)
+    result = eco.recruit(
+        args.file,
+        submitted_by=args.by or "",
+        stake=D(args.stake) if args.stake else None,
+        name=args.name or "",
+    )
+    case = result.case
+    print(f"{case.evidence.name}: court says {case.ruling.verdict.upper()} "
+          f"(confidence {case.ruling.confidence})")
+    print(f"  {case.ruling.reason}")
+    if not result.accepted:
+        print(f"\nnot recruited — {result.reason}")
+        return 1
+    print(f"\n{result}")
+    print("The firm exists, is paused, and holds nothing. It starts trading when "
+          "the funding is approved:")
+    print(f"  python -m src.main approve {result.approval_id} --by you")
+    print("  python -m src.main trade apply-approvals")
+    return 0
+
+
+def cmd_recruit_watch(args) -> int:
+    """Try every bot in a directory."""
+    from pathlib import Path as _Path
+
+    eco = _ecosystem(args)
+    results = eco.recruit_all(
+        args.dir,
+        submitted_by=args.by or "",
+        move_to=_Path(args.move_to) if args.move_to else None,
+    )
+    if not results:
+        print(f"nothing to recruit in {args.dir}")
+        return 0
+    taken = [r for r in results if r.accepted]
+    for result in results:
+        print(("  + " if result.accepted else "  - ") + str(result))
+    print(f"\n{len(taken)} of {len(results)} recruited, all paused and unfunded.")
+    if taken:
+        print("Fund them:  python -m src.main approvals")
+    return 0
+
+
+def cmd_recruits(args) -> int:
+    """Recruited firms still waiting to be funded."""
+    from .recruit import pending_recruits
+
+    eco = _ecosystem(args)
+    rows = pending_recruits(eco)
+    if not rows:
+        print("no recruits waiting. Drop a bot in with `trade recruit <file>`.")
+        return 0
+    print(f"{'firm':20} {'from':28} {'asking':>12}  approval")
+    for row in rows:
+        print(f"{row['firm']:20} {(row['file'] or '')[:28]:28} "
+              f"{row['requested']:>12}  #{row['approval']}")
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -927,6 +991,19 @@ def add_trade_parser(subparsers) -> None:
 
     p = add("council-case", "one ruling, juror by juror", cmd_council_case)
     p.add_argument("id", type=int)
+
+    p = add("recruit", "drop a bot file in; a cleared file becomes a firm", cmd_recruit)
+    p.add_argument("file")
+    p.add_argument("--stake", help="capital to ask for (default: the configured per-firm)")
+    p.add_argument("--name", help="override the firm name")
+    p.add_argument("--by", help="who is submitting it")
+
+    p = add("recruit-watch", "try every bot in a directory", cmd_recruit_watch)
+    p.add_argument("--dir", default="bots")
+    p.add_argument("--move-to", help="move recruited files here")
+    p.add_argument("--by")
+
+    add("recruits", "recruited firms waiting to be funded", cmd_recruits)
 
     add("frameworks", "which external frameworks are installed", cmd_frameworks)
 

@@ -271,13 +271,19 @@ def _court_panel(eco) -> str:
         "enctype='multipart/form-data'>"
         "<input type=file name=file accept='.py,.yaml,.yml,.json' required>"
         "<button class=go>Put it on trial</button></form>"
+        "<form method=post action='/village/actions/recruit' "
+        "enctype='multipart/form-data'>"
+        "<input type=file name=file accept='.py,.yaml,.yml,.json' required>"
+        "<button>Recruit it as a firm</button></form>"
     )
     return _panel(
         "Strategy court",
         _table(rows)
-        + "<p class=muted>The file is read, never executed. ACCEPT admits an "
-        "<em>unselected</em> candidate genome — nothing trades because the court "
-        "liked it.</p>",
+        + "<p class=muted>The file is read, never executed. <strong>Put it on "
+        "trial</strong> admits an <em>unselected</em> candidate genome — nothing "
+        "trades because the court liked it. <strong>Recruit it</strong> goes "
+        "further: a cleared file becomes a firm of its own, created paused and "
+        "holding nothing, with one approval for its capital.</p>",
         upload,
     )
 
@@ -624,6 +630,36 @@ async def action_court_submit(file: UploadFile) -> RedirectResponse:
     finally:
         eco.db.close()
     return _back(said)
+
+
+@router.post("/village/actions/recruit")
+async def action_recruit(file: UploadFile) -> RedirectResponse:
+    """Drop a bot in and make it a firm — if the court clears it.
+
+    Same trial as court-submit; the difference is what an ACCEPT buys. Here it
+    creates a firm, paused and holding nothing, plus one approval for the
+    capital. Nothing on this page funds anything.
+    """
+    eco = ecosystem()
+    try:
+        inbox = Path(eco.config.audit_vault).parent / "inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        name = Path(file.filename or "submitted").name
+        target = inbox / name
+        target.write_bytes(await file.read())
+        result = eco.recruit(target, submitted_by="web")
+        said = (
+            f"{result.firm_key} recruited from {name} — paused and unfunded. "
+            f"Approve #{result.approval_id} to give it "
+            f"{fmt_money(result.requested)} and set it trading."
+            if result.accepted else
+            f"{name} was not recruited: {result.reason}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        said = f"could not recruit that file: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said[:220])
 
 
 @router.post("/village/actions/market-sell")

@@ -628,6 +628,17 @@ class Ecosystem:
                 out.setdefault(symbol, []).append(key)
         return out
 
+    def recruit(self, path, submitted_by: str = "", stake=None, name: str = ""):
+        """Drop a bot file in; the court rules, and a cleared file becomes a firm."""
+        from .recruit import recruit as _recruit
+
+        return _recruit(self, path, submitted_by=submitted_by, stake=stake, name=name)
+
+    def recruit_all(self, directory, submitted_by: str = "", move_to=None) -> list:
+        from .recruit import watch as _watch
+
+        return _watch(self, directory, submitted_by=submitted_by, move_to=move_to)
+
     def apply_approvals(self) -> list:
         """Carry out decisions a human has already made.
 
@@ -657,6 +668,20 @@ class Ecosystem:
             elif approval.action == ApprovalAction.ALLOCATE_CAPITAL.value and details.get("firm"):
                 if details.get("kind") == "capital_transfer":
                     continue  # settled through the black market, not here
+                if details.get("kind") == "recruit":
+                    from .recruit import fund
+
+                    result = fund(
+                        self, details["firm"], D(details["new_allocation"]),
+                        by=approval.approved_by or "approval",
+                    )
+                    applied.append(
+                        f"funded {result['firm']} with {result['allocation']}"
+                    )
+                    details["applied"] = True
+                    self.db.update("human_approvals", approval.id,
+                                   {"details": json.dumps(details, default=str)})
+                    continue
                 change = self.brokerage.allocator.apply_approved_increase(
                     details["firm"], D(details["new_allocation"])
                 )

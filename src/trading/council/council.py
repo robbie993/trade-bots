@@ -50,6 +50,7 @@ DEFER = "defer"
 PANELS = {
     "allocate_capital": jurors.RAISE,
     "capital_transfer": jurors.TRANSFER,
+    "recruit": jurors.RECRUIT,
     "kill_firm": jurors.KILL,
     "resume_firm": jurors.RESUME,
 }
@@ -105,8 +106,10 @@ class Council:
 
     # -- ruling ------------------------------------------------------------
     def panel_for(self, evidence: CouncilEvidence):
-        if evidence.kind == "capital_transfer":
-            return PANELS.get("capital_transfer")
+        # `kind` narrows an action: a transfer and a recruit are both
+        # allocate_capital rows, and they are not the same decision.
+        if evidence.kind in ("capital_transfer", "recruit"):
+            return PANELS.get(evidence.kind)
         return PANELS.get(evidence.action)
 
     def rule(self, evidence: CouncilEvidence) -> CouncilRuling:
