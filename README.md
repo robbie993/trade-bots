@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 671 tests, no database server, no network
+python -m pytest            # 826 tests, no database server, no network
 ```
 
 ---
@@ -90,6 +90,7 @@ python -m pytest            # 671 tests, no database server, no network
 ```
 src/
 ├── config.py               all tunables, the whole risk surface in one file
+├── deploy.py               hosted = read-only; the gate is not a public URL
 ├── money.py                Decimal helpers — no float ever touches cash
 ├── kill_criteria.py        §4 thresholds, pure functions
 ├── notifications.py        console / file / Slack / email
@@ -122,11 +123,17 @@ src/
 │   ├── sandbox/            alliances, betrayal — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
 │   ├── web.py              Mission Control, mounted at /village
-│   ├── flow.py             the tick's telemetry, for the animated diagram
+│   ├── api.py              the same numbers as read-only JSON
+│   ├── static/solar.html   the firms as a solar system (vendored, MIT)
+│   ├── council/            the village ruling on its own pending decisions
+│   ├── flow.py             the village map, and the tick's telemetry
+│   ├── snapshot.py         the same village, frozen into one HTML file
+│   ├── recruit.py          drop a bot in; a cleared file becomes a firm
+│   ├── importer.py         adapt bots written for something else
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
-    └── migrations/         001-006 products, 007-015 trading; Postgres + sqlite/
+    └── migrations/         001-006 products, 007-016 trading; Postgres + sqlite/
 ```
 
 Deliberately **not** built (spec §2.1): sharks, government, alliances, black
@@ -151,6 +158,9 @@ python -m src.main trade init
 python -m src.main trade simulate --days 120
 python -m src.main trade leaderboard
 python -m src.main serve          # gate on /, Mission Control on /village
+python -m src.main trade dashboard  # or freeze it into one shareable file
+
+TRADE_AUTONOMY=council python -m src.main trade run   # and let it run itself
 ```
 
 ---

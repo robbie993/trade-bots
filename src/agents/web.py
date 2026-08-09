@@ -52,6 +52,22 @@ try:
 except Exception:  # pragma: no cover - the gate must serve with or without it
     _village_router = None
 
+# A hosted deployment runs read-only: see src/deploy.py. Installed last so the
+# middleware wraps every router mounted above it, including any added later.
+from ..deploy import install as _install_public  # noqa: E402
+
+# The same numbers as JSON, for anything that is not this browser. Read-only:
+# there is no POST in that router, so mounting it cannot widen what the web
+# tier is able to do.
+try:
+    from ..trading.api import router as _api_router
+
+    app.include_router(_api_router)
+except Exception:  # pragma: no cover
+    _api_router = None
+
+_install_public(app)
+
 
 def context():
     """A fresh config/DB per request — no connection shared across threads."""

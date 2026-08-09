@@ -158,6 +158,25 @@ class Learner:
             ]
         return []
 
+    def new_lessons(self, lessons: Sequence[Lesson]) -> list:
+        """The ones that have not been drawn before.
+
+        Exposed separately from ``record`` so a caller can tell which lessons
+        were *newly* concluded — the vault writes a note per new conclusion,
+        and re-writing every known lesson on every tick would bury the moment
+        a thing was actually learned.
+        """
+        existing = {
+            m.payload.get("key") for m in self.memory.lessons(limit=500) if m.payload.get("key")
+        }
+        out, seen = [], set()
+        for lesson in lessons:
+            if lesson.key in existing or lesson.key in seen:
+                continue
+            seen.add(lesson.key)
+            out.append(lesson)
+        return out
+
     def record(self, lessons: Sequence[Lesson]) -> int:
         """Persist lessons the ecosystem has not already drawn."""
         existing = {

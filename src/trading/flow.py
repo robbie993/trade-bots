@@ -30,22 +30,49 @@ from typing import Optional
 
 from ..db.connection import Database, utcnow_iso
 
-# id, label, x, y, what it is
+# The village map. Each entry is a building: id, label, x, y, kind of
+# building, and what actually goes on inside it.
+#
+# The layout is a map, not a flowchart, and the difference matters for what
+# you can read off it: the six stages of a tick run along the top road, and
+# everything that is *not* on the tick's critical path — the courthouse, the
+# arena, the bazaar, the tavern — sits off to the side where it belongs.
 NODES = (
-    ("market", "Market data", 60, 50, "prices up to the cursor, never past it"),
-    ("firms", "Firms", 200, 50, "analysts, bull/bear debate, trader, risk manager"),
-    ("heart", "Heart", 340, 50, "six moral foundations, before anything executes"),
-    ("venue", "Venue", 480, 50, "paper by default; live venues refuse without approval"),
-    ("ledger", "Ledger", 620, 50, "position, cash and P&L move together or not at all"),
-    ("brain", "Brain", 760, 50, "remembers the fill and what argued for it"),
-    ("blocked", "Blocked", 340, 165, "risk or ethics refused it; the proposal is still stored"),
-    ("gate", "Human gate", 480, 165, "kills and capital raises wait here"),
-    ("brokerage", "Brokerage", 620, 165, "reconcile, score, kill, allocate"),
-    ("audit", "Audit", 760, 165, "the Obsidian vault"),
-    ("halt", "KILL_ALL", 620, 275, "everything paused, waiting on a human"),
+    ("market", "Market well", 70, 60, "well",
+     "prices arrive here, up to the cursor and never past it"),
+    ("firms", "Firm quarter", 250, 60, "halls",
+     "analysts, the bull/bear debate, the trader, the risk manager"),
+    ("heart", "Temple", 440, 60, "temple",
+     "six moral foundations, consulted before anything executes"),
+    ("venue", "Trading post", 620, 60, "post",
+     "paper by default; live venues turn orders away without approval"),
+    ("ledger", "Counting house", 790, 60, "bank",
+     "position, cash and P&L move together or not at all"),
+    ("brain", "Library", 930, 60, "library",
+     "remembers the fill and the argument that produced it"),
+
+    ("blocked", "The pound", 440, 215, "pound",
+     "where refused proposals stop. They are still written down"),
+    ("gate", "Gatehouse", 620, 215, "gate",
+     "kills and capital raises wait here for a human"),
+    ("brokerage", "Town hall", 790, 215, "hall",
+     "reconcile, score, kill, allocate"),
+    ("audit", "Archive", 930, 215, "archive",
+     "the Obsidian vault"),
+    ("halt", "Bell tower", 790, 370, "bell",
+     "KILL_ALL: everything paused, waiting on a human"),
+
+    ("court", "Courthouse", 250, 215, "court",
+     "a dropped strategy file, twelve jurors, a ruling"),
+    ("arena", "Arena", 70, 215, "arena",
+     "bouts, milestones, tokens — points, never capital"),
+    ("bazaar", "Bazaar", 70, 370, "bazaar",
+     "genome licences for tokens; capital only through the gatehouse"),
+    ("tavern", "Tavern", 250, 370, "tavern",
+     "alliances, betrayal, espionage — and none of it reaches the ledger"),
 )
 
-# from, to — every edge a dot can travel
+# from, to — every road a villager can walk
 EDGES = (
     ("market", "firms"),
     ("firms", "heart"),
@@ -58,6 +85,13 @@ EDGES = (
     ("brokerage", "audit"),
     ("brokerage", "gate"),
     ("brokerage", "halt"),
+    # The side of the village that is not on the tick's critical path.
+    ("firms", "court"),
+    ("court", "brain"),
+    ("firms", "arena"),
+    ("firms", "bazaar"),
+    ("bazaar", "gate"),
+    ("firms", "tavern"),
 )
 
 NODE_IDS = frozenset(n[0] for n in NODES)
@@ -237,8 +271,8 @@ def diagram() -> dict:
     """The shape of the flow, for the page to draw."""
     return {
         "nodes": [
-            {"id": i, "label": lbl, "x": x, "y": y, "about": about}
-            for i, lbl, x, y, about in NODES
+            {"id": i, "label": lbl, "x": x, "y": y, "building": kind, "about": about}
+            for i, lbl, x, y, kind, about in NODES
         ],
         "edges": [{"id": f"{a}>{b}", "from": a, "to": b} for a, b in EDGES],
     }

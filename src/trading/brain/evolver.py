@@ -169,19 +169,22 @@ class Evolver:
         best = max(candidates, key=lambda c: c.fitness)
         gen.winner = best
 
+        # The incumbent goes in first so the mutants can point at it. Every
+        # mutant in a generation *is* a mutation of that one genome, and
+        # recording which one turns `strategy_genomes` from a list into a
+        # lineage — without it `parent_id` sits null and the descent of a
+        # strategy is unrecoverable after the fact.
+        parent_id = self.store.db.insert(
+            "strategy_genomes",
+            _genome_row(firm, generation, incumbent, best, incumbent),
+        )
         for candidate in candidates:
+            if candidate is incumbent:
+                continue
             self.store.db.insert(
                 "strategy_genomes",
-                {
-                    "firm_id": firm.id,
-                    "generation": generation,
-                    "genome": json.dumps(candidate.genome, sort_keys=True),
-                    "fitness": candidate.fitness,
-                    "trades": candidate.result.closed_trades if candidate.result else 0,
-                    "selected": candidate is best and best.fitness > incumbent.fitness,
-                    "notes": "incumbent" if candidate.is_incumbent else "mutant",
-                    "created_at": utcnow_iso(),
-                },
+                {**_genome_row(firm, generation, candidate, best, incumbent),
+                 "parent_id": parent_id},
             )
 
         if (
@@ -205,6 +208,19 @@ class Evolver:
             "SELECT * FROM strategy_genomes WHERE firm_id = ? ORDER BY id DESC LIMIT ?",
             (firm_id, limit),
         )
+
+
+def _genome_row(firm, generation: int, candidate, best, incumbent) -> dict:
+    return {
+        "firm_id": firm.id,
+        "generation": generation,
+        "genome": json.dumps(candidate.genome, sort_keys=True),
+        "fitness": candidate.fitness,
+        "trades": candidate.result.closed_trades if candidate.result else 0,
+        "selected": candidate is best and best.fitness > incumbent.fitness,
+        "notes": "incumbent" if candidate.is_incumbent else "mutant",
+        "created_at": utcnow_iso(),
+    }
 
 
 __all__ = ["BASE_GENOME", "Candidate", "Evolver", "GENES", "Generation"]

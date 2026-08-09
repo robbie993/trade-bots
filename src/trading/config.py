@@ -108,8 +108,14 @@ class BrokerageConfig:
         default_factory=lambda: _env_bool("TRADE_APPROVE_INCREASES", True)
     )
     # Total capital the brokerage is allowed to have deployed across all firms.
+    #
+    # Deliberately larger than the sum of the firms in config/firm_config.yaml.
+    # When the cap equals what is already deployed there is no headroom, and a
+    # cap with no headroom silently disables two things that are supposed to
+    # work: the allocator can never raise a winner, and no recruited bot can
+    # ever be funded. The gap is the room the village has to grow into.
     total_capital: Decimal = field(
-        default_factory=lambda: _env_decimal("TRADE_TOTAL_CAPITAL", "250000.00")
+        default_factory=lambda: _env_decimal("TRADE_TOTAL_CAPITAL", "1000000.00")
     )
     # Reconciliation tolerance. Not zero because prices carry 8 decimals and
     # cash carries 2; one cent of quantisation per fill is expected.
@@ -120,6 +126,42 @@ class BrokerageConfig:
     ecosystem_max_drawdown_pct: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_ECOSYSTEM_MAX_DRAWDOWN_PCT", "25.0")
     )
+
+
+@dataclass(frozen=True)
+class AutonomyConfig:
+    """How much the village decides for itself.
+
+    ``human``   — every gated decision waits for you. The original behaviour,
+                  and still what you get if you set nothing.
+    ``council`` — the council rules on each pending decision from the ledger.
+                  It grants, refuses, or *defers*: a decision the evidence does
+                  not settle still waits for a human, so autonomy narrows what
+                  you are asked about rather than removing you.
+
+    ``live_trading_needs_human`` is not a normal setting. Sending an order to a
+    real broker is the one act that leaves this system — irreversible, outside
+    the ledger, real money. The council has no panel for it, so turning this
+    off does not make it autonomous; it exists so the answer to "can it trade
+    my real money on its own?" is a line of code you can read rather than a
+    promise.
+    """
+
+    mode: str = field(default_factory=lambda: os.environ.get("TRADE_AUTONOMY", "human"))
+    # How near a run thing has to be before the council declines to call it.
+    margin: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_COUNCIL_MARGIN", "20")
+    )
+    # Ticks between rulings on the same firm and action. The council may reach
+    # the same conclusion twice; it may not compound its way there in a minute.
+    cooldown_ticks: int = field(
+        default_factory=lambda: _env_int("TRADE_COUNCIL_COOLDOWN", 3)
+    )
+    live_trading_needs_human: bool = True
+
+    @property
+    def council_decides(self) -> bool:
+        return self.mode.strip().lower() == "council"
 
 
 @dataclass(frozen=True)
@@ -250,6 +292,7 @@ class TradingConfig:
     firm: FirmDefaults = field(default_factory=FirmDefaults)
     kill: FirmKillConfig = field(default_factory=FirmKillConfig)
     brokerage: BrokerageConfig = field(default_factory=BrokerageConfig)
+    autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
     brain: BrainConfig = field(default_factory=BrainConfig)
     heart: HeartConfig = field(default_factory=HeartConfig)
     gateway: GatewayConfig = field(default_factory=GatewayConfig)

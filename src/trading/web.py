@@ -141,7 +141,8 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<button class=go>Run a tick</button></form>"
         "<form method=post action='/village/actions/apply-approvals'>"
         "<button>Carry out approved decisions</button></form>"
-        "<a href='/village/flow'><button>Watch the flow &rarr;</button></a>",
+        "<a href='/village/flow'><button>Walk the village &rarr;</button></a>"
+        "<a href='/village/solar'><button>Solar system &rarr;</button></a>",
     )
     if not reconciliation.ok:
         header += (
@@ -155,13 +156,22 @@ def _render(eco: Ecosystem, said: str) -> str:
         header,
         _firms_panel(eco, firms, by_id),
         _brokerage_panel(eco, firms),
+        _council_panel(eco),
         _court_panel(eco),
         _arena_panel(eco),
         _market_panel(eco),
         _sandbox_panel(eco),
-        "<p><a href='/'>&larr; approval gate</a> · "
-        "<span class=muted>nothing on this page grants an approval</span></p>",
+        MISSION_FOOTER,
     ])
+
+
+# The line that closes Mission Control. Named because the snapshot exporter
+# removes it by identity rather than by guessing at a regex: in a file with no
+# server behind it, a link back to the approval gate goes nowhere.
+MISSION_FOOTER = (
+    "<p><a href='/'>&larr; approval gate</a> · "
+    "<span class=muted>nothing on this page grants an approval</span></p>"
+)
 
 
 # =========================================================================
@@ -212,6 +222,41 @@ def _brokerage_panel(eco, firms) -> str:
     )
 
 
+def _council_panel(eco) -> str:
+    """What the village decided for itself — and what it handed back to you."""
+    autonomy = eco.config.autonomy
+    rows = [{
+        "id": f"#{r['id']}",
+        "verdict": _verdict(r.get("verdict")),
+        "action": e(r.get("action") or ""),
+        "firm": e(r.get("firm_key") or "-"),
+        "for": r.get("for_weight"),
+        "against": r.get("against_weight"),
+        "reason": e((r.get("reason") or "")[:70]),
+    } for r in eco.council.recent(8)]
+
+    if not autonomy.council_decides:
+        note = (
+            "<p class=muted>The council is not sitting. Every kill, raise and "
+            "resume waits for you at the <a href='/'>approval gate</a>. "
+            "Start it with <code>TRADE_AUTONOMY=council</code>.</p>"
+        )
+    else:
+        note = (
+            "<p class=muted>The council rules from the ledger, not from the "
+            "request: it grants, refuses, or <strong>defers</strong>. A deferred "
+            "decision is still pending for you, which is the point — autonomy "
+            "narrows what you are asked about rather than removing you. "
+            "It has no panel for live trading, and never will.</p>"
+        )
+    return _panel("The council", _table(rows) + note)
+
+
+def _verdict(value) -> str:
+    css = {"grant": "good", "refuse": "warn", "defer": "muted"}.get(value or "", "muted")
+    return f"<span class={css}>{e(value or '')}</span>"
+
+
 def _court_panel(eco) -> str:
     rows = [{
         "id": f"<a href='/village/court/{r['id']}'>#{r['id']}</a>",
@@ -226,13 +271,19 @@ def _court_panel(eco) -> str:
         "enctype='multipart/form-data'>"
         "<input type=file name=file accept='.py,.yaml,.yml,.json' required>"
         "<button class=go>Put it on trial</button></form>"
+        "<form method=post action='/village/actions/recruit' "
+        "enctype='multipart/form-data'>"
+        "<input type=file name=file accept='.py,.yaml,.yml,.json' required>"
+        "<button>Recruit it as a firm</button></form>"
     )
     return _panel(
         "Strategy court",
         _table(rows)
-        + "<p class=muted>The file is read, never executed. ACCEPT admits an "
-        "<em>unselected</em> candidate genome — nothing trades because the court "
-        "liked it.</p>",
+        + "<p class=muted>The file is read, never executed. <strong>Put it on "
+        "trial</strong> admits an <em>unselected</em> candidate genome — nothing "
+        "trades because the court liked it. <strong>Recruit it</strong> goes "
+        "further: a cleared file becomes a firm of its own, created paused and "
+        "holding nothing, with one approval for its capital.</p>",
         upload,
     )
 
@@ -443,7 +494,8 @@ def firm_detail(firm_key: str) -> HTMLResponse:
                    + "<p class=muted>Blocked proposals are stored too — "
                    "&ldquo;why didn't it?&rdquo; is answerable from a row.</p>"),
             f"<p class=muted>genome: <code>{e(firm.genome)}</code></p>",
-            "<p><a href='/village'>&larr; Mission Control</a></p>",
+            "<p><a href='/village'>&larr; Mission Control</a> · "
+        "<a href='/village/solar'>the same firms as a solar system</a></p>",
         ])
     finally:
         eco.db.close()
@@ -571,7 +623,7 @@ async def action_court_submit(file: UploadFile) -> RedirectResponse:
         name = Path(file.filename or "submitted").name
         target = inbox / name
         target.write_bytes(await file.read())
-        case = eco.court.submit(target, submitted_by="web")
+        case = eco.try_strategy(target, submitted_by="web")
         said = f"{name}: {case.ruling.verdict.upper()} — {case.ruling.reason[:120]}"
     except Exception as exc:  # noqa: BLE001
         said = f"could not try that file: {exc}"
@@ -580,13 +632,43 @@ async def action_court_submit(file: UploadFile) -> RedirectResponse:
     return _back(said)
 
 
+@router.post("/village/actions/recruit")
+async def action_recruit(file: UploadFile) -> RedirectResponse:
+    """Drop a bot in and make it a firm — if the court clears it.
+
+    Same trial as court-submit; the difference is what an ACCEPT buys. Here it
+    creates a firm, paused and holding nothing, plus one approval for the
+    capital. Nothing on this page funds anything.
+    """
+    eco = ecosystem()
+    try:
+        inbox = Path(eco.config.audit_vault).parent / "inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        name = Path(file.filename or "submitted").name
+        target = inbox / name
+        target.write_bytes(await file.read())
+        result = eco.recruit(target, submitted_by="web")
+        said = (
+            f"{result.firm_key} recruited from {name} — paused and unfunded. "
+            f"Approve #{result.approval_id} to give it "
+            f"{fmt_money(result.requested)} and set it trading."
+            if result.accepted else
+            f"{name} was not recruited: {result.reason}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        said = f"could not recruit that file: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said[:220])
+
+
 @router.post("/village/actions/market-sell")
 def action_market_sell(
     seller: str = Form(...), asset: str = Form(...), price: str = Form(...)
 ) -> RedirectResponse:
     eco = ecosystem()
     try:
-        listing = eco.black_market.list_asset(seller, asset, price)
+        listing = eco.list_asset(seller, asset, price)
         said = f"listed #{listing.id}: {seller} sells {asset} for {listing.price} {listing.currency}"
     except Exception as exc:  # noqa: BLE001
         said = f"refused: {exc}"
@@ -599,7 +681,7 @@ def action_market_sell(
 def action_market_buy(buyer: str = Form(...), listing: int = Form(...)) -> RedirectResponse:
     eco = ecosystem()
     try:
-        result = eco.black_market.buy(buyer, listing)
+        result = eco.buy_listing(buyer, listing)
         if result["settled"]:
             said = f"settled transaction #{result['transaction']}"
         else:
@@ -639,17 +721,7 @@ def action_sandbox(
 ) -> RedirectResponse:
     eco = ecosystem()
     try:
-        if action == "form":
-            members = [m.strip() for m in target.split(",") if m.strip()]
-            said = str(eco.sandbox.form(name, actor, members))
-        elif action == "betray":
-            said = str(eco.sandbox.betray(actor, name))
-        elif action == "spy":
-            said = str(eco.sandbox.spy(actor, target))
-        elif action == "sabotage":
-            said = str(eco.sandbox.sabotage(actor, target))
-        else:
-            said = f"unknown sandbox action {action!r}"
+        said = str(eco.intrigue(action, actor, name=name, target=target))
     except Exception as exc:  # noqa: BLE001
         said = f"refused: {exc}"
     finally:
@@ -658,44 +730,64 @@ def action_sandbox(
 
 
 # =========================================================================
-# the flow diagram
+# the village map
 #
-# The dots are real. Every one is an event `Ecosystem.tick()` wrote as it
-# happened, read back out of `flow_events`. If nothing is running, nothing
-# moves — which is the point: an animation that always loops tells you only
-# that the animation works.
+# The villagers are real. Every walker is an event `Ecosystem.tick()` wrote as
+# it happened, read back out of `flow_events`, walking the road its event
+# travelled. If nothing is running, nobody walks — which is the point: an
+# animation that always loops tells you only that the animation works.
 # =========================================================================
-FLOW_SCRIPT = """
+# The animation is one piece of code with two drivers behind it. The live page
+# polls the database; the exported snapshot replays a recording embedded in the
+# file. Both feed the same `show()`, so a villager means the same thing in a
+# file you emailed as it does on the running server.
+FLOW_CORE = """
 const NS = 'http://www.w3.org/2000/svg';
-const KIND_COLOUR = {ok:'var(--good)', blocked:'var(--warn)',
-                     refused:'var(--warn)', alarm:'var(--bad)'};
-let after = Number(document.body.dataset.after || 0);
-let paused = false;
-
-function pulse(nodeId, kind) {
+const KIND = {ok:'var(--good)', blocked:'var(--warn)',
+              refused:'var(--warn)', alarm:'var(--bad)'};
+function lamp(nodeId, kind) {
   const el = document.getElementById('node-' + nodeId);
   if (!el) return;
   el.classList.add('lit');
-  el.style.setProperty('--lit', KIND_COLOUR[kind] || 'var(--good)');
-  setTimeout(() => el.classList.remove('lit'), 700);
+  el.style.setProperty('--lit', KIND[kind] || 'var(--good)');
+  setTimeout(() => el.classList.remove('lit'), 900);
 }
 
-function travel(edgeId, kind) {
-  const path = document.getElementById('edge-' + edgeId);
-  if (!path) return;
-  const dot = document.createElementNS(NS, 'circle');
-  dot.setAttribute('r', 5);
-  dot.setAttribute('fill', KIND_COLOUR[kind] || 'var(--good)');
-  path.parentNode.appendChild(dot);
-  const length = path.getTotalLength();
+// One villager walks one road, once, and is gone. Nobody wanders for effect:
+// if you see somebody on a road, something happened.
+function walk(edgeId, ev) {
+  const road = document.getElementById('edge-' + edgeId);
+  const traffic = document.getElementById('traffic');
+  if (!road || !traffic) return;
+  const colour = KIND[ev.kind] || 'var(--good)';
+
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('class', 'villager walking');
+  g.innerHTML =
+    "<title>" + (ev.firm ? ev.firm + ' — ' : '') + ev.label + "</title>" +
+    "<ellipse class='ground' cx='0' cy='2' rx='7' ry='2.5'/>" +
+    "<line class='leg leg-l' x1='-2.5' y1='-8' x2='-3.5' y2='0'/>" +
+    "<line class='leg leg-r' x1='2.5' y1='-8' x2='3.5' y2='0'/>" +
+    "<rect class='torso' x='-4.5' y='-18' width='9' height='11' rx='3.5' fill='" + colour + "'/>" +
+    "<circle class='head' cx='0' cy='-21.5' r='4.2' fill='" + colour + "'/>";
+  traffic.appendChild(g);
+
+  const length = road.getTotalLength();
+  const duration = Math.min(2600, Math.max(900, length * 4));
   const started = performance.now();
-  const duration = 650;
   function step(now) {
     const t = Math.min(1, (now - started) / duration);
-    const at = path.getPointAtLength(t * length);
-    dot.setAttribute('cx', at.x);
-    dot.setAttribute('cy', at.y);
-    if (t < 1) requestAnimationFrame(step); else dot.remove();
+    const at = road.getPointAtLength(t * length);
+    // Flip the walker so they always face the way they are going.
+    const ahead = road.getPointAtLength(Math.min(length, t * length + 1));
+    const facing = ahead.x < at.x ? -1 : 1;
+    g.setAttribute('transform', 'translate(' + at.x + ',' + at.y + ') scale(' + facing + ',1)');
+    if (t < 1) { requestAnimationFrame(step); }
+    else {
+      // Arrived. Stand still for a beat, then go inside.
+      g.classList.remove('walking');
+      setTimeout(() => g.remove(), 500);
+    }
   }
   requestAnimationFrame(step);
 }
@@ -713,89 +805,243 @@ function log(ev) {
 
 function show(ev, delay) {
   setTimeout(() => {
-    if (ev.edge) travel(ev.edge, ev.kind);
-    pulse(ev.node, ev.kind);
+    if (ev.edge) walk(ev.edge, ev);
+    lamp(ev.node, ev.kind);
     log(ev);
   }, delay);
 }
+
+function say(text) {
+  const status = document.getElementById('flow-status');
+  if (status) status.textContent = text;
+}
+"""
+
+
+# The live driver: ask the database what has happened since last time.
+FLOW_LIVE = """
+let after = Number(document.body.dataset.after || 0);
+let paused = false;
+let living = false;
+let ticking = false;
 
 async function poll() {
   if (paused) return;
   try {
     const res = await fetch('/village/flow/events?after=' + after);
     const data = await res.json();
-    // Space a burst out so a whole tick reads as a sequence rather than a flash.
-    data.events.forEach((ev, i) => show(ev, i * 220));
+    // Space a burst out so a tick reads as people crossing the village one
+    // after another rather than a single flash.
+    data.events.forEach((ev, i) => show(ev, i * 260));
     if (data.events.length) after = data.events[data.events.length - 1].id;
-    const status = document.getElementById('flow-status');
-    if (status) status.textContent = data.events.length
-      ? data.events.length + ' step(s) just now'
-      : 'idle — run a tick, or start `trade run`';
-  } catch (e) { /* the page keeps trying; a dropped poll is not an error */ }
+    // Most polls land between ticks, so "quiet" would be wrong while the
+    // village is plainly running. Say which it is.
+    say(data.events.length
+      ? data.events.length + ' villager(s) on the roads'
+      : (living ? 'running — next tick shortly'
+                : 'quiet — run a tick, let it run, or start `trade run`'));
+  } catch (err) { /* a dropped poll is not an error; the page keeps trying */ }
 }
 setInterval(poll, 900);
 poll();
 
-document.getElementById('flow-pause')?.addEventListener('click', (e) => {
+document.getElementById('flow-pause')?.addEventListener('click', (ev) => {
   paused = !paused;
-  e.target.textContent = paused ? 'Resume' : 'Pause';
+  ev.target.textContent = paused ? 'Resume' : 'Pause';
+});
+
+// Let it run: tick on a timer instead of on a click.
+//
+// One tick at a time, never two at once. A setInterval that fires while the
+// previous tick is still settling would have two processes writing the ledger,
+// and the whole point of this system is that the books add up.
+async function liveTick() {
+  if (!living || ticking) return;
+  ticking = true;
+  try {
+    await fetch('/village/actions/tick', {method: 'POST'});
+  } catch (err) { /* a missed tick is not fatal; the next one comes round */ }
+  ticking = false;
+  if (living) setTimeout(liveTick, 2500);
+}
+
+document.getElementById('flow-live')?.addEventListener('click', (ev) => {
+  living = !living;
+  ev.target.textContent = living ? 'Stop' : 'Let it run';
+  ev.target.classList.toggle('go', living);
+  if (living) { paused = false; liveTick(); }
+  else say('stopped — the village is quiet again');
 });
 """
 
 
-def _svg() -> str:
+# The snapshot driver: there is no server to ask, so the events travel inside
+# the file. It plays once on load and then waits — a recording that looped
+# forever would look like a village that never stops working.
+FLOW_REPLAY = """
+function replay() {
+  EVENTS.forEach((ev, i) => show(ev, i * 260));
+  say(EVENTS.length
+    ? 'replaying ' + EVENTS.length + ' recorded event(s)'
+    : 'nothing was recorded — the village was quiet');
+}
+
+document.getElementById('flow-replay')?.addEventListener('click', replay);
+replay();
+"""
+
+
+BUILDINGS = {
+    # kind: (roof colour, wall colour, a glyph over the door)
+    "well":    ("#7c9cbf", "#9fb6cc", "\u224b"),
+    "halls":   ("#8a6f4e", "#c0a276", "\u2302"),
+    "temple":  ("#a06a9a", "#c9a3c4", "\u2625"),
+    "post":    ("#5f8f6f", "#93b79f", "\u21c4"),
+    "bank":    ("#8a7f4e", "#c3b880", "$"),
+    "library": ("#4e7a8a", "#87b0bd", "\u25a4"),
+    "pound":   ("#8a5050", "#bd8c8c", "\u2298"),
+    "gate":    ("#6a6a8a", "#a0a0bd", "\u26bf"),
+    "hall":    ("#7a5f8a", "#b092bd", "\u2696"),
+    "archive": ("#5f6a5f", "#96a396", "\u274f"),
+    "bell":    ("#8a4a4a", "#bd8080", "\u2621"),
+    "court":   ("#4e5f8a", "#8c9bbd", "\u00a7"),
+    "arena":   ("#8a7a4e", "#bdae80", "\u2605"),
+    "bazaar":  ("#8a6a4e", "#bd9c80", "\u25b2"),
+    "tavern":  ("#6a5a4a", "#a3927f", "\u2617"),
+}
+
+BUILDING_W, BUILDING_H = 96, 60
+
+
+def _building(node: dict) -> str:
+    """One building: footprint, roof, nameplate, and a door the villagers use."""
+    roof, wall, glyph = BUILDINGS.get(node["building"], ("#777", "#aaa", "\u2022"))
+    x, y = node["x"], node["y"]
+    w, h = BUILDING_W, BUILDING_H
+    return (
+        f"<g id='node-{e(node['id'])}' class='building'>"
+        f"<title>{e(node['label'])} \u2014 {e(node['about'])}</title>"
+        f"<ellipse class='ground' cx='{x + w / 2}' cy='{y + h + 6}' rx='{w / 2}' ry='7'/>"
+        f"<rect class='walls' x='{x}' y='{y + 18}' width='{w}' height='{h - 18}' rx='3' "
+        f"fill='{wall}'/>"
+        f"<path class='roof' d='M{x - 6},{y + 18} L{x + w / 2},{y - 4} L{x + w + 6},{y + 18} Z' "
+        f"fill='{roof}'/>"
+        f"<rect class='door' x='{x + w / 2 - 9}' y='{y + h - 22}' width='18' height='22' rx='2'/>"
+        f"<text class='glyph' x='{x + w / 2}' y='{y + 40}' text-anchor='middle'>{glyph}</text>"
+        f"<text class='plate' x='{x + w / 2}' y='{y + h + 22}' text-anchor='middle'>"
+        f"{e(node['label'])}</text>"
+        f"</g>"
+    )
+
+
+def _villager(x: float, y: float, label: str, mood: str = "resident",
+              tint: str = "", ident: str = "") -> str:
+    """A little person. The same shape whether resident or message."""
+    ident_attr = f" id='{e(ident)}'" if ident else ""
+    colour = tint or "var(--fg)"
+    return (
+        f"<g{ident_attr} class='villager {e(mood)}' transform='translate({x},{y})'>"
+        f"<title>{e(label)}</title>"
+        f"<ellipse class='ground' cx='0' cy='2' rx='7' ry='2.5'/>"
+        f"<line class='leg leg-l' x1='-2.5' y1='-8' x2='-3.5' y2='0'/>"
+        f"<line class='leg leg-r' x1='2.5' y1='-8' x2='3.5' y2='0'/>"
+        f"<rect class='torso' x='-4.5' y='-18' width='9' height='11' rx='3.5' "
+        f"fill='{colour}'/>"
+        f"<circle class='head' cx='0' cy='-21.5' r='4.2' fill='{colour}'/>"
+        f"</g>"
+    )
+
+
+def _village(firms: list) -> str:
+    """The map: roads first, then buildings, then the residents standing about."""
     from .flow import diagram
 
     shape = diagram()
     positions = {n["id"]: n for n in shape["nodes"]}
-    width, height = 130, 54
 
-    edges = []
+    def door(node_id: str):
+        node = positions[node_id]
+        return node["x"] + BUILDING_W / 2, node["y"] + BUILDING_H
+
+    roads = []
     for edge in shape["edges"]:
-        a, b = positions[edge["from"]], positions[edge["to"]]
-        x1, y1 = a["x"] + width / 2, a["y"] + height / 2
-        x2, y2 = b["x"] + width / 2, b["y"] + height / 2
-        # Straight where the stages are in a row, gently curved where the flow
-        # drops to a sink, so the two never overlap into an unreadable knot.
-        if a["y"] == b["y"]:
-            d = f"M{x1},{y1} L{x2},{y2}"
+        x1, y1 = door(edge["from"])
+        x2, y2 = door(edge["to"])
+        if abs(y1 - y2) < 1:
+            d = f"M{x1},{y1 + 8} L{x2},{y2 + 8}"
         else:
-            d = f"M{x1},{y1} Q{(x1 + x2) / 2},{(y1 + y2) / 2 + 26} {x2},{y2}"
-        edges.append(
-            f"<path id='edge-{e(edge['id'])}' d='{d}' class='wire' "
-            f"marker-end='url(#arrow)'/>"
+            # Lanes between rows bow outward so two of them never lie on top of
+            # each other and become one unreadable line.
+            mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
+            d = f"M{x1},{y1 + 8} Q{mid_x + 34},{mid_y + 12} {x2},{y2 + 8}"
+        roads.append(
+            f"<path id='edge-{e(edge['id'])}' class='road' d='{d}'/>"
+            f"<path class='road-edge' d='{d}'/>"
         )
 
-    nodes = []
-    for node in shape["nodes"]:
-        nodes.append(
-            f"<g id='node-{e(node['id'])}' class='node'>"
-            f"<title>{e(node['about'])}</title>"
-            f"<rect x='{node['x']}' y='{node['y']}' width='{width}' height='{height}' "
-            f"rx='8'/>"
-            f"<text x='{node['x'] + width / 2}' y='{node['y'] + height / 2 + 5}' "
-            f"text-anchor='middle'>{e(node['label'])}</text></g>"
+    buildings = [_building(node) for node in shape["nodes"]]
+
+    # Residents: one per firm that actually exists, loitering in the yard below
+    # the firm quarter. Not decoration — their posture is the firm's status, so
+    # a paused firm is visibly sitting one out and a killed one has faded.
+    #
+    # The yard starts below the nameplate (BUILDING_H + 22) rather than beside
+    # it, or the villagers stand on top of the building's own label.
+    quarter = positions["firms"]
+    residents = []
+    for index, firm in enumerate(firms):
+        x = quarter["x"] + 16 + (index % 4) * 22
+        y = quarter["y"] + BUILDING_H + 62 + (index // 4) * 26
+        mood = {"active": "resident", "paused": "paused", "killed": "gone"}.get(
+            firm.status, "resident"
+        )
+        residents.append(
+            _villager(x, y, f"{firm.firm_key} \u2014 {firm.status}", mood,
+                      ident=f"resident-{firm.firm_key}")
         )
 
     return (
-        "<svg viewBox='0 0 950 350' class='flow' role='img' "
-        "aria-label='the tick, as it runs'>"
-        "<defs><marker id='arrow' viewBox='0 0 10 10' refX='9' refY='5' "
-        "markerWidth='6' markerHeight='6' orient='auto-start-reverse'>"
-        "<path d='M0,0 L10,5 L0,10 z' class='arrowhead'/></marker></defs>"
-        + "".join(edges) + "".join(nodes) + "</svg>"
+        "<svg viewBox='0 0 1060 500' class='village' role='img' "
+        "aria-label='the village, as it runs'>"
+        "<rect class='sky' x='0' y='0' width='1060' height='500'/>"
+        + "".join(roads) + "".join(buildings) + "".join(residents)
+        + "<g id='traffic'></g></svg>"
     )
 
 
 FLOW_STYLE = """
-.flow { width: 100%; height: auto; }
-.flow .wire { fill: none; stroke: var(--line); stroke-width: 2; }
-.flow .arrowhead { fill: var(--line); }
-.flow .node rect { fill: var(--card); stroke: var(--line); stroke-width: 2;
-                   transition: stroke .2s, filter .2s; }
-.flow .node text { fill: var(--fg); font-size: 13px; }
-.flow .node.lit rect { stroke: var(--lit); stroke-width: 3; }
-#flow-log { list-style: none; padding: 0; margin: 0; max-height: 16rem;
+.village { width: 100%; height: auto; }
+.village .sky { fill: var(--card); }
+.village .road { fill: none; stroke: var(--line); stroke-width: 9;
+                 stroke-linecap: round; opacity: .55; }
+.village .road-edge { fill: none; stroke: var(--bg); stroke-width: 3;
+                      stroke-dasharray: 5 9; stroke-linecap: round; opacity: .8; }
+.village .ground { fill: #000; opacity: .13; }
+.village .walls, .village .roof { stroke: rgba(0,0,0,.25); stroke-width: 1; }
+.village .door { fill: rgba(0,0,0,.42); }
+.village .glyph { font-size: 15px; fill: rgba(255,255,255,.85); }
+.village .plate { font-size: 11px; fill: var(--muted); }
+.village .building { transition: filter .25s; }
+.village .building.lit { filter: drop-shadow(0 0 8px var(--lit)); }
+.village .building.lit .roof { stroke: var(--lit); stroke-width: 2; }
+
+.villager .leg { stroke: var(--fg); stroke-width: 2; stroke-linecap: round; }
+.villager.walking .leg-l { animation: step .42s linear infinite; }
+.villager.walking .leg-r { animation: step .42s linear infinite reverse; }
+.villager.resident { animation: idle 3.4s ease-in-out infinite; }
+.villager.paused { opacity: .55; }
+.villager.paused .leg { stroke-dasharray: 2 3; }
+.villager.gone { opacity: .3; }
+.villager.gone .head, .villager.gone .torso { fill: var(--muted); }
+@keyframes step { 0% { transform: rotate(-22deg); } 50% { transform: rotate(22deg); }
+                  100% { transform: rotate(-22deg); } }
+@keyframes idle { 0%,100% { translate: 0 0; } 50% { translate: 0 -1px; } }
+@media (prefers-reduced-motion: reduce) {
+  .villager.walking .leg-l, .villager.walking .leg-r,
+  .villager.resident { animation: none; }
+}
+
+#flow-log { list-style: none; padding: 0; margin: 0; max-height: 15rem;
             overflow-y: auto; font-size: .85rem; }
 #flow-log li { padding: .25rem 0; border-bottom: 1px solid var(--line); }
 #flow-log li.kind-blocked, #flow-log li.kind-refused { color: var(--warn); }
@@ -810,8 +1056,19 @@ def flow_page() -> HTMLResponse:
     eco = ecosystem()
     try:
         recorder = eco.flow
+        firms = eco.store.firms()
+        village = _village(firms)
         recent = recorder.recent(20)
         after = recorder.latest_id()
+        autonomy = (
+            "Let it run ticks the village on a timer. The council is sitting: "
+            "raises, kills and resumes are decided from the ledger, and anything "
+            "the evidence does not settle still waits for you at the gatehouse."
+            if eco.config.autonomy.council_decides else
+            "Let it run ticks the village on a timer. The council is not sitting "
+            "(TRADE_AUTONOMY=human), so kills and capital raises will queue up at "
+            "the gatehouse for you."
+        )
         history = "".join(
             f"<li class='kind-{e(ev.kind)}'>"
             f"{e(ev.firm + ' · ' if ev.firm else '')}{e(ev.label)}"
@@ -823,29 +1080,52 @@ def flow_page() -> HTMLResponse:
 
     body = "".join([
         f"<style>{FLOW_STYLE}</style>",
-        "<h1>The flow</h1>",
-        "<p class=muted>Every dot is something that actually happened: a proposal, "
-        "a fill, a refusal. Nothing loops for decoration — if the village is idle, "
-        "the diagram is still.</p>",
-        _panel("", _svg()),
+        "<h1>The village</h1>",
+        "<p class=muted>Every villager on a road is something that actually "
+        "happened: a proposal walking to the temple, a fill going to the counting "
+        "house, a refusal being turned back to the pound. Nobody wanders for "
+        "effect — when the village is quiet, the roads are empty.</p>",
+        _panel("", village),
+        f"<p class=muted>The figures outside the firm quarter are the "
+        f"{len(firms)} firm(s) that actually exist. A paused firm sits one out; "
+        f"a killed one has faded.</p>",
         "<div class=card>"
         "<form method=post action='/village/actions/tick'>"
         "<button class=go>Run a tick</button></form>"
+        "<button id=flow-live>Let it run</button> "
         "<button id=flow-pause>Pause</button> "
-        "<span class=muted id=flow-status>waiting…</span></div>",
-        _panel("Recent steps", f"<ul id=flow-log>{history or ''}</ul>"),
-        "<p class=muted>Blocked and refused things travel to <strong>Blocked</strong> "
-        "and stop there — they do not glide on to the venue in a different colour. "
-        "Kills and capital raises travel to the <strong>Human gate</strong>, which is "
-        "where they wait for you.</p>",
+        "<span class=muted id=flow-status>waiting…</span>"
+        f"<p class=muted id=flow-autonomy>{e(autonomy)}</p></div>",
+        _panel("What just happened", f"<ul id=flow-log>{history or ''}</ul>"),
+        "<p class=muted>Refused proposals walk to <strong>the pound</strong> and stop "
+        "there — they do not carry on to the trading post in a different colour. "
+        "Kills and capital raises walk to the <strong>gatehouse</strong>, which is "
+        "where they wait for you. The courthouse, arena, bazaar and tavern sit off "
+        "the main road because none of them is on the tick's critical path.</p>",
         "<p><a href='/village'>&larr; Mission Control</a></p>",
-        f"<script>{FLOW_SCRIPT}</script>",
+        f"<script>{FLOW_CORE}{FLOW_LIVE}</script>",
     ])
     html_page = page("The flow — the Village", body)
     # `after` rides on <body> so the first poll does not replay history.
     return HTMLResponse(
         html_page.body.decode().replace("<body>", f"<body data-after='{after}'>")
     )
+
+
+@router.get("/village/solar", response_class=HTMLResponse)
+def solar_page() -> HTMLResponse:
+    """The village as a solar system — one planet per firm.
+
+    Served from the app rather than opened as a file so the page's fetch of
+    ``/api/firms`` is same-origin. A ``file://`` page polling localhost is a
+    CORS request, and the fix for that is either a browser flag or opening the
+    API to arbitrary origins; serving it here needs neither.
+    """
+    page = Path(__file__).parent / "static" / "solar.html"
+    if not page.exists():  # pragma: no cover - only if the file is deleted
+        return HTMLResponse("<p>solar.html is missing from src/trading/static/</p>",
+                            status_code=404)
+    return HTMLResponse(page.read_text())
 
 
 @router.get("/village/flow/events")

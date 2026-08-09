@@ -32,3 +32,16 @@ CodeTribunal/
 vault/
 vendor/
 data/market/
+
+# Exported dashboards. `trade dashboard` renders your real equity, positions
+# and P&L into a file; a local snapshot is yours, not the repository's. The
+# CI workflow adds its demo one explicitly with `git add -f`.
+dashboard/
+
+# The drop box. The examples and the README ship; your own bots do not — a
+# strategy you wrote is yours, and `recruit-watch` should not be a way to
+# commit it by accident.
+bots/*
+!bots/README.md
+!bots/example_momentum.py
+!bots/example_reversion.yaml

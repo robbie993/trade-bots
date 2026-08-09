@@ -1,0 +1,17 @@
+# The same contract in YAML. `genome:` and `universe:`, nothing computed.
+#
+# `strategy:` here is a label, not a nested block — both spellings are read.
+name: Slow Trend Desk
+asset_class: Equities
+strategy: trend_following
+
+genome:
+  fast_window: 12
+  slow_window: 60
+  rsi_window: 14
+  trend_bias: 70
+  value_window: 60
+  fair_band_pct: 6
+  calm_vol_pct: 30
+
+universe: [AAPL, MSFT, JNJ, KO]

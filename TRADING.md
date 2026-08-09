@@ -94,6 +94,10 @@ runs — including the parts that would look like progress.
 
 ## What the system may and may not do alone
 
+By default, this is the split. Everything in the right-hand column can be
+handed to **the council** instead — see the next section; the last row is the
+one it may never touch.
+
 | Autonomous | Needs a human |
 |---|---|
 | Read data, analyse, debate, propose | Send an order to any live venue |
@@ -115,6 +119,106 @@ python -m src.main approvals
 python -m src.main approve 3 --by you
 python -m src.main trade apply-approvals               # carries out what you decided
 ```
+
+---
+
+## The council — letting it run itself
+
+The table above is the default. If you would rather not sit in front of it
+approving things, the village has a body that can decide most of them:
+
+```bash
+export TRADE_AUTONOMY=council
+python -m src.main trade autonomy      # what it may and may not decide
+python -m src.main trade run           # and leave it
+```
+
+The council is the strategy court's machinery pointed at the approval queue —
+deterministic jurors over evidence, weighted, with vetoes. It reaches one of
+three verdicts, and the third is the one that matters:
+
+| | |
+|---|---|
+| **GRANT** | the panel carried it; the tick carries it out on the spot |
+| **REFUSE** | the panel rejected it, with its reasons |
+| **DEFER** | the evidence does not settle it — it stays pending, for you |
+
+A body that can only say yes or no will say one of them when it should have
+said neither. `DEFER` is what stops this being a rubber stamp, and it is why
+switching autonomy on does not mean you are never asked anything: it means you
+are only asked about the cases the ledger does not answer.
+
+### What it decides on
+
+It reads the ledger, never the request. A request that says a firm is
+wonderful does not make it so — the evidence is gathered fresh from the same
+tables the brokerage reads, and there is a test that asserts a flattering
+request changes nothing.
+
+**Three vetoes outrank every other consideration**, because each is a fact no
+amount of good performance argues with:
+
+* the books do not reconcile
+* the firm is below the sample gate — *insufficient data is not a reason to act*
+* the raise would breach the brokerage's total capital, or the firm's own ceiling
+
+**And one veto exists purely to prevent the failure the human gate was there
+for.** A council that grants the same firm a raise every tick is compounding,
+and it compounds fastest into whichever firm is currently winning. After three
+recent raises to one firm, the fourth goes to you.
+
+The sample gate has one deliberate exception, and it is the same exception
+`should_kill_firm` already makes: drawdown, a catastrophic single loss and
+consecutive losses are checked *before* the gate, because they are not
+statistical claims about an edge — they are the account being emptied.
+Demanding twenty trades before acting on a 40% drawdown would reproduce
+exactly the mistake the kill switch was written to avoid.
+
+### What it may never decide
+
+**Sending an order to a live venue.** That is the one act in this system that
+leaves it: irreversible, outside the ledger, real money sitting at a real
+broker. Everything else the council rules on moves numbers between rows of a
+database that reconciles, and can be read back and undone.
+
+This is not a setting. `live_trading` has no panel of jurors, so there is no
+code path that reaches a verdict on it however the configuration is written,
+and there is a test asserting it stays that way.
+
+### Nothing goes round the gate
+
+The council does not get a private path into the ledger. Every decision is
+still a row in `human_approvals`, still granted through `HumanGate.approve`,
+still carried out by `apply_approvals` — the only thing that changes is who
+signs the row, and the signature says `the council` rather than your name.
+A second, quieter route into the books is exactly the kind of thing that makes
+an audit trail worth nothing.
+
+Every ruling is written to `council_rulings` with each juror's reasoning and
+the state of the ledger it was decided on:
+
+```bash
+python -m src.main trade council           # the rulings
+python -m src.main trade council-case 1    # one ruling, juror by juror
+```
+
+That table stores the evidence as JSON, and the jurors are pure functions of
+it — so a stored ruling replays to the stored verdict months later. There is a
+test that does exactly that, because "the machine decided" is not an answer.
+
+### It stays quiet
+
+While the council is sitting, a request it is about to grant no longer pages
+you. Only a **deferred** one does — the outcome that actually needs a person.
+Live trading and the whole product village notify exactly as they always did.
+
+### It also lets firms back in
+
+Pausing is autonomous because it stops the bleeding; starting again is the
+other direction, so it goes through the gate like everything else. Without
+somebody able to grant it, a long run only ever empties the village out — so a
+paused firm whose condition has cleared asks to resume, and the council rules
+on that too.
 
 ---
 
@@ -311,6 +415,56 @@ genome, an allocation change, or a human does that. A system that silently
 rewrote its own strategy from its own conclusions is exactly what a kill
 switch cannot see coming.
 
+### Seeing it — the vault as a graph
+
+The database is where memory is *kept*; the vault is where it can be *read*.
+Every tick writes the brain into `vault/brain/` as plain Markdown:
+
+```
+vault/brain/
+  index.md
+  lessons/SPY-loser.md          a conclusion, and when it was drawn
+  symbols/SPY.md                what the trades in that name actually say
+  genomes/g00042.md             one candidate strategy, and its parent
+```
+
+These are cross-linked, and **the links are relationships out of the
+database, not decoration**. A lesson links to the symbol it is about; the
+symbol links back to every firm that traded it; a genome links to the genome
+it was mutated from. That last one is the interesting edge: `parent_id` now
+records which genome each mutant descends from, so a firm's strategy has a
+recoverable lineage instead of an undated pile of candidates.
+
+Which means you get the graph view for free, with nothing to install and no
+data leaving the machine:
+
+```bash
+python -m src.main trade audit --write     # refresh the brain notes
+```
+
+Then open `vault/` as an Obsidian vault and use its **Graph View** — lessons,
+symbols, firms and genome lineages as one network. The
+[obsidian-galaxy](https://github.com/agentage/obsidian-galaxy) plugin renders
+the same thing as a 3D force graph if you want the galaxy version. Neither
+needs an integration, because the vault was already the right shape.
+
+**Records are appended; views are regenerated, and they live in different
+folders.** `firms/`, `brokerage/` and `brain/lessons/` are append-only — a
+decision that has been written cannot be quietly amended, and a lesson's note
+gains a dated entry each time it is re-concluded, so you can see *when* the
+village came to believe something. `brain/symbols/` and `brain/genomes/` are
+rebuilt from the database: a symbol's track record moves with every closed
+trade, and regenerating it loses nothing because the trades it counts are
+recorded in the firm notes. Every regenerated note says so at the top.
+
+A symbol note also separates fills from closed trades, because "20 trades
+(1 won, 1 lost)" reads as though eighteen went missing. They did not — an
+opening buy is remembered with a realised P&L of zero, and only the closing
+leg of a round trip settles.
+
+Writing the vault is best-effort, like the flow recorder: a tick does not fail
+because a note could not be written.
+
 ---
 
 ## Mission Control
@@ -344,30 +498,63 @@ Uploaded strategy files go through exactly the same court as the CLI — read
 with `ast`, never executed. There is a test that uploads a file which would
 write a marker on import and asserts the marker never appears.
 
-### The flow
+### The village map
 
-`/village/flow` animates the tick as it runs. Eleven stages, and a dot for
-every proposal, fill and refusal that actually happened:
+`/village/flow` is the village, drawn as a village: fifteen buildings, the
+roads between them, and a little person walking a road for every proposal,
+fill and refusal that actually happened.
 
 ```
-market → firms → heart → venue → ledger → brain
-                   ↓        ↓
-                blocked  blocked        brokerage → audit
-                                        brokerage → human gate
-                                        brokerage → KILL_ALL
+ Market  →  Firm     →  Temple  →  Trading  →  Counting  →  Library
+ well       quarter                post        house           |
+             | | |         ↓          ↓                        ↓
+ Arena ←─────┘ | └──→ The pound  The pound     Town hall ←──────┘
+               |                                 |  |  ↓
+ Courthouse ←──┤                    Gatehouse ←──┘  |  Archive
+      └────────┼──────────→ Library                 ↓
+ Bazaar  ←─────┤                                 Bell tower
+      └────────┼──────────→ Gatehouse
+ Tavern  ←─────┘
 ```
+
+Six of them are the tick, in order along the top road:
+
+| Building | What goes on inside |
+| --- | --- |
+| Market well | prices arrive, up to the cursor and never past it |
+| Firm quarter | analysts, the bull/bear debate, the trader, the risk manager |
+| Temple | the six moral foundations, consulted before anything executes |
+| Trading post | paper by default; live venues turn orders away without approval |
+| Counting house | position, cash and P&L move together or not at all |
+| Library | remembers the fill and the argument that produced it |
+
+Five are what happens to a tick's output: **the pound** (refused proposals
+stop there), **the gatehouse** (kills and capital raises wait — for you, or
+for the council), **the town hall** (reconcile, score, kill, allocate), **the
+archive** (the Obsidian vault) and **the bell tower** (`KILL_ALL`).
+
+Four sit off the main road because none of them is on the tick's critical
+path: the **courthouse** (a dropped strategy file, twelve jurors, a ruling),
+the **arena** (bouts, milestones, tokens), the **bazaar** (genome licences —
+and capital only via the gatehouse) and the **tavern** (alliances, betrayal,
+espionage, none of which reaches the ledger).
 
 Three things make it worth looking at rather than decorative:
 
-**The dots are real.** Each one is a row `Ecosystem.tick()` wrote as it
-happened, read back from `flow_events`. Nothing loops on a timer — if the
-village is idle, the diagram is still, and that is information.
+**The villagers are real.** Each walker is a row `Ecosystem.tick()` wrote as
+it happened, read back from `flow_events`, and it walks the road its event
+travelled. Nothing loops on a timer — when the village is quiet, the roads are
+empty, and that is information.
 
-**Blocked things leave the flow.** A proposal the risk manager or the
-conscience refused travels to *Blocked* and stops. It does not glide on to the
-venue in a different colour. Kills and capital raises travel to the *Human
-gate*, which is where they wait for you. An animation where everything reaches
-the end is an expensive way to learn nothing.
+The figures standing in the yard below the firm quarter are the firms
+themselves, one each, and their posture is their status: a paused firm sits
+one out, a killed firm has faded.
+
+**Blocked things leave the road.** A proposal the risk manager or the
+conscience refused walks to *the pound* and stops. It does not carry on to the
+trading post in a different colour. Kills and capital raises walk to the
+*gatehouse*, which is where they wait for you. An animation where everything
+reaches the end is an expensive way to learn nothing.
 
 **Telemetry can never break a tick.** `FlowRecorder.emit` swallows its own
 errors, and there is a test that drops the `flow_events` table mid-run and
@@ -381,6 +568,287 @@ in exactly the case the diagram exists for. The page polls; the table keeps
 its most recent 400 rows and prunes itself.
 
 There is no authentication. Bind it to localhost.
+
+### Taking a copy of it
+
+```bash
+python -m src.main trade dashboard --out dashboard/village.html
+```
+
+That freezes Mission Control and the village map into **one self-contained
+HTML file** — no server, no build step, no network, no CDN. Open it by
+double-clicking it, email it, put it in a bucket, commit it.
+
+It is the same code that renders the live pages, run once, which is the only
+reason it is worth having: a second dashboard written by hand would be a
+second set of numbers to keep true, and this one cannot drift from `/village`
+because it *is* `/village`.
+
+Freezing costs two things, and the file says both out loud:
+
+**The buttons are gone — removed, not disabled.** A snapshot with a "Run a
+tick" button that silently does nothing is worse than one with no button,
+because it invites you to believe the page is live. Every form, button and
+outbound link is stripped, and the banner says where the working controls
+are. There is nothing in the file that could grant an approval, because there
+is nothing in the file to grant it with.
+
+**The villagers are a recording.** The live page asks the database what has
+happened since the last poll; a file has nothing to ask, so the events travel
+inside it and replay on load. They are still real — every one is a row the
+tick wrote — but they are a recording of a moment, which is why the banner
+carries the timestamp, the database and the data source. A number without its
+as-of is a rumour.
+
+`dashboard/` is in `.gitignore`. A snapshot of your own book is yours, not the
+repository's.
+
+There is a workflow, `.github/workflows/add-village-dashboard.yml`, that runs
+the same command on GitHub and opens a PR with the result. The runner cannot
+see your database, so it seeds one and simulates against the deterministic
+synthetic feed: what it produces is a **demo**, labelled as one in the banner.
+For your own numbers, run the command locally.
+
+### The JSON API
+
+Mission Control renders HTML because a dashboard needing a gateway and an npm
+install to show a table is three more things that can be down when you want to
+know whether a firm is bleeding. For everything that is *not* this browser —
+another dashboard, a notebook, a status board on a spare monitor — the same
+numbers are available as JSON:
+
+| | |
+|---|---|
+| `GET /api/status` | the one-screen health check, including `reconciled` |
+| `GET /api/firms` | every firm as the brokerage currently scores it |
+| `GET /api/council` | recent rulings |
+| `GET /api/tokens` | the standings |
+
+**Read-only by construction, not by convention.** There is no POST in that
+router and no route that takes a decision — there is a test that enumerates the
+routes and asserts the method set is `{GET, HEAD}`. Capital still moves only
+through the approval gate.
+
+Two things it will not do to a number. **Money stays a string** — `"49448.85"`,
+not `49448.85` — because JSON has no decimal type and every parser on the other
+end will hand you a float, undoing the reason `src/money.py` exists. And
+**`sufficient_data` rides along on every scorecard**, so a consumer can tell
+"score 42 on four trades" from "score 42 on forty". Anything that drops that
+flag and plots the number is drawing a conclusion the ledger refused to draw.
+
+### The solar system
+
+`/village/solar` is the same firms as planets: one per firm, sized by the
+capital it holds, orbiting in rank order, colour by status — a killed firm
+keeps its orbit and loses its colour. It polls `/api/firms` every fifteen
+seconds.
+
+The rendering engine is [solar-system-agents](https://github.com/Audazia/solar-system-agents)
+(MIT), vendored into `src/trading/static/solar.html`. Four things changed:
+
+* **The eight invented demo agents are gone.** A planet is a firm on the ledger
+  or it is not drawn.
+* **The polling is written here.** Upstream's README advertises "API Polling
+  (built-in)" and ships a `gateway` config block, but the project contains no
+  `fetch()`, `XMLHttpRequest` or `WebSocket` — none of it is implemented, and
+  the gateway config is read by nothing.
+* **An upstream `ReferenceError` is fixed.** A trail-drawing line reads `i`
+  after the `let`-scoped loop that declared it, throwing inside
+  `requestAnimationFrame` on every frame — which is why nothing orbits. The
+  line was dead; its value was overwritten two lines later.
+* **The Google Fonts import is removed.** It was the only outbound request on
+  the page, and nothing else in this repository phones anywhere.
+
+It is served by the app rather than opened as a file, so the fetch is
+same-origin — a `file://` page polling localhost is a CORS request, and the
+fixes for that are a browser flag or opening the API to arbitrary origins.
+
+## Bringing your own bots
+
+Drop a file in `bots/` and run:
+
+```bash
+python -m src.main trade recruit-watch --dir bots
+```
+
+A file the court clears becomes a **firm of its own** — its own capital, its
+own kill switch, its own planet at `/village/solar`, its own resident in the
+village map, its own line on the leaderboard. There is also
+`trade recruit <file>` for one, and a **Recruit it as a firm** button on
+Mission Control.
+
+Three things hold, and they are the same three that hold everywhere else here.
+
+**The trial is not optional.** A recruit goes through the same strategy court
+as `court-submit`: parsed with `ast`, never imported, never executed. A file
+that reaches for `socket`, evals at runtime, or cannot be parsed is refused
+with reasons. There is no trusted flag that skips the jury, including for
+files you wrote.
+
+**A recruit is born paused and holding nothing.** Creating a funded, trading
+firm from a file would be starting the bleeding. So the firm is created at
+`paused` with an allocation of zero, and its capital is one
+`ALLOCATE_CAPITAL` approval:
+
+```bash
+python -m src.main trade recruits          # who is waiting, and for how much
+python -m src.main approve <id> --by you
+python -m src.main trade apply-approvals   # funds it and sets it trading
+```
+
+**MODIFY does not recruit.** The court's middle verdict means it could not
+tell. A body that reads "I don't know" as a yes is not worth having.
+
+### When the council is sitting
+
+It rules on recruits too, on a panel of its own — because a brand-new firm has
+no track record, so the sample gate is the wrong question and would veto every
+recruit forever. **The evidence for a recruit is its trial**: what the court
+ruled, the backtest fitness, whether it named symbols, and whether the stake is
+modest. Asking for more than half of the remaining capital is a veto: an
+untried firm does not get that without you.
+
+### What a bot has to declare
+
+Two module-level literals. The court reads the syntax tree, so anything
+computed at import time is invisible to it — and the file is refused rather
+than run.
+
+```python
+GENOME = {
+    "fast_window": 8, "slow_window": 60, "rsi_window": 14,
+    "trend_bias": 88,        # 100 = pure momentum, 0 = pure mean reversion
+    "value_window": 60, "fair_band_pct": 6, "calm_vol_pct": 30,
+}
+UNIVERSE = ["SPY", "QQQ"]
+```
+
+YAML and JSON work too, with `genome:` and `universe:` keys. `bots/` ships one
+of each as a template, and `bots/README.md` has the full contract.
+
+**One limit worth being plain about.** A firm here *is* a genome — the
+parameters the built-in analysts read — not arbitrary code. The court will not
+execute your file, so a bot whose edge lives in its own Python functions cannot
+be run as-is; what carries over is the configuration. If your bots have real
+logic you want in the village, either express the behaviour as a genome, or the
+analyst roster needs to grow to cover what they do.
+
+`bots/*` is gitignored apart from the examples: a strategy you wrote is yours,
+and the drop box should not be a way to commit it by accident.
+
+### Importing bots written for something else
+
+`recruit` needs a file that already speaks the dialect. A bot you wrote last
+year does not: it has `FAST_MA = 12`, `TICKERS = [...]`, and its edge in a
+function called `should_buy`. So there is an adapter:
+
+```bash
+python -m src.main trade import ~/my-bots --dry-run   # read it, write nothing
+python -m src.main trade import ~/my-bots             # writes into bots/
+python -m src.main trade recruit-watch --dir bots
+```
+
+It never runs your code — parsed with `ast`, same as the court — and it prints
+what it did with every value:
+
+```
+meme_sniper.py -> meme_sniper
+  symbols   : DOGE-USD, SHIB-USD, PEPE-USD, BONK-USD
+  guessed   : fast_window     <- FAST_MA   (alias — check it)
+  guessed   : slow_window     <- SLOW_MA   (alias — check it)
+  defaulted : fair_band_pct, trend_bias
+  NOT CARRIED: 3 function(s)/class(es) — fetch_ohlcv, should_buy, MemeSniper
+  ignored   : MIN_LIQUIDITY_USD, TAKE_PROFIT_PCT, STOP_LOSS_PCT
+```
+
+Four things it will not do:
+
+**It will not pretend your logic came across.** A firm here is a genome. If the
+edge lived in `should_buy`, that function is named under `NOT CARRIED` and it
+is not here. An importer that emitted a plausible genome and let you believe
+the strategy had been ported would be worse than one that refuses.
+
+**It will not invent a number.** A gene the file never mentions is left at the
+village default and listed under `defaulted`. A name matched by alias rather
+than exactly is listed under `guessed`, for you to check.
+
+**It will not copy a credential.** A file that looks like it holds an API key
+is reported and nothing is written.
+
+**It will tell you when the bot does something the village does not.** Options,
+shorting, leverage and intraday bars each get a line. Those warnings match on
+parameter *names* rather than the file text, because matching the text found
+"short" inside `short_window` and "tick" inside `TICKERS` — and a confident
+wrong warning teaches you to ignore the section that matters.
+
+## Deploying it
+
+The build error Vercel gives you is real and its suggested fix is the right
+one — there are two FastAPI apps in the tree and it cannot pick. That is now
+declared:
+
+```toml
+[tool.vercel]
+entrypoint = "src.agents.web:app"
+```
+
+But making the build pass is the easy half. **A hosted deployment runs
+read-only**, and that is not a limitation to work around — it is the point.
+
+Every page here carries the same warning: *this page has no authentication;
+bind it to localhost*. On a public URL that warning becomes load-bearing,
+because the approval gate is the one hard boundary in front of every dollar
+and it grants on an unauthenticated form post:
+
+```
+POST /approvals/3/approve      approved_by=web
+```
+
+So when the app detects a serverless host — `VERCEL`, `AWS_LAMBDA_*`,
+`K_SERVICE`, `FLY_APP_NAME` and friends — it:
+
+* refuses every non-`GET` request, **in middleware**, so it covers the gate,
+  the village actions and any route added later without anyone remembering to
+  guard it;
+* **strips the forms and buttons from the HTML**, because a control that 403s
+  when clicked is worse than no control;
+* says on the page that it is a mirror, so nobody mistakes it for the console.
+
+Reading still works — every page, plus the whole JSON API. Force it either way
+with `MVV_PUBLIC=1` or `MVV_PUBLIC=0`.
+
+This is not authentication. It is the *absence of a write surface*, which is
+the part you can verify by reading `src/deploy.py`.
+
+### It also needs a real database
+
+Serverless filesystems are read-only apart from a per-instance `/tmp` that
+disappears between requests, so the default SQLite file cannot work: every
+tick, approval and fill would be written to storage that is about to vanish.
+Attach Postgres. If you do not, the page says so rather than half-working, and
+the audit vault is off there for the same reason.
+
+You do not have to name it `DATABASE_URL`. Managed add-ons each invent their
+own variable and none of them is that one — Vercel Postgres and Neon set
+`POSTGRES_URL`, Vercel's Prisma preset sets `POSTGRES_PRISMA_URL` — so those
+are read too, and `postgres://` is normalised to the `postgresql://` psycopg
+expects. `DATABASE_URL` still wins when you set it. Without this, attaching a
+database appeared to do nothing and the app fell back to a SQLite file that
+does not persist, which is the worst failure available because it looks like
+it worked.
+
+### Probably what you actually want
+
+If the goal is to show somebody the village rather than to operate it from a
+phone, there is a better answer than hosting the app:
+
+```bash
+python -m src.main trade dashboard --out dashboard/village.html
+```
+
+One self-contained file with real numbers, no server, no database, no write
+surface to reason about — and Vercel serves static files perfectly. The
+working console, with the buttons and the approvals, belongs on your machine.
 
 ---
 
@@ -610,7 +1078,15 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade audit [--write]` | the full audit report |
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
-| `/village/flow` | the tick, animated as it runs |
+| `/village/flow` | the village map, walked as the tick runs |
+| `trade import <path>` | adapt bots written for something else |
+| `trade recruit <f>` | drop a bot in; a cleared file becomes a firm |
+| `trade recruit-watch --dir D` | try every bot in a directory |
+| `trade recruits` | recruited firms waiting to be funded |
+| `trade dashboard` | freeze it all into one self-contained HTML file |
+| `trade autonomy` | what the village decides for itself |
+| `trade council` | the council's rulings |
+| `trade council-case <id>` | one ruling, juror by juror |
 | `trade court-submit <f>` | put a strategy file on trial |
 | `trade court-docket` | recent strategy cases |
 | `trade court-case <id>` | one case in full, juror by juror |
@@ -653,7 +1129,7 @@ src/trading/
 ├── sandbox/             alliances, betrayal, espionage — read-only guard
 ├── gateway/             OmniRoute, with an offline fallback
 ├── execution/           paper (default) and the live venues that refuse
-└── audit/               the Obsidian vault
+└── audit/               the Obsidian vault, including brain/ as a graph
 ```
 
 Configuration lives in `config/firm_config.yaml` (the firms) and is documented

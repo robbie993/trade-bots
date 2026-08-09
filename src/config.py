@@ -219,13 +219,38 @@ class CourtConfig:
     )
 
 
+def _database_url() -> str:
+    """DATABASE_URL, or whatever the host decided to call it.
+
+    Managed Postgres add-ons each inject their own name and none of them is
+    DATABASE_URL: Vercel and Neon set POSTGRES_URL, Vercel's Prisma preset sets
+    POSTGRES_PRISMA_URL, Heroku-style add-ons vary. Reading only DATABASE_URL
+    means attaching a database to the deployment appears to do nothing, and the
+    app quietly falls back to a SQLite file on a disk that does not persist —
+    which is the worst of the available failures, because it looks like it
+    worked.
+
+    DATABASE_URL still wins when it is set, so nothing about a local checkout
+    or an explicit configuration changes.
+    """
+    for name in (
+        "DATABASE_URL",
+        "POSTGRES_URL_NON_POOLING",   # Vercel/Neon, direct connection
+        "POSTGRES_URL",               # Vercel Postgres, Neon, Supabase
+        "POSTGRES_PRISMA_URL",
+        "DATABASE_URL_UNPOOLED",
+    ):
+        url = os.environ.get(name, "").strip()
+        if url:
+            # psycopg wants `postgresql://`; several hosts hand out `postgres://`.
+            return url.replace("postgres://", "postgresql://", 1) \
+                if url.startswith("postgres://") else url
+    return f"sqlite:///{DEFAULT_SQLITE_PATH}"
+
+
 @dataclass(frozen=True)
 class Config:
-    database_url: str = field(
-        default_factory=lambda: os.environ.get(
-            "DATABASE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH}"
-        )
-    )
+    database_url: str = field(default_factory=_database_url)
     operator_email: str = field(
         default_factory=lambda: os.environ.get("MVV_OPERATOR_EMAIL", "")
     )

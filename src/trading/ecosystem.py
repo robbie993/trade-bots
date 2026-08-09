@@ -39,6 +39,7 @@ from .brain.memory import AgentMemory
 from .brokerage.brokerage import Brokerage, OversightReport
 from .brokerage.reconciliation import LedgerNotReconciled
 from .config import TradingConfig
+from .council import COUNCIL_ACTIONS, Council, gather as gather_evidence
 from .data.market_data import MarketData
 from .data.feeds import build_feed
 from .execution import build_venue
@@ -62,6 +63,8 @@ class TickReport:
     errors: list = field(default_factory=list)
     oversight: Optional[OversightReport] = None
     lessons: int = 0
+    rulings: list = field(default_factory=list)
+    carried_out: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -77,6 +80,10 @@ class TickReport:
             lines.append(self.oversight.summary())
         if self.lessons:
             lines.append(f"  {self.lessons} new lesson(s) recorded")
+        for ruling in self.rulings:
+            lines.append(f"  COUNCIL: {ruling}")
+        for done in self.carried_out:
+            lines.append(f"  CARRIED OUT: {done}")
         return "\n".join(lines)
 
 
@@ -100,6 +107,9 @@ class Ecosystem:
         self.learner = Learner(self.store, self.memory, self.config)
         self.evolver = Evolver(self.store, self.config)
         self.brokerage = Brokerage(self.store, self.config, self.gate)
+        self.council = Council(db, margin=self.config.autonomy.margin)
+        if self.config.autonomy.council_decides:
+            self.gate.quiet_actions = set(COUNCIL_ACTIONS)
         self.gateway = OmniRoute(self.config.gateway)
         self.audit = ObsidianLogger(self.config.audit_vault, self.config)
         self._feed = None
@@ -178,11 +188,80 @@ class Ecosystem:
         consequence for the ledger.
         """
         cards = self.brokerage.evaluator.evaluate_all(self.store.firms(), self.market())
-        return {
-            "bouts": self.arena.round_robin(cards, metric),
-            "milestones": self.arena.award_milestones(cards),
-            "standings": self.arena.standings(),
-        }
+        bouts = self.arena.round_robin(cards, metric)
+        milestones = self.arena.award_milestones(cards)
+        for fight in bouts:
+            self.flow.move(
+                "firms", "arena", str(fight)[:110],
+                kind="ok" if fight.decided else "blocked",
+                firm=fight.winner or fight.challenger,
+            )
+        for firm_key, milestone, amount in milestones:
+            self.flow.move("firms", "arena", f"{milestone} (+{amount})", firm=firm_key)
+        return {"bouts": bouts, "milestones": milestones, "standings": self.arena.standings()}
+
+    # -- the layers, with the village watching -----------------------------
+    #
+    # Thin wrappers so a court ruling or a market sale shows up in the village
+    # whether it was driven from the CLI or from the dashboard. Each one emits
+    # and delegates; none of them changes what the underlying call does.
+    def try_strategy(self, path, firm_key: str = "", submitted_by: str = ""):
+        from pathlib import Path as _Path
+
+        self.flow.move("firms", "court", f"{_Path(str(path)).name} submitted",
+                       firm=firm_key, detail=f"by {submitted_by or 'unknown'}")
+        case = self.court.submit(path, firm_key=firm_key, submitted_by=submitted_by)
+        kind = {"accept": "ok", "modify": "blocked", "reject": "refused"}.get(
+            case.verdict, "ok"
+        )
+        self.flow.emit("court", f"{case.verdict.upper()}: {case.evidence.name}", kind=kind,
+                       firm=firm_key, detail=case.ruling.reason[:200])
+        if case.verdict == "accept":
+            self.flow.move("court", "brain", f"candidate genome #{case.genome_id}",
+                           firm=firm_key)
+        return case
+
+    def list_asset(self, seller: str, asset_type: str, price, title: str = ""):
+        listing = self.black_market.list_asset(seller, asset_type, price, title=title)
+        self.flow.move("firms", "bazaar",
+                       f"{seller} lists {asset_type} for {listing.price} {listing.currency}",
+                       firm=seller, detail=listing.title)
+        return listing
+
+    def buy_listing(self, buyer: str, listing_id: int):
+        result = self.black_market.buy(buyer, listing_id)
+        if result["settled"]:
+            self.flow.move("firms", "bazaar", f"{buyer} bought listing #{listing_id}",
+                           firm=buyer)
+        else:
+            # A capital sale does not settle in the bazaar. The villager carries
+            # it on to the gatehouse, which is where it waits for a person.
+            self.flow.move("firms", "bazaar", f"{buyer} wants listing #{listing_id}",
+                           firm=buyer)
+            self.flow.move("bazaar", "gate",
+                           f"capital transfer needs approval #{result['approval_id']}",
+                           kind="blocked", firm=buyer)
+        return result
+
+    def intrigue(self, action: str, actor: str, name: str = "", target: str = ""):
+        if action == "form":
+            members = [m.strip() for m in target.split(",") if m.strip()]
+            result = self.sandbox.form(name, actor, members)
+        elif action == "betray":
+            result = self.sandbox.betray(actor, name)
+        elif action == "spy":
+            result = self.sandbox.spy(actor, target)
+        elif action == "sabotage":
+            result = self.sandbox.sabotage(actor, target)
+        else:
+            raise ValueError(f"unknown sandbox action {action!r}")
+        self.flow.move(
+            "firms", "tavern", str(result)[:110],
+            kind="alarm" if action in ("betray", "sabotage") else "ok",
+            firm=actor,
+            detail="nothing in the tavern reaches the ledger",
+        )
+        return result
 
     # =====================================================================
     # setup
@@ -299,10 +378,27 @@ class Ecosystem:
             flow.move("brokerage", "gate", f"{paused['firm']} paused — kill needs you",
                       kind="alarm", firm=paused["firm"], detail=paused["reason"])
 
-        report.lessons = self.learner.record(self.learner.lessons(report.oversight.cards))
+        # The council sits after the brokerage has produced its requests and
+        # before the vault is written, so a ruling and what it caused land in
+        # the same audit entry. In `human` mode both calls are no-ops and the
+        # tick is byte-for-byte what it was.
+        if self.config.autonomy.council_decides:
+            self.request_resumes(market)
+            report.rulings = self.hold_council(market)
+            report.carried_out = self.apply_approvals()
+            for done in report.carried_out:
+                flow.move("gate", "brokerage", str(done)[:110])
+
+        drawn = self.learner.lessons(report.oversight.cards)
+        fresh = self.learner.new_lessons(drawn)
+        report.lessons = self.learner.record(fresh)
         self.audit.log_oversight(report.oversight, market.as_of())
+        self.log_brain(fresh, market)
         self.audit.rebuild_index()
         flow.move("brokerage", "audit", "vault written")
+        if fresh:
+            flow.move("ledger", "brain", f"{len(fresh)} lesson(s) learned",
+                      detail="; ".join(str(lesson)[:80] for lesson in fresh[:3]))
 
         if report.oversight.halted:
             flow.move("brokerage", "halt", report.oversight.halted["reason"][:100],
@@ -398,6 +494,151 @@ class Ecosystem:
     # =====================================================================
     # operator actions
     # =====================================================================
+    # =====================================================================
+    # the council
+    #
+    # The gate is unchanged: every one of these decisions is still a row in
+    # `human_approvals`, still granted through `HumanGate.approve`, still
+    # carried out by `apply_approvals`. The only thing that moves is *who*
+    # signs the row. That is deliberate — a second, quieter path into the
+    # ledger for autonomous decisions is exactly the kind of thing that makes
+    # an audit trail worthless.
+    # =====================================================================
+    def hold_council(self, market: Optional[MarketData] = None) -> list:
+        """Rule on everything pending that the council is allowed to rule on."""
+        if not self.config.autonomy.council_decides:
+            return []
+
+        market = market or self.market()
+        rulings = []
+        for approval in self.gate.pending():
+            if approval.action == ApprovalAction.LIVE_TRADING.value:
+                continue  # never the council's; see src/trading/council
+            evidence = gather_evidence(self, approval, market)
+            if self.council.panel_for(evidence) is None:
+                continue  # not a council matter at all; it stays with a human
+            if self.council.already_heard(approval.id, evidence):
+                continue  # same request, same facts — the ruling stands
+            ruling = self.council.rule(evidence)
+            self.council.record(ruling, approval.id)
+            rulings.append(ruling)
+
+            if ruling.granted:
+                self.gate.approve(approval.id, approved_by="the council")
+                self.flow.move("gate", "brokerage", f"council granted: {ruling.reason[:70]}",
+                               firm=ruling.firm_key, detail=str(ruling))
+            elif ruling.verdict == "refuse":
+                self.gate.reject(approval.id, approved_by="the council")
+                self.flow.emit("gate", f"council refused: {ruling.reason[:70]}",
+                               kind="blocked", firm=ruling.firm_key, detail=str(ruling))
+            else:
+                # The one outcome that needs a person, so this is the one that
+                # is allowed to interrupt them.
+                self.gate.notify_request(approval)
+                self.flow.emit("gate", f"council deferred to you: {ruling.reason[:70]}",
+                               kind="blocked", firm=ruling.firm_key, detail=str(ruling))
+        return rulings
+
+    def request_resumes(self, market: Optional[MarketData] = None) -> list:
+        """Ask for paused firms whose condition has cleared to trade again.
+
+        Pausing is autonomous because it stops the bleeding. Starting again is
+        the other direction, so it goes through the gate like everything else —
+        and without this the village only ever empties out.
+        """
+        from .firms.kill_switch import INSUFFICIENT_DATA, should_kill_firm
+
+        market = market or self.market()
+        asked = []
+        for firm in self.store.firms():
+            if firm.status != FirmStatus.PAUSED.value:
+                continue
+            card = self.brokerage.evaluator.evaluate(firm, market)
+            if card is None:
+                continue
+            should, reason = should_kill_firm(card.to_metrics(), self.config.kill)
+            if should and reason != INSUFFICIENT_DATA:
+                continue  # still bleeding; it stays paused
+            approval = self.gate.request(
+                ApprovalAction.RESUME_FIRM.value,
+                f"Resume {firm.firm_key}: the condition that paused it has cleared",
+                details={
+                    "kind": "resume",
+                    "firm": firm.firm_key,
+                    "reason": "no kill condition currently met",
+                },
+                dedupe_key=f"resume:{firm.firm_key}",
+            )
+            asked.append(approval)
+        return asked
+
+    # =====================================================================
+    # the brain, in the vault
+    #
+    # The database is where memory is kept; the vault is where it can be
+    # *read*. Every link written here is a relationship already in the data —
+    # a lesson to the symbol it is about, a symbol to the firms that traded
+    # it, a genome to the genome it was mutated from — which is what makes a
+    # graph view over this vault worth opening.
+    #
+    # Best-effort, like the flow recorder: a tick does not fail because a note
+    # could not be written.
+    # =====================================================================
+    def log_brain(self, lessons: Sequence = (), market: Optional[MarketData] = None) -> dict:
+        """Write what the village has learned into the vault."""
+        written = {"lessons": 0, "symbols": 0, "genomes": 0}
+        try:
+            firms = self.store.firms()
+            for lesson in lessons:
+                self.audit.log_lesson(lesson, firm_key=_firm_for(lesson, firms))
+                written["lessons"] += 1
+
+            traded_by: dict = {}
+            for firm in firms:
+                for symbol in firm.universe or ():
+                    traded_by.setdefault(symbol.upper(), []).append(firm.firm_key)
+
+            keys_by_symbol = self._lesson_keys_by_symbol()
+            for symbol, keys in traded_by.items():
+                record = self.memory.track_record(symbol)
+                if not record.get("trades") and symbol not in keys_by_symbol:
+                    continue  # nothing has happened in this name yet
+                self.audit.write_symbol(record, firms=keys,
+                                        lesson_keys=keys_by_symbol.get(symbol, ()))
+                written["symbols"] += 1
+
+            by_id = {f.id: f.firm_key for f in firms}
+            for row in self.db.query(
+                "SELECT * FROM strategy_genomes ORDER BY id DESC LIMIT 200"
+            ):
+                if self.audit.write_genome(row, by_id.get(row.get("firm_id"), "")):
+                    written["genomes"] += 1
+
+            self.audit.rebuild_brain()
+        except Exception as exc:  # noqa: BLE001 - the vault never breaks a tick
+            self.flow.emit("brain", "vault note failed", kind="blocked", detail=str(exc)[:200])
+        return written
+
+    def _lesson_keys_by_symbol(self) -> dict:
+        out: dict = {}
+        for memory in self.memory.lessons(limit=500):
+            symbol = (memory.symbol or "").upper()
+            key = memory.payload.get("key")
+            if symbol and key:
+                out.setdefault(symbol, []).append(key)
+        return out
+
+    def recruit(self, path, submitted_by: str = "", stake=None, name: str = ""):
+        """Drop a bot file in; the court rules, and a cleared file becomes a firm."""
+        from .recruit import recruit as _recruit
+
+        return _recruit(self, path, submitted_by=submitted_by, stake=stake, name=name)
+
+    def recruit_all(self, directory, submitted_by: str = "", move_to=None) -> list:
+        from .recruit import watch as _watch
+
+        return _watch(self, directory, submitted_by=submitted_by, move_to=move_to)
+
     def apply_approvals(self) -> list:
         """Carry out decisions a human has already made.
 
@@ -419,7 +660,28 @@ class Ecosystem:
                     details["firm"], details.get("reason", "approved by human")
                 )
                 applied.append(f"killed {result['firm']} (returned {result['returned']})")
+            elif approval.action == ApprovalAction.RESUME_FIRM.value and details.get("firm"):
+                result = self.brokerage.resume_firm(
+                    details["firm"], approval.approved_by or "the council"
+                )
+                applied.append(f"resumed {result['firm']}")
             elif approval.action == ApprovalAction.ALLOCATE_CAPITAL.value and details.get("firm"):
+                if details.get("kind") == "capital_transfer":
+                    continue  # settled through the black market, not here
+                if details.get("kind") == "recruit":
+                    from .recruit import fund
+
+                    result = fund(
+                        self, details["firm"], D(details["new_allocation"]),
+                        by=approval.approved_by or "approval",
+                    )
+                    applied.append(
+                        f"funded {result['firm']} with {result['allocation']}"
+                    )
+                    details["applied"] = True
+                    self.db.update("human_approvals", approval.id,
+                                   {"details": json.dumps(details, default=str)})
+                    continue
                 change = self.brokerage.allocator.apply_approved_increase(
                     details["firm"], D(details["new_allocation"])
                 )
@@ -457,6 +719,9 @@ class Ecosystem:
             for generation in range(1, generations + 1):
                 out.append(self.evolver.evolve(record, market, generation, analysts))
                 record = self.store.require_firm_by_id(record.id)
+        if out:
+            # New genomes exist; the lineage in the vault should show them.
+            self.log_brain()
         return out
 
     def simulate(self, days: int = 30, on_tick=None) -> list:
@@ -568,6 +833,12 @@ class Ecosystem:
         for event in self.store.events(limit=40):
             lines.append(f"- `{event.get('created_at')}` **{event.get('event_type')}**: {event.get('detail')}")
         return "\n".join(lines)
+
+
+def _firm_for(lesson, firms) -> str:
+    """Which firm a lesson is about, when it is about one at all."""
+    topic = getattr(lesson, "topic", "") or ""
+    return next((f.firm_key for f in firms if f.firm_key == topic), "")
 
 
 __all__ = ["Ecosystem", "TickReport"]
