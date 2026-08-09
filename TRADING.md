@@ -313,6 +313,41 @@ switch cannot see coming.
 
 ---
 
+## Mission Control
+
+Everything above on one page, at `/village`:
+
+```bash
+python -m src.main serve          # gate on /, Mission Control on /village
+```
+
+Six panels — ecosystem health and reconciliation, firms, brokerage and
+allocations, the court docket, the token standings, the market and the
+sandbox — plus a firm page with its live kill table, positions and recent
+proposals, and a case page showing every juror's finding.
+
+The buttons do what the equivalent CLI command does and **no more**: run a
+tick, run a season, drop a strategy file in, list and buy with tokens, form an
+alliance, betray one. Anything that would move capital writes an approval
+request and stops, exactly as it does from a terminal. The page has no
+privileged path into the ledger, and the two places a decision is granted are
+still the gate at `/` and `mvv approve`.
+
+Server-rendered HTML, no build step, no framework, no external service. Every
+number is a `SELECT` away in the same database the CLI reads. It is worth
+saying why that matters rather than treating it as a style preference: a
+dashboard that needs a gateway, a WebSocket bus and an npm install to render a
+table is three more things that can be down at the moment you want to know
+whether a firm is bleeding.
+
+Uploaded strategy files go through exactly the same court as the CLI — read
+with `ast`, never executed. There is a test that uploads a file which would
+write a marker on import and asserts the marker never appears.
+
+There is no authentication. Bind it to localhost.
+
+---
+
 ## The strategy court
 
 Drop a strategy file in and get a verdict you can check:

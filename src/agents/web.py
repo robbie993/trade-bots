@@ -42,6 +42,16 @@ from .monitoring import HealthMonitor
 
 app = FastAPI(title="MVV — Human Approval Gate", docs_url=None, redoc_url=None)
 
+# Mission Control (src/trading/web.py) mounts alongside the gate: same app,
+# same database, same process. The gate stays the only place a decision is
+# granted; /village is where you watch everything else.
+try:
+    from ..trading.web import router as _village_router
+
+    app.include_router(_village_router)
+except Exception:  # pragma: no cover - the gate must serve with or without it
+    _village_router = None
+
 
 def context():
     """A fresh config/DB per request — no connection shared across threads."""
@@ -97,7 +107,8 @@ def page(title: str, body: str) -> HTMLResponse:
         f"<meta name=viewport content='width=device-width,initial-scale=1'>"
         f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>"
         f"{body}"
-        f"<footer class=muted>MVV Phase 1 — Human Approval Gate. "
+        f"<footer class=muted>MVV Phase 1 — Human Approval Gate &middot; "
+        f"<a href='/village'>Mission Control</a>. "
         f"This page has no authentication: anyone who can reach it can approve "
         f"spending. Bind it to localhost or put it behind your own auth."
         f"</footer></body></html>"
@@ -210,6 +221,10 @@ def index() -> HTMLResponse:
             f"<h1>Human Approval Gate</h1>"
             f"<p class=muted>Nothing here spends money. Decisions are recorded; the "
             f"orchestrator acts on them on its next tick.</p>"
+            f"<div class=card><a href='/village'><button class=go>"
+            f"Mission Control &rarr;</button></a> "
+            f"<span class=muted>firms, brokerage, court, competition, market, "
+            f"sandbox</span></div>"
             f"{stop_html}"
             f"<div class=card>Cash: <span class={cash_class}>"
             f"{fmt_money(cash_status['available_cash'])} available</span> · "

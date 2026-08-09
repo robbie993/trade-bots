@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 618 tests, no database server, no network
+python -m pytest            # 650 tests, no database server, no network
 ```
 
 ---
@@ -121,6 +121,7 @@ src/
 │   ├── black_market/       genome licences; capital only via an approval
 │   ├── sandbox/            alliances, betrayal — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
+│   ├── web.py              Mission Control, mounted at /village
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
@@ -148,6 +149,7 @@ product village except the database, the gate and the principle.
 python -m src.main trade init
 python -m src.main trade simulate --days 120
 python -m src.main trade leaderboard
+python -m src.main serve          # gate on /, Mission Control on /village
 ```
 
 ---
