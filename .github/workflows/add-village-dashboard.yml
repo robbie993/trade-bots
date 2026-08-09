@@ -1,0 +1,55 @@
+name: ✨ Add Village Dashboard PR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  add-dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: 📁 Create dashboard folder and HTML file
+        run: |
+          mkdir -p dashboard
+          cat > dashboard/village.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>🏛️ AI Village — Mission Control</title>
+              <style>
+                  /* ... full styles as provided above ... */
+              </style>
+          </head>
+          <body>
+              <!-- ... full HTML structure ... -->
+              <script>
+                  // ... full JavaScript ... 
+              </script>
+          </body>
+          </html>
+          EOF
+
+      - name: 📋 Commit and create PR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b add-village-dashboard
+          git add dashboard/village.html
+          git commit -m "✨ Add visual AI Village dashboard"
+          git push --set-upstream origin add-village-dashboard
+          gh pr create \
+            --title "✨ Add Village Dashboard" \
+            --body "This PR adds a beautiful visual dashboard for the AI Village. Open 'dashboard/village.html' in your browser to see agents, tokens, P&L, and a drag-and-drop file zone." \
+            --base main \
+            --head add-village-dashboard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
