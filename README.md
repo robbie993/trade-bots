@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 812 tests, no database server, no network
+python -m pytest            # 826 tests, no database server, no network
 ```
 
 ---
@@ -90,6 +90,7 @@ python -m pytest            # 812 tests, no database server, no network
 ```
 src/
 ├── config.py               all tunables, the whole risk surface in one file
+├── deploy.py               hosted = read-only; the gate is not a public URL
 ├── money.py                Decimal helpers — no float ever touches cash
 ├── kill_criteria.py        §4 thresholds, pure functions
 ├── notifications.py        console / file / Slack / email

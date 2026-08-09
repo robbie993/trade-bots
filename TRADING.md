@@ -781,6 +781,66 @@ parameter *names* rather than the file text, because matching the text found
 "short" inside `short_window` and "tick" inside `TICKERS` — and a confident
 wrong warning teaches you to ignore the section that matters.
 
+## Deploying it
+
+The build error Vercel gives you is real and its suggested fix is the right
+one — there are two FastAPI apps in the tree and it cannot pick. That is now
+declared:
+
+```toml
+[tool.vercel]
+entrypoint = "src.agents.web:app"
+```
+
+But making the build pass is the easy half. **A hosted deployment runs
+read-only**, and that is not a limitation to work around — it is the point.
+
+Every page here carries the same warning: *this page has no authentication;
+bind it to localhost*. On a public URL that warning becomes load-bearing,
+because the approval gate is the one hard boundary in front of every dollar
+and it grants on an unauthenticated form post:
+
+```
+POST /approvals/3/approve      approved_by=web
+```
+
+So when the app detects a serverless host — `VERCEL`, `AWS_LAMBDA_*`,
+`K_SERVICE`, `FLY_APP_NAME` and friends — it:
+
+* refuses every non-`GET` request, **in middleware**, so it covers the gate,
+  the village actions and any route added later without anyone remembering to
+  guard it;
+* **strips the forms and buttons from the HTML**, because a control that 403s
+  when clicked is worse than no control;
+* says on the page that it is a mirror, so nobody mistakes it for the console.
+
+Reading still works — every page, plus the whole JSON API. Force it either way
+with `MVV_PUBLIC=1` or `MVV_PUBLIC=0`.
+
+This is not authentication. It is the *absence of a write surface*, which is
+the part you can verify by reading `src/deploy.py`.
+
+### It also needs a real database
+
+Serverless filesystems are read-only apart from a per-instance `/tmp` that
+disappears between requests, so the default SQLite file cannot work: every
+tick, approval and fill would be written to storage that is about to vanish.
+Set `DATABASE_URL` to Postgres. If you do not, the page says so rather than
+half-working. The audit vault is off there for the same reason.
+
+### Probably what you actually want
+
+If the goal is to show somebody the village rather than to operate it from a
+phone, there is a better answer than hosting the app:
+
+```bash
+python -m src.main trade dashboard --out dashboard/village.html
+```
+
+One self-contained file with real numbers, no server, no database, no write
+surface to reason about — and Vercel serves static files perfectly. The
+working console, with the buttons and the approvals, belongs on your machine.
+
 ---
 
 ## The strategy court

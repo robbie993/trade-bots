@@ -29,6 +29,16 @@ mvv = "src.cli:main"
 [tool.setuptools.packages.find]
 include = ["src*"]
 
+# Vercel could not work out which of several FastAPI apps to serve — there is
+# one in src/agents/web.py and one in the tests. This names it.
+#
+# Read src/deploy.py before pointing a real deployment at this: a hosted app
+# runs read-only, because the approval gate has no authentication and does not
+# belong on a public URL. It also needs DATABASE_URL to be Postgres; serverless
+# disks do not persist, so the default SQLite file would lose every write.
+[tool.vercel]
+entrypoint = "src.agents.web:app"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
