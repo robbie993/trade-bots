@@ -178,11 +178,80 @@ class Ecosystem:
         consequence for the ledger.
         """
         cards = self.brokerage.evaluator.evaluate_all(self.store.firms(), self.market())
-        return {
-            "bouts": self.arena.round_robin(cards, metric),
-            "milestones": self.arena.award_milestones(cards),
-            "standings": self.arena.standings(),
-        }
+        bouts = self.arena.round_robin(cards, metric)
+        milestones = self.arena.award_milestones(cards)
+        for fight in bouts:
+            self.flow.move(
+                "firms", "arena", str(fight)[:110],
+                kind="ok" if fight.decided else "blocked",
+                firm=fight.winner or fight.challenger,
+            )
+        for firm_key, milestone, amount in milestones:
+            self.flow.move("firms", "arena", f"{milestone} (+{amount})", firm=firm_key)
+        return {"bouts": bouts, "milestones": milestones, "standings": self.arena.standings()}
+
+    # -- the layers, with the village watching -----------------------------
+    #
+    # Thin wrappers so a court ruling or a market sale shows up in the village
+    # whether it was driven from the CLI or from the dashboard. Each one emits
+    # and delegates; none of them changes what the underlying call does.
+    def try_strategy(self, path, firm_key: str = "", submitted_by: str = ""):
+        from pathlib import Path as _Path
+
+        self.flow.move("firms", "court", f"{_Path(str(path)).name} submitted",
+                       firm=firm_key, detail=f"by {submitted_by or 'unknown'}")
+        case = self.court.submit(path, firm_key=firm_key, submitted_by=submitted_by)
+        kind = {"accept": "ok", "modify": "blocked", "reject": "refused"}.get(
+            case.verdict, "ok"
+        )
+        self.flow.emit("court", f"{case.verdict.upper()}: {case.evidence.name}", kind=kind,
+                       firm=firm_key, detail=case.ruling.reason[:200])
+        if case.verdict == "accept":
+            self.flow.move("court", "brain", f"candidate genome #{case.genome_id}",
+                           firm=firm_key)
+        return case
+
+    def list_asset(self, seller: str, asset_type: str, price, title: str = ""):
+        listing = self.black_market.list_asset(seller, asset_type, price, title=title)
+        self.flow.move("firms", "bazaar",
+                       f"{seller} lists {asset_type} for {listing.price} {listing.currency}",
+                       firm=seller, detail=listing.title)
+        return listing
+
+    def buy_listing(self, buyer: str, listing_id: int):
+        result = self.black_market.buy(buyer, listing_id)
+        if result["settled"]:
+            self.flow.move("firms", "bazaar", f"{buyer} bought listing #{listing_id}",
+                           firm=buyer)
+        else:
+            # A capital sale does not settle in the bazaar. The villager carries
+            # it on to the gatehouse, which is where it waits for a person.
+            self.flow.move("firms", "bazaar", f"{buyer} wants listing #{listing_id}",
+                           firm=buyer)
+            self.flow.move("bazaar", "gate",
+                           f"capital transfer needs approval #{result['approval_id']}",
+                           kind="blocked", firm=buyer)
+        return result
+
+    def intrigue(self, action: str, actor: str, name: str = "", target: str = ""):
+        if action == "form":
+            members = [m.strip() for m in target.split(",") if m.strip()]
+            result = self.sandbox.form(name, actor, members)
+        elif action == "betray":
+            result = self.sandbox.betray(actor, name)
+        elif action == "spy":
+            result = self.sandbox.spy(actor, target)
+        elif action == "sabotage":
+            result = self.sandbox.sabotage(actor, target)
+        else:
+            raise ValueError(f"unknown sandbox action {action!r}")
+        self.flow.move(
+            "firms", "tavern", str(result)[:110],
+            kind="alarm" if action in ("betray", "sabotage") else "ok",
+            firm=actor,
+            detail="nothing in the tavern reaches the ledger",
+        )
+        return result
 
     # =====================================================================
     # setup

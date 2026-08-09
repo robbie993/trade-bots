@@ -419,7 +419,7 @@ def cmd_court_submit(args) -> int:
 
     eco = _ecosystem(args)
     try:
-        case = eco.court.submit(
+        case = eco.try_strategy(
             args.file, firm_key=args.firm or "", submitted_by=args.by or ""
         )
     except EvidenceError as exc:
@@ -567,7 +567,7 @@ def cmd_market_sell(args) -> int:
 
     eco = _ecosystem(args)
     try:
-        listing = eco.black_market.list_asset(
+        listing = eco.list_asset(
             args.seller, args.asset, args.price, title=args.title or ""
         )
     except MarketError as exc:
@@ -584,7 +584,7 @@ def cmd_market_buy(args) -> int:
 
     eco = _ecosystem(args)
     try:
-        result = eco.black_market.buy(args.buyer, args.listing)
+        result = eco.buy_listing(args.buyer, args.listing)
     except MarketError as exc:
         print(f"refused: {exc}")
         return 1
@@ -642,14 +642,13 @@ def cmd_sandbox_action(args) -> int:
 
     eco = _ecosystem(args)
     try:
-        if args.sandbox_action == "form":
-            result = eco.sandbox.form(args.name, args.actor, args.members or [])
-        elif args.sandbox_action == "betray":
-            result = eco.sandbox.betray(args.actor, args.name)
-        elif args.sandbox_action == "spy":
-            result = eco.sandbox.spy(args.actor, args.target)
-        else:
-            result = eco.sandbox.sabotage(args.actor, args.target)
+        result = eco.intrigue(
+            args.sandbox_action,
+            args.actor,
+            name=getattr(args, "name", "") or "",
+            target=",".join(args.members) if args.sandbox_action == "form"
+            else getattr(args, "target", "") or "",
+        )
     except SandboxViolation as exc:
         print(f"refused: {exc}")
         return 1

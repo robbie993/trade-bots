@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 671 tests, no database server, no network
+python -m pytest            # 674 tests, no database server, no network
 ```
 
 ---
@@ -122,7 +122,7 @@ src/
 │   ├── sandbox/            alliances, betrayal — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
 │   ├── web.py              Mission Control, mounted at /village
-│   ├── flow.py             the tick's telemetry, for the animated diagram
+│   ├── flow.py             the village map, and the tick's telemetry
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py

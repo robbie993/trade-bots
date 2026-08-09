@@ -344,30 +344,63 @@ Uploaded strategy files go through exactly the same court as the CLI — read
 with `ast`, never executed. There is a test that uploads a file which would
 write a marker on import and asserts the marker never appears.
 
-### The flow
+### The village map
 
-`/village/flow` animates the tick as it runs. Eleven stages, and a dot for
-every proposal, fill and refusal that actually happened:
+`/village/flow` is the village, drawn as a village: fifteen buildings, the
+roads between them, and a little person walking a road for every proposal,
+fill and refusal that actually happened.
 
 ```
-market → firms → heart → venue → ledger → brain
-                   ↓        ↓
-                blocked  blocked        brokerage → audit
-                                        brokerage → human gate
-                                        brokerage → KILL_ALL
+ Market  →  Firm     →  Temple  →  Trading  →  Counting  →  Library
+ well       quarter                post        house           |
+             | | |         ↓          ↓                        ↓
+ Arena ←─────┘ | └──→ The pound  The pound     Town hall ←──────┘
+               |                                 |  |  ↓
+ Courthouse ←──┤                    Gatehouse ←──┘  |  Archive
+      └────────┼──────────→ Library                 ↓
+ Bazaar  ←─────┤                                 Bell tower
+      └────────┼──────────→ Gatehouse
+ Tavern  ←─────┘
 ```
+
+Six of them are the tick, in order along the top road:
+
+| Building | What goes on inside |
+| --- | --- |
+| Market well | prices arrive, up to the cursor and never past it |
+| Firm quarter | analysts, the bull/bear debate, the trader, the risk manager |
+| Temple | the six moral foundations, consulted before anything executes |
+| Trading post | paper by default; live venues turn orders away without approval |
+| Counting house | position, cash and P&L move together or not at all |
+| Library | remembers the fill and the argument that produced it |
+
+Five are what happens to a tick's output: **the pound** (refused proposals
+stop there), **the gatehouse** (kills and capital raises wait for you), **the
+town hall** (reconcile, score, kill, allocate), **the archive** (the Obsidian
+vault) and **the bell tower** (`KILL_ALL`).
+
+Four sit off the main road because none of them is on the tick's critical
+path: the **courthouse** (a dropped strategy file, twelve jurors, a ruling),
+the **arena** (bouts, milestones, tokens), the **bazaar** (genome licences —
+and capital only via the gatehouse) and the **tavern** (alliances, betrayal,
+espionage, none of which reaches the ledger).
 
 Three things make it worth looking at rather than decorative:
 
-**The dots are real.** Each one is a row `Ecosystem.tick()` wrote as it
-happened, read back from `flow_events`. Nothing loops on a timer — if the
-village is idle, the diagram is still, and that is information.
+**The villagers are real.** Each walker is a row `Ecosystem.tick()` wrote as
+it happened, read back from `flow_events`, and it walks the road its event
+travelled. Nothing loops on a timer — when the village is quiet, the roads are
+empty, and that is information.
 
-**Blocked things leave the flow.** A proposal the risk manager or the
-conscience refused travels to *Blocked* and stops. It does not glide on to the
-venue in a different colour. Kills and capital raises travel to the *Human
-gate*, which is where they wait for you. An animation where everything reaches
-the end is an expensive way to learn nothing.
+The figures standing in the yard below the firm quarter are the firms
+themselves, one each, and their posture is their status: a paused firm sits
+one out, a killed firm has faded.
+
+**Blocked things leave the road.** A proposal the risk manager or the
+conscience refused walks to *the pound* and stops. It does not carry on to the
+trading post in a different colour. Kills and capital raises walk to the
+*gatehouse*, which is where they wait for you. An animation where everything
+reaches the end is an expensive way to learn nothing.
 
 **Telemetry can never break a tick.** `FlowRecorder.emit` swallows its own
 errors, and there is a test that drops the `flow_events` table mid-run and
@@ -610,7 +643,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade audit [--write]` | the full audit report |
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
-| `/village/flow` | the tick, animated as it runs |
+| `/village/flow` | the village map, walked as the tick runs |
 | `trade court-submit <f>` | put a strategy file on trial |
 | `trade court-docket` | recent strategy cases |
 | `trade court-case <id>` | one case in full, juror by juror |

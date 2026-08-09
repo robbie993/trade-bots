@@ -284,7 +284,7 @@ def test_apply_approvals_from_the_page_carries_out_only_decided_things(client):
 # =========================================================================
 # the flow diagram
 # =========================================================================
-def test_the_flow_page_draws_every_node_and_edge(client):
+def test_the_village_draws_every_building_and_road(client):
     import re
 
     from src.trading.flow import EDGES, NODES
@@ -295,10 +295,42 @@ def test_the_flow_page_draws_every_node_and_edge(client):
     assert "data-after=" in body
 
 
-def test_the_flow_page_says_the_dots_are_real(client):
+def test_the_village_says_the_villagers_are_real(client):
     body = client.get("/village/flow").text
     assert "actually happened" in body
-    assert "if the village is idle" in body.lower()
+    assert "nobody wanders for" in body.lower()
+
+
+def test_every_firm_gets_a_resident(client):
+    import re
+
+    body = client.get("/village/flow").text
+    residents = re.findall(r"id='resident-([a-z_]+)'", body)
+    assert sorted(residents) == ["alpha", "beta"]
+
+
+def test_a_resident_posture_follows_the_firm_status(client):
+    """The little people are the firms, so a paused firm has to look paused."""
+    import re
+
+    db = db_for(client)
+    db.execute("UPDATE firms SET status = ? WHERE firm_key = ?", ("paused", "alpha"))
+    db.execute("UPDATE firms SET status = ? WHERE firm_key = ?", ("killed", "beta"))
+    db.close()
+    body = client.get("/village/flow").text
+    moods = dict(re.findall(r"id='resident-([a-z_]+)' class='villager (\w+)'", body))
+    assert moods == {"alpha": "paused", "beta": "gone"}
+
+
+def test_the_side_buildings_get_their_own_traffic(client):
+    """A court ruling or a market sale should show up in the village too."""
+    client.post(
+        "/village/actions/market-sell",
+        data={"seller": "alpha", "asset": "genome", "price": "50"},
+        follow_redirects=False,
+    )
+    edges = {ev["edge"] for ev in client.get("/village/flow/events?after=0").json()["events"]}
+    assert "firms>bazaar" in edges
 
 
 def test_the_event_feed_is_empty_before_anything_runs(client):
