@@ -120,6 +120,16 @@ def market(feed):
 
 
 @pytest.fixture
+def market_data(feed):
+    """A MarketData positioned mid-history — for tests that need marks."""
+    from src.trading.data.market_data import MarketData
+
+    data = MarketData(feed, ["SPY", "QQQ", "BTC-USD"])
+    data.seek(150)
+    return data
+
+
+@pytest.fixture
 def store(db):
     from src.trading.store import TradingStore
 

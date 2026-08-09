@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 252 tests, no database server, no network
+python -m pytest            # 618 tests, no database server, no network
 ```
 
 ---
@@ -116,11 +116,15 @@ src/
 │   ├── brokerage/          reconcile, evaluate, allocate, rank, KILL_ALL
 │   ├── brain/              memory, genome evolution, lessons
 │   ├── heart/              six moral foundations, allow/warn/block
+│   ├── court/              strategy trials: evidence, jury, advocates, judge
+│   ├── competition/        tokens, titles, bouts
+│   ├── black_market/       genome licences; capital only via an approval
+│   ├── sandbox/            alliances, betrayal — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
-    └── migrations/         001-006 products, 007-010 trading; Postgres + sqlite/
+    └── migrations/         001-006 products, 007-014 trading; Postgres + sqlite/
 ```
 
 Deliberately **not** built (spec §2.1): sharks, government, alliances, black
@@ -396,3 +400,11 @@ Deviations from the spec's sample code, each on purpose:
    money arithmetic deliberately does not go through them. The core loop
    itself imports nothing outside the standard library, so the thing that
    decides whether to spend money has no supply chain.
+
+Four layers now sit above that ledger, none of them on the tick's critical
+path: a **strategy court** that tries a dropped file with twelve deterministic
+jurors, a **competition** of tokens and bouts, a **black market** where firms
+license genomes, and a **sandbox** for alliances and betrayal that holds a
+read-only view of the books. Spec §2.1 ruled out the black market and
+gamification; that call was reversed deliberately, and the fences are
+documented in [TRADING.md](TRADING.md).

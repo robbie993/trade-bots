@@ -22,6 +22,14 @@ human has already made.
     trade audit                the full audit report
     trade status               one-screen health check
     trade monitor              status, repeatedly
+    trade court-submit <file>  put a strategy file on trial
+    trade court-docket         recent strategy cases
+    trade court-case <id>      one case in full, juror by juror
+    trade tokens               the token standings (points, not capital)
+    trade season               run every bout, award milestones
+    trade market               what firms have for sale
+    trade market-buy           buy a listing (capital needs an approval)
+    trade sandbox              alliances, intrigue, shadow scoreboard
     trade frameworks           which external frameworks are installed
     trade live-request         ask for permission to trade a live venue
     trade apply-approvals      carry out what a human approved
@@ -36,7 +44,9 @@ from ..config import Config
 from ..db.connection import Database
 from ..money import D, fmt_money, fmt_pct
 from .adapters import render_survey
+from .black_market import ASSET_TYPES
 from .brokerage.reconciliation import LedgerNotReconciled
+from .competition.arena import METRICS
 from .config import TradingConfig
 from .ecosystem import Ecosystem
 from .firms.kill_switch import kill_check_table
@@ -401,6 +411,255 @@ def cmd_monitor(args) -> int:  # pragma: no cover - long-running
         time.sleep(args.interval)
 
 
+# =========================================================================
+# the strategy court
+# =========================================================================
+def cmd_court_submit(args) -> int:
+    from .court import EvidenceError
+
+    eco = _ecosystem(args)
+    try:
+        case = eco.court.submit(
+            args.file, firm_key=args.firm or "", submitted_by=args.by or ""
+        )
+    except EvidenceError as exc:
+        print(f"cannot read that as a strategy: {exc}")
+        return 1
+    print(case.transcript())
+    return 0 if case.ruling.verdict != "reject" else 1
+
+
+def cmd_court_docket(args) -> int:
+    eco = _ecosystem(args)
+    rows = eco.court.docket(args.limit)
+    if not rows:
+        print("(no cases yet — `trade court-submit <file>`)")
+        return 0
+    print(
+        _table(
+            [
+                {
+                    "id": r["id"],
+                    "file": (r.get("file_name") or "")[:28],
+                    "ruling": (r.get("ruling") or "").upper(),
+                    "conf": r.get("confidence"),
+                    "fitness": r.get("fitness"),
+                    "genome": r.get("genome_id") or "-",
+                    "when": (r.get("created_at") or "")[:16],
+                }
+                for r in rows
+            ]
+        )
+    )
+    print("\nACCEPT admits a CANDIDATE genome. Nothing trades because the court liked it.")
+    return 0
+
+
+def cmd_court_case(args) -> int:
+    eco = _ecosystem(args)
+    row = eco.court.case(args.id)
+    if row is None:
+        print(f"no case {args.id}")
+        return 1
+    import json as _json
+
+    print(f"CASE #{row['id']} — {row['file_name']}  sha256 {(row['file_sha256'] or '')[:16]}…")
+    print(f"  ruling: {(row['ruling'] or '').upper()} (confidence {row['confidence']})")
+    print(f"  reason: {row['ruling_reason']}\n")
+    try:
+        findings = _json.loads(row.get("findings") or "[]")
+    except ValueError:
+        findings = []
+    print(
+        _table(
+            [
+                {
+                    "juror": f["juror"],
+                    "verdict": f["verdict"],
+                    "weight": f["weight"],
+                    "veto": "yes" if f.get("veto") else "",
+                    "reason": f["reason"][:60],
+                }
+                for f in findings
+            ]
+        )
+    )
+    print(f"\n{row.get('prosecution') or ''}\n\n{row.get('defence') or ''}")
+    return 0
+
+
+def cmd_court_watch(args) -> int:
+    eco = _ecosystem(args)
+    cases = eco.court.watch(args.dir)
+    if not cases:
+        print("nothing to review (drop .py/.yaml/.json strategies into the directory)")
+        return 0
+    for case in cases:
+        print(f"{case.evidence.name:28} {case.verdict.upper():7} {case.ruling.reason[:70]}")
+    return 0
+
+
+# =========================================================================
+# competition
+# =========================================================================
+def cmd_tokens(args) -> int:
+    eco = _ecosystem(args)
+    print(eco.arena.render())
+    events = eco.tokens.events(args.firm, limit=args.limit)
+    if events:
+        print("\nrecent:")
+        for event in events:
+            print(f"  {(event['created_at'] or '')[:16]}  {event['firm_key']:<14} "
+                  f"{str(event['amount']):>8}  {event['reason']}")
+    return 0
+
+
+def cmd_season(args) -> int:
+    eco = _ecosystem(args)
+    result = eco.run_season(args.metric)
+    for fight in result["bouts"]:
+        print(f"  {fight}")
+    for firm, milestone, amount in result["milestones"]:
+        print(f"  MILESTONE {firm}: {milestone} (+{amount})")
+    print()
+    print(eco.arena.render())
+    return 0
+
+
+def cmd_bout(args) -> int:
+    eco = _ecosystem(args)
+    cards = eco.brokerage.evaluator.evaluate_all(eco.store.firms(), eco.market())
+    print(f"  {eco.arena.bout(args.challenger, args.opponent, cards, args.metric)}")
+    return 0
+
+
+# =========================================================================
+# the black market
+# =========================================================================
+def cmd_market(args) -> int:
+    eco = _ecosystem(args)
+    listings = eco.black_market.listings(args.status)
+    if listings:
+        print(_table([
+            {
+                "id": listing.id,
+                "seller": listing.seller,
+                "asset": listing.asset_type,
+                "title": listing.title[:28],
+                "price": f"{listing.price} {listing.currency}",
+                "status": listing.status,
+            }
+            for listing in listings
+        ]))
+    else:
+        print(f"(no {args.status} listings)")
+    pending = eco.black_market.pending_transfers()
+    if pending:
+        print("\ncapital transfers awaiting approval (no capital has moved):")
+        for row in pending:
+            print(f"  transaction #{row['id']}  {row['seller']} -> {row['buyer']}  "
+                  f"{fmt_money(D(row['price']))}  approval #{row['approval_id']}")
+    return 0
+
+
+def cmd_market_sell(args) -> int:
+    from .black_market import MarketError
+
+    eco = _ecosystem(args)
+    try:
+        listing = eco.black_market.list_asset(
+            args.seller, args.asset, args.price, title=args.title or ""
+        )
+    except MarketError as exc:
+        print(f"refused: {exc}")
+        return 1
+    print(f"listed: {listing}")
+    if listing.currency == "cash":
+        print("  capital listings settle only through an approved transfer")
+    return 0
+
+
+def cmd_market_buy(args) -> int:
+    from .black_market import MarketError
+
+    eco = _ecosystem(args)
+    try:
+        result = eco.black_market.buy(args.buyer, args.listing)
+    except MarketError as exc:
+        print(f"refused: {exc}")
+        return 1
+    if result["settled"]:
+        print(f"settled: transaction #{result['transaction']}")
+        delivery = result.get("delivery") or {}
+        if delivery.get("kind") == "genome":
+            print(f"  candidate genome #{delivery['genome_id']} — {delivery['note']}")
+    else:
+        print(f"transaction #{result['transaction']} opened; {result['note']}")
+        print(f"  python -m src.main approve {result['approval_id']} --by you")
+    return 0
+
+
+def cmd_market_settle(args) -> int:
+    from .black_market import MarketError
+
+    eco = _ecosystem(args)
+    try:
+        result = eco.black_market.settle_capital_transfer(args.transaction)
+    except MarketError as exc:
+        print(f"refused: {exc}")
+        return 1
+    print(f"transferred {fmt_money(D(result['amount']))} from {result['from']} to {result['to']}")
+    print(eco.brokerage.reconcile(eco.market()).summary())
+    return 0
+
+
+# =========================================================================
+# the sandbox
+# =========================================================================
+def cmd_sandbox(args) -> int:
+    eco = _ecosystem(args)
+    print(eco.sandbox.render())
+    alliances = eco.sandbox.alliances.all()
+    if alliances:
+        print("\nalliances:")
+        for alliance in alliances:
+            print(f"  {alliance}")
+    events = eco.sandbox.events(args.limit)
+    if events:
+        print("\nevents:")
+        for event in events:
+            print(f"  [{event['event_type']}] {event['actor']} -> {event['target'] or '-'}: "
+                  f"{(event['detail'] or '')[:80]}")
+    print(
+        "\nNothing here touches the ledger: the sandbox holds a read-only view of it "
+        "and can write only its own two tables."
+    )
+    return 0
+
+
+def cmd_sandbox_action(args) -> int:
+    from .sandbox import SandboxViolation
+
+    eco = _ecosystem(args)
+    try:
+        if args.sandbox_action == "form":
+            result = eco.sandbox.form(args.name, args.actor, args.members or [])
+        elif args.sandbox_action == "betray":
+            result = eco.sandbox.betray(args.actor, args.name)
+        elif args.sandbox_action == "spy":
+            result = eco.sandbox.spy(args.actor, args.target)
+        else:
+            result = eco.sandbox.sabotage(args.actor, args.target)
+    except SandboxViolation as exc:
+        print(f"refused: {exc}")
+        return 1
+    except Exception as exc:  # noqa: BLE001 - InsufficientTokens and friends
+        print(f"refused: {exc}")
+        return 1
+    print(f"  {result}")
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -491,6 +750,76 @@ def add_trade_parser(subparsers) -> None:
     p = add("monitor", "status, repeatedly", cmd_monitor)
     p.add_argument("--watch", action="store_true")
     p.add_argument("--interval", type=int, default=60)
+
+    # -- the strategy court ------------------------------------------------
+    p = add("court-submit", "put a strategy file on trial", cmd_court_submit)
+    p.add_argument("file")
+    p.add_argument("--firm", help="whose universe to backtest against")
+    p.add_argument("--by", help="who submitted it")
+
+    p = add("court-docket", "recent strategy cases", cmd_court_docket)
+    p.add_argument("--limit", type=int, default=20)
+
+    p = add("court-case", "one case in full, juror by juror", cmd_court_case)
+    p.add_argument("id", type=int)
+
+    p = add("court-watch", "try every strategy file in a directory", cmd_court_watch)
+    p.add_argument("--dir")
+
+    # -- competition -------------------------------------------------------
+    p = add("tokens", "the token standings (points, not capital)", cmd_tokens)
+    p.add_argument("--firm")
+    p.add_argument("--limit", type=int, default=10)
+
+    p = add("season", "run every bout and award milestones", cmd_season)
+    p.add_argument("--metric", default="score", choices=sorted(METRICS))
+
+    p = add("bout", "one head-to-head", cmd_bout)
+    p.add_argument("challenger")
+    p.add_argument("opponent")
+    p.add_argument("--metric", default="score", choices=sorted(METRICS))
+
+    # -- the black market --------------------------------------------------
+    p = add("market", "what is for sale", cmd_market)
+    p.add_argument("--status", default="active")
+
+    p = add("market-sell", "list an asset", cmd_market_sell)
+    p.add_argument("seller")
+    p.add_argument("--asset", required=True, choices=list(ASSET_TYPES))
+    p.add_argument("--price", required=True)
+    p.add_argument("--title")
+
+    p = add("market-buy", "buy a listing", cmd_market_buy)
+    p.add_argument("buyer")
+    p.add_argument("listing", type=int)
+
+    p = add("market-settle", "apply an approved capital transfer", cmd_market_settle)
+    p.add_argument("transaction", type=int)
+
+    # -- the sandbox -------------------------------------------------------
+    p = add("sandbox", "alliances, intrigue and the shadow scoreboard", cmd_sandbox)
+    p.add_argument("--limit", type=int, default=15)
+
+    p = add("sandbox-form", "form an alliance", cmd_sandbox_action)
+    p.add_argument("name")
+    p.add_argument("actor")
+    p.add_argument("members", nargs="*")
+    p.set_defaults(sandbox_action="form")
+
+    p = add("sandbox-betray", "break an alliance for a reward", cmd_sandbox_action)
+    p.add_argument("actor")
+    p.add_argument("name")
+    p.set_defaults(sandbox_action="betray")
+
+    p = add("sandbox-spy", "copy a rival's genome into the sandbox record", cmd_sandbox_action)
+    p.add_argument("actor")
+    p.add_argument("target")
+    p.set_defaults(sandbox_action="spy")
+
+    p = add("sandbox-sabotage", "attack a rival's shadow standing", cmd_sandbox_action)
+    p.add_argument("actor")
+    p.add_argument("target")
+    p.set_defaults(sandbox_action="sabotage")
 
     add("frameworks", "which external frameworks are installed", cmd_frameworks)
 

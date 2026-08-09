@@ -104,6 +104,75 @@ class Ecosystem:
         self.audit = ObsidianLogger(self.config.audit_vault, self.config)
         self._feed = None
         self._specs: dict = {}
+        self._court = None
+        self._tokens = None
+        self._arena = None
+        self._market = None
+        self._sandbox = None
+
+    # =====================================================================
+    # the layers above the ledger
+    #
+    # All four are built lazily and none is on the tick's critical path. The
+    # tick trades, reconciles and allocates exactly as it did before any of
+    # them existed; these are where files get judged, points get awarded and
+    # firms plot against each other.
+    # =====================================================================
+    @property
+    def court(self):
+        if self._court is None:
+            from .court import StrategyCourt
+
+            self._court = StrategyCourt(self.store, self.config, self.memory)
+        return self._court
+
+    @property
+    def tokens(self):
+        if self._tokens is None:
+            from .competition import TokenLedger
+
+            self._tokens = TokenLedger(self.db)
+        return self._tokens
+
+    @property
+    def arena(self):
+        if self._arena is None:
+            from .competition import Arena
+
+            self._arena = Arena(self.db, tokens=self.tokens)
+        return self._arena
+
+    @property
+    def black_market(self):
+        # Deliberately not `market` — that is the price feed, and confusing the
+        # two would be an unusually bad name collision in this particular file.
+        if self._market is None:
+            from .black_market import BlackMarket
+
+            self._market = BlackMarket(self.store, self.config, self.tokens, self.gate)
+        return self._market
+
+    @property
+    def sandbox(self):
+        if self._sandbox is None:
+            from .sandbox import Sandbox
+
+            self._sandbox = Sandbox(self.store, self.tokens, seed=self.config.brain.seed)
+        return self._sandbox
+
+    def run_season(self, metric: str = "score") -> dict:
+        """One competitive round: bouts and milestones over the current cards.
+
+        Reads scorecards and writes tokens. It cannot move capital, pause a
+        firm or touch a position, so a season can be run at any time without
+        consequence for the ledger.
+        """
+        cards = self.brokerage.evaluator.evaluate_all(self.store.firms(), self.market())
+        return {
+            "bouts": self.arena.round_robin(cards, metric),
+            "milestones": self.arena.award_milestones(cards),
+            "standings": self.arena.standings(),
+        }
 
     # =====================================================================
     # setup

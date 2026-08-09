@@ -54,6 +54,11 @@ def test_init_is_idempotent(cli):
         ("trade", "backtest"),
         ("trade", "evolve"),
         ("trade", "apply-approvals"),
+        ("trade", "court-docket"),
+        ("trade", "tokens"),
+        ("trade", "season"),
+        ("trade", "market"),
+        ("trade", "sandbox"),
     ],
 )
 def test_read_only_commands_run(cli, command, capsys):
@@ -165,3 +170,94 @@ def test_a_vendored_repo_is_detected(trading_config, tmp_path):
     assert repo.present
     assert "main.py" in repo.doctor()
     assert "pip install -r requirements.txt" in repo.doctor()
+
+
+# =========================================================================
+# the four layers above the ledger
+# =========================================================================
+def test_court_submit_rejects_a_dangerous_file(cli, capsys, tmp_path):
+    path = tmp_path / "evil.py"
+    path.write_text(
+        "import socket\nGENOME = {'fast_window': 10, 'slow_window': 30}\nUNIVERSE = ['SPY']\n"
+    )
+    assert cli("trade", "court-submit", str(path)) == 1
+    out = capsys.readouterr().out
+    assert "REJECT" in out and "socket" in out
+
+
+def test_court_submit_refuses_an_unreadable_file(cli, capsys, tmp_path):
+    path = tmp_path / "notes.txt"
+    path.write_text("not a strategy")
+    assert cli("trade", "court-submit", str(path)) == 1
+    assert "cannot read that as a strategy" in capsys.readouterr().out
+
+
+def test_the_docket_records_the_case(cli, capsys, tmp_path):
+    path = tmp_path / "s.yaml"
+    path.write_text("strategy:\n  universe: [SPY]\n  genome:\n    fast_window: 12\n")
+    cli("trade", "court-submit", str(path))
+    capsys.readouterr()
+    assert cli("trade", "court-docket") == 0
+    out = capsys.readouterr().out
+    assert "s.yaml" in out
+    assert "Nothing trades because the court liked it" in out
+
+
+def test_market_sell_and_buy_a_genome(cli, capsys):
+    cli("trade", "simulate", "--days", "5")
+    capsys.readouterr()
+    # Seed the buyer with tokens by winning something is slow; award directly.
+    from src.db.connection import Database
+    from src.trading.competition import TokenLedger
+    import os
+
+    db = Database.from_url(os.environ["DATABASE_URL"])
+    TokenLedger(db).award("beta", 500, "seed")
+    db.close()
+
+    assert cli("trade", "market-sell", "alpha", "--asset", "genome", "--price", "100") == 0
+    assert "listed:" in capsys.readouterr().out
+    assert cli("trade", "market-buy", "beta", "1") == 0
+    out = capsys.readouterr().out
+    assert "candidate genome" in out
+
+
+def test_a_capital_listing_asks_before_it_moves(cli, capsys):
+    assert cli("trade", "market-sell", "alpha", "--asset", "capital", "--price", "5000") == 0
+    capsys.readouterr()
+    assert cli("trade", "market-buy", "beta", "1") == 0
+    out = capsys.readouterr().out
+    assert "approve" in out
+    assert "capital transfers do not settle in the market" in out
+
+
+def test_sandbox_intrigue_runs_and_says_it_is_inert(cli, capsys):
+    from src.db.connection import Database
+    from src.trading.competition import TokenLedger
+    import os
+
+    db = Database.from_url(os.environ["DATABASE_URL"])
+    for key in ("alpha", "beta"):
+        TokenLedger(db).award(key, 500, "seed")
+    db.close()
+
+    assert cli("trade", "sandbox-form", "The Pact", "alpha", "beta") == 0
+    assert cli("trade", "sandbox-betray", "alpha", "The Pact") == 0
+    assert cli("trade", "sandbox-sabotage", "beta", "alpha") == 0
+    capsys.readouterr()
+    assert cli("trade", "sandbox") == 0
+    out = capsys.readouterr().out
+    assert "Nothing here touches the ledger" in out
+
+
+def test_the_new_commands_are_attached(cli):
+    from src.cli import build_parser
+
+    trade = build_parser()._subparsers._group_actions[0].choices["trade"]
+    commands = set(trade._subparsers._group_actions[0].choices)
+    assert {
+        "court-submit", "court-docket", "court-case", "court-watch",
+        "tokens", "season", "bout",
+        "market", "market-sell", "market-buy", "market-settle",
+        "sandbox", "sandbox-form", "sandbox-betray", "sandbox-spy", "sandbox-sabotage",
+    } <= commands
