@@ -94,6 +94,10 @@ runs — including the parts that would look like progress.
 
 ## What the system may and may not do alone
 
+By default, this is the split. Everything in the right-hand column can be
+handed to **the council** instead — see the next section; the last row is the
+one it may never touch.
+
 | Autonomous | Needs a human |
 |---|---|
 | Read data, analyse, debate, propose | Send an order to any live venue |
@@ -115,6 +119,106 @@ python -m src.main approvals
 python -m src.main approve 3 --by you
 python -m src.main trade apply-approvals               # carries out what you decided
 ```
+
+---
+
+## The council — letting it run itself
+
+The table above is the default. If you would rather not sit in front of it
+approving things, the village has a body that can decide most of them:
+
+```bash
+export TRADE_AUTONOMY=council
+python -m src.main trade autonomy      # what it may and may not decide
+python -m src.main trade run           # and leave it
+```
+
+The council is the strategy court's machinery pointed at the approval queue —
+deterministic jurors over evidence, weighted, with vetoes. It reaches one of
+three verdicts, and the third is the one that matters:
+
+| | |
+|---|---|
+| **GRANT** | the panel carried it; the tick carries it out on the spot |
+| **REFUSE** | the panel rejected it, with its reasons |
+| **DEFER** | the evidence does not settle it — it stays pending, for you |
+
+A body that can only say yes or no will say one of them when it should have
+said neither. `DEFER` is what stops this being a rubber stamp, and it is why
+switching autonomy on does not mean you are never asked anything: it means you
+are only asked about the cases the ledger does not answer.
+
+### What it decides on
+
+It reads the ledger, never the request. A request that says a firm is
+wonderful does not make it so — the evidence is gathered fresh from the same
+tables the brokerage reads, and there is a test that asserts a flattering
+request changes nothing.
+
+**Three vetoes outrank every other consideration**, because each is a fact no
+amount of good performance argues with:
+
+* the books do not reconcile
+* the firm is below the sample gate — *insufficient data is not a reason to act*
+* the raise would breach the brokerage's total capital, or the firm's own ceiling
+
+**And one veto exists purely to prevent the failure the human gate was there
+for.** A council that grants the same firm a raise every tick is compounding,
+and it compounds fastest into whichever firm is currently winning. After three
+recent raises to one firm, the fourth goes to you.
+
+The sample gate has one deliberate exception, and it is the same exception
+`should_kill_firm` already makes: drawdown, a catastrophic single loss and
+consecutive losses are checked *before* the gate, because they are not
+statistical claims about an edge — they are the account being emptied.
+Demanding twenty trades before acting on a 40% drawdown would reproduce
+exactly the mistake the kill switch was written to avoid.
+
+### What it may never decide
+
+**Sending an order to a live venue.** That is the one act in this system that
+leaves it: irreversible, outside the ledger, real money sitting at a real
+broker. Everything else the council rules on moves numbers between rows of a
+database that reconciles, and can be read back and undone.
+
+This is not a setting. `live_trading` has no panel of jurors, so there is no
+code path that reaches a verdict on it however the configuration is written,
+and there is a test asserting it stays that way.
+
+### Nothing goes round the gate
+
+The council does not get a private path into the ledger. Every decision is
+still a row in `human_approvals`, still granted through `HumanGate.approve`,
+still carried out by `apply_approvals` — the only thing that changes is who
+signs the row, and the signature says `the council` rather than your name.
+A second, quieter route into the books is exactly the kind of thing that makes
+an audit trail worth nothing.
+
+Every ruling is written to `council_rulings` with each juror's reasoning and
+the state of the ledger it was decided on:
+
+```bash
+python -m src.main trade council           # the rulings
+python -m src.main trade council-case 1    # one ruling, juror by juror
+```
+
+That table stores the evidence as JSON, and the jurors are pure functions of
+it — so a stored ruling replays to the stored verdict months later. There is a
+test that does exactly that, because "the machine decided" is not an answer.
+
+### It stays quiet
+
+While the council is sitting, a request it is about to grant no longer pages
+you. Only a **deferred** one does — the outcome that actually needs a person.
+Live trading and the whole product village notify exactly as they always did.
+
+### It also lets firms back in
+
+Pausing is autonomous because it stops the bleeding; starting again is the
+other direction, so it goes through the gate like everything else. Without
+somebody able to grant it, a long run only ever empties the village out — so a
+paused firm whose condition has cleared asks to resume, and the council rules
+on that too.
 
 ---
 
@@ -375,9 +479,9 @@ Six of them are the tick, in order along the top road:
 | Library | remembers the fill and the argument that produced it |
 
 Five are what happens to a tick's output: **the pound** (refused proposals
-stop there), **the gatehouse** (kills and capital raises wait for you), **the
-town hall** (reconcile, score, kill, allocate), **the archive** (the Obsidian
-vault) and **the bell tower** (`KILL_ALL`).
+stop there), **the gatehouse** (kills and capital raises wait — for you, or
+for the council), **the town hall** (reconcile, score, kill, allocate), **the
+archive** (the Obsidian vault) and **the bell tower** (`KILL_ALL`).
 
 Four sit off the main road because none of them is on the tick's critical
 path: the **courthouse** (a dropped strategy file, twelve jurors, a ruling),
@@ -685,6 +789,9 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade monitor --watch` | status, repeatedly |
 | `/village/flow` | the village map, walked as the tick runs |
 | `trade dashboard` | freeze it all into one self-contained HTML file |
+| `trade autonomy` | what the village decides for itself |
+| `trade council` | the council's rulings |
+| `trade council-case <id>` | one ruling, juror by juror |
 | `trade court-submit <f>` | put a strategy file on trial |
 | `trade court-docket` | recent strategy cases |
 | `trade court-case <id>` | one case in full, juror by juror |

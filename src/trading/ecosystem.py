@@ -39,6 +39,7 @@ from .brain.memory import AgentMemory
 from .brokerage.brokerage import Brokerage, OversightReport
 from .brokerage.reconciliation import LedgerNotReconciled
 from .config import TradingConfig
+from .council import COUNCIL_ACTIONS, Council, gather as gather_evidence
 from .data.market_data import MarketData
 from .data.feeds import build_feed
 from .execution import build_venue
@@ -62,6 +63,8 @@ class TickReport:
     errors: list = field(default_factory=list)
     oversight: Optional[OversightReport] = None
     lessons: int = 0
+    rulings: list = field(default_factory=list)
+    carried_out: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -77,6 +80,10 @@ class TickReport:
             lines.append(self.oversight.summary())
         if self.lessons:
             lines.append(f"  {self.lessons} new lesson(s) recorded")
+        for ruling in self.rulings:
+            lines.append(f"  COUNCIL: {ruling}")
+        for done in self.carried_out:
+            lines.append(f"  CARRIED OUT: {done}")
         return "\n".join(lines)
 
 
@@ -100,6 +107,9 @@ class Ecosystem:
         self.learner = Learner(self.store, self.memory, self.config)
         self.evolver = Evolver(self.store, self.config)
         self.brokerage = Brokerage(self.store, self.config, self.gate)
+        self.council = Council(db, margin=self.config.autonomy.margin)
+        if self.config.autonomy.council_decides:
+            self.gate.quiet_actions = set(COUNCIL_ACTIONS)
         self.gateway = OmniRoute(self.config.gateway)
         self.audit = ObsidianLogger(self.config.audit_vault, self.config)
         self._feed = None
@@ -368,6 +378,17 @@ class Ecosystem:
             flow.move("brokerage", "gate", f"{paused['firm']} paused — kill needs you",
                       kind="alarm", firm=paused["firm"], detail=paused["reason"])
 
+        # The council sits after the brokerage has produced its requests and
+        # before the vault is written, so a ruling and what it caused land in
+        # the same audit entry. In `human` mode both calls are no-ops and the
+        # tick is byte-for-byte what it was.
+        if self.config.autonomy.council_decides:
+            self.request_resumes(market)
+            report.rulings = self.hold_council(market)
+            report.carried_out = self.apply_approvals()
+            for done in report.carried_out:
+                flow.move("gate", "brokerage", str(done)[:110])
+
         report.lessons = self.learner.record(self.learner.lessons(report.oversight.cards))
         self.audit.log_oversight(report.oversight, market.as_of())
         self.audit.rebuild_index()
@@ -467,6 +488,84 @@ class Ecosystem:
     # =====================================================================
     # operator actions
     # =====================================================================
+    # =====================================================================
+    # the council
+    #
+    # The gate is unchanged: every one of these decisions is still a row in
+    # `human_approvals`, still granted through `HumanGate.approve`, still
+    # carried out by `apply_approvals`. The only thing that moves is *who*
+    # signs the row. That is deliberate — a second, quieter path into the
+    # ledger for autonomous decisions is exactly the kind of thing that makes
+    # an audit trail worthless.
+    # =====================================================================
+    def hold_council(self, market: Optional[MarketData] = None) -> list:
+        """Rule on everything pending that the council is allowed to rule on."""
+        if not self.config.autonomy.council_decides:
+            return []
+
+        market = market or self.market()
+        rulings = []
+        for approval in self.gate.pending():
+            if approval.action == ApprovalAction.LIVE_TRADING.value:
+                continue  # never the council's; see src/trading/council
+            evidence = gather_evidence(self, approval, market)
+            if self.council.panel_for(evidence) is None:
+                continue  # not a council matter at all; it stays with a human
+            if self.council.already_heard(approval.id, evidence):
+                continue  # same request, same facts — the ruling stands
+            ruling = self.council.rule(evidence)
+            self.council.record(ruling, approval.id)
+            rulings.append(ruling)
+
+            if ruling.granted:
+                self.gate.approve(approval.id, approved_by="the council")
+                self.flow.move("gate", "brokerage", f"council granted: {ruling.reason[:70]}",
+                               firm=ruling.firm_key, detail=str(ruling))
+            elif ruling.verdict == "refuse":
+                self.gate.reject(approval.id, approved_by="the council")
+                self.flow.emit("gate", f"council refused: {ruling.reason[:70]}",
+                               kind="blocked", firm=ruling.firm_key, detail=str(ruling))
+            else:
+                # The one outcome that needs a person, so this is the one that
+                # is allowed to interrupt them.
+                self.gate.notify_request(approval)
+                self.flow.emit("gate", f"council deferred to you: {ruling.reason[:70]}",
+                               kind="blocked", firm=ruling.firm_key, detail=str(ruling))
+        return rulings
+
+    def request_resumes(self, market: Optional[MarketData] = None) -> list:
+        """Ask for paused firms whose condition has cleared to trade again.
+
+        Pausing is autonomous because it stops the bleeding. Starting again is
+        the other direction, so it goes through the gate like everything else —
+        and without this the village only ever empties out.
+        """
+        from .firms.kill_switch import INSUFFICIENT_DATA, should_kill_firm
+
+        market = market or self.market()
+        asked = []
+        for firm in self.store.firms():
+            if firm.status != FirmStatus.PAUSED.value:
+                continue
+            card = self.brokerage.evaluator.evaluate(firm, market)
+            if card is None:
+                continue
+            should, reason = should_kill_firm(card.to_metrics(), self.config.kill)
+            if should and reason != INSUFFICIENT_DATA:
+                continue  # still bleeding; it stays paused
+            approval = self.gate.request(
+                ApprovalAction.RESUME_FIRM.value,
+                f"Resume {firm.firm_key}: the condition that paused it has cleared",
+                details={
+                    "kind": "resume",
+                    "firm": firm.firm_key,
+                    "reason": "no kill condition currently met",
+                },
+                dedupe_key=f"resume:{firm.firm_key}",
+            )
+            asked.append(approval)
+        return asked
+
     def apply_approvals(self) -> list:
         """Carry out decisions a human has already made.
 
@@ -488,7 +587,14 @@ class Ecosystem:
                     details["firm"], details.get("reason", "approved by human")
                 )
                 applied.append(f"killed {result['firm']} (returned {result['returned']})")
+            elif approval.action == ApprovalAction.RESUME_FIRM.value and details.get("firm"):
+                result = self.brokerage.resume_firm(
+                    details["firm"], approval.approved_by or "the council"
+                )
+                applied.append(f"resumed {result['firm']}")
             elif approval.action == ApprovalAction.ALLOCATE_CAPITAL.value and details.get("firm"):
+                if details.get("kind") == "capital_transfer":
+                    continue  # settled through the black market, not here
                 change = self.brokerage.allocator.apply_approved_increase(
                     details["firm"], D(details["new_allocation"])
                 )

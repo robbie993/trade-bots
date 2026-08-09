@@ -43,6 +43,11 @@ class ApprovalAction(str, Enum):
     # one of these being approved first.
     ALLOCATE_CAPITAL = "allocate_capital"
     KILL_FIRM = "kill_firm"
+    # Un-pausing. Pausing is autonomous because it stops the bleeding; starting
+    # again is the other direction, so it goes through the same gate as the
+    # rest — which is what lets the council rule on it rather than special-case
+    # it. See src/trading/council.
+    RESUME_FIRM = "resume_firm"
     LIVE_TRADING = "live_trading"
 
 
@@ -152,6 +157,13 @@ class HumanGate:
         self.db = db
         self.config = config or GateConfig()
         self.notifier = notifier if notifier is not None else build_notifier(app_config)
+        # Actions to record without shouting. Set by the trading ecosystem when
+        # the council is sitting: a request the council grants two lines later
+        # should not page you first. The council notifies by hand on the one
+        # outcome that actually needs you — DEFER. Anything not listed here
+        # notifies exactly as it always did, which is why live trading and the
+        # product village are unaffected.
+        self.quiet_actions: set = set()
 
     # -- requests ---------------------------------------------------------
     def request(
@@ -196,9 +208,13 @@ class HumanGate:
             },
         )
         approval = self.get(approval_id)
-        if notify:
+        if notify and action not in self.quiet_actions:
             self._notify_request(approval)
         return approval
+
+    def notify_request(self, approval) -> None:
+        """Tell the human about a request that was recorded quietly."""
+        self._notify_request(approval)
 
     def request_kill(self, experiment, reason: str) -> Approval:
         """Spec 4.3 — a kill trigger notifies and waits; it never kills."""

@@ -677,6 +677,79 @@ def cmd_dashboard(args) -> int:
     return 0
 
 
+def cmd_autonomy(args) -> int:
+    """What the village decides for itself, and what it still asks you."""
+    from .council.council import PANELS
+
+    eco = _ecosystem(args)
+    autonomy = eco.config.autonomy
+    print(f"mode        : {autonomy.mode}"
+          + ("  (the council rules on pending decisions)" if autonomy.council_decides
+             else "  (every gated decision waits for you)"))
+    print(f"margin      : {autonomy.margin} — below this the council defers to you")
+    print("\nthe council may decide:")
+    print("  allocate_capital  — raise a firm's allocation, or move capital "
+          "between two firms")
+    print("  kill_firm         — end a firm the ledger has already concluded "
+          "against")
+    print("  resume_firm       — un-pause a firm whose condition has cleared")
+    print(f"  ({len(PANELS)} panels of jurors, one per decision)")
+    print("\nit may never decide:")
+    print("  live_trading   — an order to a real broker leaves this system and "
+          "cannot be taken back")
+    print("\nA deferred decision is still a pending approval. Autonomy narrows what "
+          "you are asked\nabout; it does not remove you.")
+    if not autonomy.council_decides:
+        print("\nTurn it on with:  export TRADE_AUTONOMY=council")
+    return 0
+
+
+def cmd_council(args) -> int:
+    """The rulings, most recent first."""
+    eco = _ecosystem(args)
+    rows = eco.council.recent(args.limit)
+    if not rows:
+        print("no rulings yet.")
+        if not eco.config.autonomy.council_decides:
+            print("The council is not sitting — TRADE_AUTONOMY is "
+                  f"'{eco.config.autonomy.mode}'.")
+        return 0
+    width = max((len(r["firm_key"] or "-") for r in rows), default=4)
+    print(f"{'id':>4}  {'verdict':8} {'action':17} {'firm':{width}} reason")
+    for row in rows:
+        print(f"{row['id']:>4}  {row['verdict']:8} {row['action']:17} "
+              f"{(row['firm_key'] or '-'):{width}} {(row['reason'] or '')[:60]}")
+    print("\n`trade council-case <id>` for one ruling, juror by juror.")
+    return 0
+
+
+def cmd_council_case(args) -> int:
+    import json as _json
+
+    eco = _ecosystem(args)
+    row = eco.db.query_one("SELECT * FROM council_rulings WHERE id = ?", (args.id,))
+    if row is None:
+        print(f"no ruling #{args.id}")
+        return 1
+    print(f"ruling #{row['id']} — {row['verdict'].upper()} {row['action']} "
+          f"{row['firm_key'] or ''}")
+    print(f"  {row['reason']}")
+    print(f"  for {row['for_weight']} / against {row['against_weight']} "
+          f"(confidence {row['confidence']})")
+    print(f"  decided {row['created_at']}"
+          + (f", approval #{row['approval_id']}" if row["approval_id"] else ""))
+    print("\njurors:")
+    for finding in _json.loads(row["findings"] or "[]"):
+        mark = {"for": "+", "against": "-"}.get(finding["verdict"], " ")
+        veto = "  [VETO]" if finding.get("veto") else ""
+        print(f"  {mark} {finding['juror']:18} {finding['reason']}{veto}")
+    print("\nthe ledger as the council saw it:")
+    for key, value in sorted(_json.loads(row["evidence"] or "{}").items()):
+        if value not in ("", [], (), {}, None):
+            print(f"  {key:24} {value}")
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -844,6 +917,14 @@ def add_trade_parser(subparsers) -> None:
     p.add_argument("--events", type=int, default=120,
                    help="how many recorded events to embed")
     p.add_argument("--note", help="a line for the banner, e.g. what this is")
+
+    add("autonomy", "what the village decides for itself", cmd_autonomy)
+
+    p = add("council", "the council's rulings", cmd_council)
+    p.add_argument("--limit", type=int, default=20)
+
+    p = add("council-case", "one ruling, juror by juror", cmd_council_case)
+    p.add_argument("id", type=int)
 
     add("frameworks", "which external frameworks are installed", cmd_frameworks)
 

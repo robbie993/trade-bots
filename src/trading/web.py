@@ -155,6 +155,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         header,
         _firms_panel(eco, firms, by_id),
         _brokerage_panel(eco, firms),
+        _council_panel(eco),
         _court_panel(eco),
         _arena_panel(eco),
         _market_panel(eco),
@@ -218,6 +219,41 @@ def _brokerage_panel(eco, firms) -> str:
         + (f"<ul>{recent}</ul>" if recent else "")
         + "<p class=muted>Capital is cut automatically and raised only by an approval.</p>",
     )
+
+
+def _council_panel(eco) -> str:
+    """What the village decided for itself — and what it handed back to you."""
+    autonomy = eco.config.autonomy
+    rows = [{
+        "id": f"#{r['id']}",
+        "verdict": _verdict(r.get("verdict")),
+        "action": e(r.get("action") or ""),
+        "firm": e(r.get("firm_key") or "-"),
+        "for": r.get("for_weight"),
+        "against": r.get("against_weight"),
+        "reason": e((r.get("reason") or "")[:70]),
+    } for r in eco.council.recent(8)]
+
+    if not autonomy.council_decides:
+        note = (
+            "<p class=muted>The council is not sitting. Every kill, raise and "
+            "resume waits for you at the <a href='/'>approval gate</a>. "
+            "Start it with <code>TRADE_AUTONOMY=council</code>.</p>"
+        )
+    else:
+        note = (
+            "<p class=muted>The council rules from the ledger, not from the "
+            "request: it grants, refuses, or <strong>defers</strong>. A deferred "
+            "decision is still pending for you, which is the point — autonomy "
+            "narrows what you are asked about rather than removing you. "
+            "It has no panel for live trading, and never will.</p>"
+        )
+    return _panel("The council", _table(rows) + note)
+
+
+def _verdict(value) -> str:
+    css = {"grant": "good", "refuse": "warn", "defer": "muted"}.get(value or "", "muted")
+    return f"<span class={css}>{e(value or '')}</span>"
 
 
 def _court_panel(eco) -> str:
@@ -748,6 +784,8 @@ function say(text) {
 FLOW_LIVE = """
 let after = Number(document.body.dataset.after || 0);
 let paused = false;
+let living = false;
+let ticking = false;
 
 async function poll() {
   if (paused) return;
@@ -758,9 +796,12 @@ async function poll() {
     // after another rather than a single flash.
     data.events.forEach((ev, i) => show(ev, i * 260));
     if (data.events.length) after = data.events[data.events.length - 1].id;
+    // Most polls land between ticks, so "quiet" would be wrong while the
+    // village is plainly running. Say which it is.
     say(data.events.length
       ? data.events.length + ' villager(s) on the roads'
-      : 'quiet — run a tick, or start `trade run`');
+      : (living ? 'running — next tick shortly'
+                : 'quiet — run a tick, let it run, or start `trade run`'));
   } catch (err) { /* a dropped poll is not an error; the page keeps trying */ }
 }
 setInterval(poll, 900);
@@ -769,6 +810,29 @@ poll();
 document.getElementById('flow-pause')?.addEventListener('click', (ev) => {
   paused = !paused;
   ev.target.textContent = paused ? 'Resume' : 'Pause';
+});
+
+// Let it run: tick on a timer instead of on a click.
+//
+// One tick at a time, never two at once. A setInterval that fires while the
+// previous tick is still settling would have two processes writing the ledger,
+// and the whole point of this system is that the books add up.
+async function liveTick() {
+  if (!living || ticking) return;
+  ticking = true;
+  try {
+    await fetch('/village/actions/tick', {method: 'POST'});
+  } catch (err) { /* a missed tick is not fatal; the next one comes round */ }
+  ticking = false;
+  if (living) setTimeout(liveTick, 2500);
+}
+
+document.getElementById('flow-live')?.addEventListener('click', (ev) => {
+  living = !living;
+  ev.target.textContent = living ? 'Stop' : 'Let it run';
+  ev.target.classList.toggle('go', living);
+  if (living) { paused = false; liveTick(); }
+  else say('stopped — the village is quiet again');
 });
 """
 
@@ -958,6 +1022,15 @@ def flow_page() -> HTMLResponse:
         village = _village(firms)
         recent = recorder.recent(20)
         after = recorder.latest_id()
+        autonomy = (
+            "Let it run ticks the village on a timer. The council is sitting: "
+            "raises, kills and resumes are decided from the ledger, and anything "
+            "the evidence does not settle still waits for you at the gatehouse."
+            if eco.config.autonomy.council_decides else
+            "Let it run ticks the village on a timer. The council is not sitting "
+            "(TRADE_AUTONOMY=human), so kills and capital raises will queue up at "
+            "the gatehouse for you."
+        )
         history = "".join(
             f"<li class='kind-{e(ev.kind)}'>"
             f"{e(ev.firm + ' · ' if ev.firm else '')}{e(ev.label)}"
@@ -981,8 +1054,10 @@ def flow_page() -> HTMLResponse:
         "<div class=card>"
         "<form method=post action='/village/actions/tick'>"
         "<button class=go>Run a tick</button></form>"
+        "<button id=flow-live>Let it run</button> "
         "<button id=flow-pause>Pause</button> "
-        "<span class=muted id=flow-status>waiting…</span></div>",
+        "<span class=muted id=flow-status>waiting…</span>"
+        f"<p class=muted id=flow-autonomy>{e(autonomy)}</p></div>",
         _panel("What just happened", f"<ul id=flow-log>{history or ''}</ul>"),
         "<p class=muted>Refused proposals walk to <strong>the pound</strong> and stop "
         "there — they do not carry on to the trading post in a different colour. "
