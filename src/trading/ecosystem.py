@@ -104,6 +104,7 @@ class Ecosystem:
         self.audit = ObsidianLogger(self.config.audit_vault, self.config)
         self._feed = None
         self._specs: dict = {}
+        self._flow = None
         self._court = None
         self._tokens = None
         self._arena = None
@@ -118,6 +119,15 @@ class Ecosystem:
     # them existed; these are where files get judged, points get awarded and
     # firms plot against each other.
     # =====================================================================
+    @property
+    def flow(self):
+        """The tick's telemetry. Best-effort: it never raises into a decision."""
+        if self._flow is None:
+            from .flow import FlowRecorder
+
+            self._flow = FlowRecorder(self.db)
+        return self._flow
+
     @property
     def court(self):
         if self._court is None:
@@ -251,6 +261,13 @@ class Ecosystem:
         market = market or self.market()
         self.heart.new_session()
 
+        # Telemetry for the flow diagram. Every emit() below is best-effort and
+        # swallows its own errors — the tick's behaviour is identical whether
+        # or not anybody is watching.
+        flow = self.flow
+        flow.start_run()
+        flow.emit("market", f"bars up to {market.as_of()}", detail=f"source: {self.feed.name}")
+
         for record in self.store.firms():
             if record.is_killed and not self.store.positions(record.id):
                 continue  # dead and flat: nothing left to do
@@ -258,18 +275,38 @@ class Ecosystem:
                 self._run_firm(record, market, report)
             except TradingLedgerError as exc:
                 report.errors.append(f"{record.firm_key}: {exc}")
+                flow.emit("ledger", "ledger refused a fill", kind="alarm",
+                          firm=record.firm_key, detail=str(exc))
 
         try:
             report.oversight = self.brokerage.oversee(market)
+            flow.move("brain", "brokerage", "reconciled, scored, allocated")
         except LedgerNotReconciled as exc:
             report.errors.append(str(exc))
+            flow.move("brain", "brokerage", "books do not reconcile", kind="alarm",
+                      detail=str(exc)[:300])
             self.notifier.send("🚨 TRADING LEDGER DOES NOT RECONCILE", str(exc))
             return report
+
+        for change in report.oversight.allocation_changes:
+            if change.applied:
+                flow.emit("brokerage", f"cut {change.firm_key} to {change.new_allocation}",
+                          firm=change.firm_key, detail=str(change))
+            else:
+                flow.move("brokerage", "gate", f"raise for {change.firm_key} needs you",
+                          kind="blocked", firm=change.firm_key, detail=str(change))
+        for paused in report.oversight.paused:
+            flow.move("brokerage", "gate", f"{paused['firm']} paused — kill needs you",
+                      kind="alarm", firm=paused["firm"], detail=paused["reason"])
 
         report.lessons = self.learner.record(self.learner.lessons(report.oversight.cards))
         self.audit.log_oversight(report.oversight, market.as_of())
         self.audit.rebuild_index()
+        flow.move("brokerage", "audit", "vault written")
 
+        if report.oversight.halted:
+            flow.move("brokerage", "halt", report.oversight.halted["reason"][:100],
+                      kind="alarm")
         if report.oversight.halted:
             self.notifier.send(
                 "🛑 TRADING KILL_ALL", report.oversight.halted["reason"]
@@ -291,21 +328,33 @@ class Ecosystem:
         positions = self.store.positions(record.id)
         venue = build_venue(record.venue, self.config, self.gate)
 
+        flow = self.flow
         for proposal in firm.propose(market, positions):
             report.proposals += 1
+            what = f"{proposal.side} {proposal.symbol}"
+            flow.move("market", "firms", what, firm=record.firm_key,
+                      detail=proposal.rationale[:200])
             self.heart.consider(proposal, record, positions, market)
             self.store.record_proposal(proposal)
+            flow.move("firms", "heart", what, firm=record.firm_key,
+                      detail=f"risk: {proposal.risk_verdict} — {proposal.risk_reason}")
 
             if proposal.risk_verdict == "block":
                 report.blocked_by_risk += 1
                 self.audit.log_trade(record.firm_key, proposal)
+                flow.move("heart", "blocked", f"risk blocked {what}", kind="blocked",
+                          firm=record.firm_key, detail=proposal.risk_reason)
                 continue
             if proposal.ethics_verdict == "block":
                 report.blocked_by_ethics += 1
                 self.audit.log_trade(record.firm_key, proposal)
+                flow.move("heart", "blocked", f"ethics blocked {what}", kind="blocked",
+                          firm=record.firm_key, detail=proposal.ethics_reason)
                 continue
             if not proposal.is_executable:
                 continue
+            flow.move("heart", "venue", what, firm=record.firm_key,
+                      detail=f"ethics: {proposal.ethics_verdict} — {proposal.ethics_reason}")
 
             try:
                 fill = venue.execute(proposal, market.mark(proposal.symbol))
@@ -315,6 +364,8 @@ class Ecosystem:
                 self.store.set_proposal_status(proposal.id, ProposalStatus.BLOCKED.value)
                 report.refused_by_venue.append(str(exc))
                 self.audit.log_trade(record.firm_key, proposal)
+                flow.move("venue", "blocked", f"{record.venue} refused {what}",
+                          kind="refused", firm=record.firm_key, detail=str(exc))
                 continue
 
             try:
@@ -327,13 +378,20 @@ class Ecosystem:
                 self.store.set_proposal_status(proposal.id, ProposalStatus.BLOCKED.value)
                 report.errors.append(f"{record.firm_key}: {exc}")
                 self.audit.log_trade(record.firm_key, proposal)
+                flow.move("venue", "blocked", f"ledger refused {what}", kind="alarm",
+                          firm=record.firm_key, detail=str(exc))
                 continue
             report.filled += 1
+            flow.move("venue", "ledger", f"filled {fill.quantity} {fill.symbol}",
+                      firm=record.firm_key,
+                      detail=f"at {fill.price}, fee {fill.fee}, cash {fill.cash_delta}")
             # settle() moved the database row; keep the object in step so the
             # audit note records what happened rather than what was intended.
             proposal.status = ProposalStatus.FILLED.value
             self.memory.remember_fill(fill, proposal)
             positions = self.store.positions(record.id)
+            flow.move("ledger", "brain", f"remembered {fill.symbol}", firm=record.firm_key,
+                      detail=f"realised {fill.realized_pnl}")
             narration = self.gateway.narrate(proposal, proposal.signals)
             self.audit.log_trade(record.firm_key, proposal, fill, narration.text)
 

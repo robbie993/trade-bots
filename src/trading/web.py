@@ -30,7 +30,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..config import Config
 from ..db.connection import Database
@@ -140,7 +140,8 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<form method=post action='/village/actions/tick'>"
         "<button class=go>Run a tick</button></form>"
         "<form method=post action='/village/actions/apply-approvals'>"
-        "<button>Carry out approved decisions</button></form>",
+        "<button>Carry out approved decisions</button></form>"
+        "<a href='/village/flow'><button>Watch the flow &rarr;</button></a>",
     )
     if not reconciliation.ok:
         header += (
@@ -654,6 +655,208 @@ def action_sandbox(
     finally:
         eco.db.close()
     return _back(said[:220])
+
+
+# =========================================================================
+# the flow diagram
+#
+# The dots are real. Every one is an event `Ecosystem.tick()` wrote as it
+# happened, read back out of `flow_events`. If nothing is running, nothing
+# moves — which is the point: an animation that always loops tells you only
+# that the animation works.
+# =========================================================================
+FLOW_SCRIPT = """
+const NS = 'http://www.w3.org/2000/svg';
+const KIND_COLOUR = {ok:'var(--good)', blocked:'var(--warn)',
+                     refused:'var(--warn)', alarm:'var(--bad)'};
+let after = Number(document.body.dataset.after || 0);
+let paused = false;
+
+function pulse(nodeId, kind) {
+  const el = document.getElementById('node-' + nodeId);
+  if (!el) return;
+  el.classList.add('lit');
+  el.style.setProperty('--lit', KIND_COLOUR[kind] || 'var(--good)');
+  setTimeout(() => el.classList.remove('lit'), 700);
+}
+
+function travel(edgeId, kind) {
+  const path = document.getElementById('edge-' + edgeId);
+  if (!path) return;
+  const dot = document.createElementNS(NS, 'circle');
+  dot.setAttribute('r', 5);
+  dot.setAttribute('fill', KIND_COLOUR[kind] || 'var(--good)');
+  path.parentNode.appendChild(dot);
+  const length = path.getTotalLength();
+  const started = performance.now();
+  const duration = 650;
+  function step(now) {
+    const t = Math.min(1, (now - started) / duration);
+    const at = path.getPointAtLength(t * length);
+    dot.setAttribute('cx', at.x);
+    dot.setAttribute('cy', at.y);
+    if (t < 1) requestAnimationFrame(step); else dot.remove();
+  }
+  requestAnimationFrame(step);
+}
+
+function log(ev) {
+  const list = document.getElementById('flow-log');
+  if (!list) return;
+  const li = document.createElement('li');
+  li.className = 'kind-' + ev.kind;
+  li.textContent = (ev.firm ? ev.firm + ' · ' : '') + ev.label
+                 + (ev.detail ? ' — ' + ev.detail : '');
+  list.prepend(li);
+  while (list.children.length > 40) list.lastChild.remove();
+}
+
+function show(ev, delay) {
+  setTimeout(() => {
+    if (ev.edge) travel(ev.edge, ev.kind);
+    pulse(ev.node, ev.kind);
+    log(ev);
+  }, delay);
+}
+
+async function poll() {
+  if (paused) return;
+  try {
+    const res = await fetch('/village/flow/events?after=' + after);
+    const data = await res.json();
+    // Space a burst out so a whole tick reads as a sequence rather than a flash.
+    data.events.forEach((ev, i) => show(ev, i * 220));
+    if (data.events.length) after = data.events[data.events.length - 1].id;
+    const status = document.getElementById('flow-status');
+    if (status) status.textContent = data.events.length
+      ? data.events.length + ' step(s) just now'
+      : 'idle — run a tick, or start `trade run`';
+  } catch (e) { /* the page keeps trying; a dropped poll is not an error */ }
+}
+setInterval(poll, 900);
+poll();
+
+document.getElementById('flow-pause')?.addEventListener('click', (e) => {
+  paused = !paused;
+  e.target.textContent = paused ? 'Resume' : 'Pause';
+});
+"""
+
+
+def _svg() -> str:
+    from .flow import diagram
+
+    shape = diagram()
+    positions = {n["id"]: n for n in shape["nodes"]}
+    width, height = 130, 54
+
+    edges = []
+    for edge in shape["edges"]:
+        a, b = positions[edge["from"]], positions[edge["to"]]
+        x1, y1 = a["x"] + width / 2, a["y"] + height / 2
+        x2, y2 = b["x"] + width / 2, b["y"] + height / 2
+        # Straight where the stages are in a row, gently curved where the flow
+        # drops to a sink, so the two never overlap into an unreadable knot.
+        if a["y"] == b["y"]:
+            d = f"M{x1},{y1} L{x2},{y2}"
+        else:
+            d = f"M{x1},{y1} Q{(x1 + x2) / 2},{(y1 + y2) / 2 + 26} {x2},{y2}"
+        edges.append(
+            f"<path id='edge-{e(edge['id'])}' d='{d}' class='wire' "
+            f"marker-end='url(#arrow)'/>"
+        )
+
+    nodes = []
+    for node in shape["nodes"]:
+        nodes.append(
+            f"<g id='node-{e(node['id'])}' class='node'>"
+            f"<title>{e(node['about'])}</title>"
+            f"<rect x='{node['x']}' y='{node['y']}' width='{width}' height='{height}' "
+            f"rx='8'/>"
+            f"<text x='{node['x'] + width / 2}' y='{node['y'] + height / 2 + 5}' "
+            f"text-anchor='middle'>{e(node['label'])}</text></g>"
+        )
+
+    return (
+        "<svg viewBox='0 0 950 350' class='flow' role='img' "
+        "aria-label='the tick, as it runs'>"
+        "<defs><marker id='arrow' viewBox='0 0 10 10' refX='9' refY='5' "
+        "markerWidth='6' markerHeight='6' orient='auto-start-reverse'>"
+        "<path d='M0,0 L10,5 L0,10 z' class='arrowhead'/></marker></defs>"
+        + "".join(edges) + "".join(nodes) + "</svg>"
+    )
+
+
+FLOW_STYLE = """
+.flow { width: 100%; height: auto; }
+.flow .wire { fill: none; stroke: var(--line); stroke-width: 2; }
+.flow .arrowhead { fill: var(--line); }
+.flow .node rect { fill: var(--card); stroke: var(--line); stroke-width: 2;
+                   transition: stroke .2s, filter .2s; }
+.flow .node text { fill: var(--fg); font-size: 13px; }
+.flow .node.lit rect { stroke: var(--lit); stroke-width: 3; }
+#flow-log { list-style: none; padding: 0; margin: 0; max-height: 16rem;
+            overflow-y: auto; font-size: .85rem; }
+#flow-log li { padding: .25rem 0; border-bottom: 1px solid var(--line); }
+#flow-log li.kind-blocked, #flow-log li.kind-refused { color: var(--warn); }
+#flow-log li.kind-alarm { color: var(--bad); }
+"""
+
+
+@router.get("/village/flow", response_class=HTMLResponse)
+def flow_page() -> HTMLResponse:
+    from ..agents.web import page
+
+    eco = ecosystem()
+    try:
+        recorder = eco.flow
+        recent = recorder.recent(20)
+        after = recorder.latest_id()
+        history = "".join(
+            f"<li class='kind-{e(ev.kind)}'>"
+            f"{e(ev.firm + ' · ' if ev.firm else '')}{e(ev.label)}"
+            f"{e(' — ' + ev.detail if ev.detail else '')}</li>"
+            for ev in reversed(recent)
+        )
+    finally:
+        eco.db.close()
+
+    body = "".join([
+        f"<style>{FLOW_STYLE}</style>",
+        "<h1>The flow</h1>",
+        "<p class=muted>Every dot is something that actually happened: a proposal, "
+        "a fill, a refusal. Nothing loops for decoration — if the village is idle, "
+        "the diagram is still.</p>",
+        _panel("", _svg()),
+        "<div class=card>"
+        "<form method=post action='/village/actions/tick'>"
+        "<button class=go>Run a tick</button></form>"
+        "<button id=flow-pause>Pause</button> "
+        "<span class=muted id=flow-status>waiting…</span></div>",
+        _panel("Recent steps", f"<ul id=flow-log>{history or ''}</ul>"),
+        "<p class=muted>Blocked and refused things travel to <strong>Blocked</strong> "
+        "and stop there — they do not glide on to the venue in a different colour. "
+        "Kills and capital raises travel to the <strong>Human gate</strong>, which is "
+        "where they wait for you.</p>",
+        "<p><a href='/village'>&larr; Mission Control</a></p>",
+        f"<script>{FLOW_SCRIPT}</script>",
+    ])
+    html_page = page("The flow — the Village", body)
+    # `after` rides on <body> so the first poll does not replay history.
+    return HTMLResponse(
+        html_page.body.decode().replace("<body>", f"<body data-after='{after}'>")
+    )
+
+
+@router.get("/village/flow/events")
+def flow_events(after: int = 0, limit: int = 60) -> JSONResponse:
+    """Everything the tick has recorded since `after`. Polled by the page."""
+    eco = ecosystem()
+    try:
+        events = [ev.to_dict() for ev in eco.flow.since(after, limit)]
+    finally:
+        eco.db.close()
+    return JSONResponse({"events": events})
 
 
 __all__ = ["router"]

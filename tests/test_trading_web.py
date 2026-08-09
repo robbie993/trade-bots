@@ -279,3 +279,46 @@ def test_sandbox_actions_leave_the_ledger_alone(client):
 def test_apply_approvals_from_the_page_carries_out_only_decided_things(client):
     response = client.post("/village/actions/apply-approvals", follow_redirects=False)
     assert "nothing approved is waiting" in said(response)
+
+
+# =========================================================================
+# the flow diagram
+# =========================================================================
+def test_the_flow_page_draws_every_node_and_edge(client):
+    import re
+
+    from src.trading.flow import EDGES, NODES
+
+    body = client.get("/village/flow").text
+    assert len(re.findall(r"id='node-", body)) == len(NODES)
+    assert len(re.findall(r"id='edge-", body)) == len(EDGES)
+    assert "data-after=" in body
+
+
+def test_the_flow_page_says_the_dots_are_real(client):
+    body = client.get("/village/flow").text
+    assert "actually happened" in body
+    assert "if the village is idle" in body.lower()
+
+
+def test_the_event_feed_is_empty_before_anything_runs(client):
+    assert client.get("/village/flow/events?after=0").json()["events"] == []
+
+
+def test_a_tick_fills_the_event_feed(client):
+    client.post("/village/actions/tick", follow_redirects=False)
+    events = client.get("/village/flow/events?after=0").json()["events"]
+    assert events
+    assert events[0]["node"] == "market"
+    assert any(ev["edge"] == "market>firms" for ev in events)
+    assert any(ev["edge"] == "brokerage>audit" for ev in events)
+
+
+def test_the_feed_only_returns_what_is_new(client):
+    client.post("/village/actions/tick", follow_redirects=False)
+    first = client.get("/village/flow/events?after=0").json()["events"]
+    assert client.get(f"/village/flow/events?after={first[-1]['id']}").json()["events"] == []
+
+
+def test_mission_control_links_to_the_flow(client):
+    assert "/village/flow" in client.get("/village").text

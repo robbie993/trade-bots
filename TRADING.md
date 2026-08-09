@@ -344,6 +344,42 @@ Uploaded strategy files go through exactly the same court as the CLI — read
 with `ast`, never executed. There is a test that uploads a file which would
 write a marker on import and asserts the marker never appears.
 
+### The flow
+
+`/village/flow` animates the tick as it runs. Eleven stages, and a dot for
+every proposal, fill and refusal that actually happened:
+
+```
+market → firms → heart → venue → ledger → brain
+                   ↓        ↓
+                blocked  blocked        brokerage → audit
+                                        brokerage → human gate
+                                        brokerage → KILL_ALL
+```
+
+Three things make it worth looking at rather than decorative:
+
+**The dots are real.** Each one is a row `Ecosystem.tick()` wrote as it
+happened, read back from `flow_events`. Nothing loops on a timer — if the
+village is idle, the diagram is still, and that is information.
+
+**Blocked things leave the flow.** A proposal the risk manager or the
+conscience refused travels to *Blocked* and stops. It does not glide on to the
+venue in a different colour. Kills and capital raises travel to the *Human
+gate*, which is where they wait for you. An animation where everything reaches
+the end is an expensive way to learn nothing.
+
+**Telemetry can never break a tick.** `FlowRecorder.emit` swallows its own
+errors, and there is a test that drops the `flow_events` table mid-run and
+asserts the tick still completes with no errors. The ledger does not read this
+table and the recorder never checks whether its write succeeded.
+
+It goes through the database rather than an in-process queue, because the
+usual arrangement is `trade run` in one terminal and the dashboard in another
+— two processes. A queue inside the web server would render an empty diagram
+in exactly the case the diagram exists for. The page polls; the table keeps
+its most recent 400 rows and prunes itself.
+
 There is no authentication. Bind it to localhost.
 
 ---
@@ -574,6 +610,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade audit [--write]` | the full audit report |
 | `trade status` | one-screen health check |
 | `trade monitor --watch` | status, repeatedly |
+| `/village/flow` | the tick, animated as it runs |
 | `trade court-submit <f>` | put a strategy file on trial |
 | `trade court-docket` | recent strategy cases |
 | `trade court-case <id>` | one case in full, juror by juror |
