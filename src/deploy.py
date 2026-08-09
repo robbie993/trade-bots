@@ -63,7 +63,8 @@ NO_DATABASE = (
     "<div class='card alarm'><strong>No database.</strong> "
     "This host has no writable disk, so the default SQLite file cannot be used: "
     "anything written would go to storage that disappears between requests. "
-    "Set <code>DATABASE_URL</code> to a Postgres instance and redeploy.</div>"
+    "Attach a Postgres database and redeploy — <code>DATABASE_URL</code>, or "
+    "the <code>POSTGRES_URL</code> a managed add-on sets for you.</div>"
 )
 
 
@@ -78,9 +79,14 @@ def is_public() -> bool:
 
 
 def storage_is_durable() -> bool:
-    """Postgres, or a SQLite file on a disk that will still be there."""
-    url = os.environ.get("DATABASE_URL", "")
-    if url.startswith(("postgres://", "postgresql://")):
+    """Postgres, or a SQLite file on a disk that will still be there.
+
+    Asks Config rather than reading DATABASE_URL directly, so a database
+    attached under a host's own name (POSTGRES_URL and friends) counts.
+    """
+    from .config import Config
+
+    if Config().database_url.startswith(("postgres://", "postgresql://")):
         return True
     return not is_public()
 

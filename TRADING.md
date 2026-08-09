@@ -825,8 +825,17 @@ the part you can verify by reading `src/deploy.py`.
 Serverless filesystems are read-only apart from a per-instance `/tmp` that
 disappears between requests, so the default SQLite file cannot work: every
 tick, approval and fill would be written to storage that is about to vanish.
-Set `DATABASE_URL` to Postgres. If you do not, the page says so rather than
-half-working. The audit vault is off there for the same reason.
+Attach Postgres. If you do not, the page says so rather than half-working, and
+the audit vault is off there for the same reason.
+
+You do not have to name it `DATABASE_URL`. Managed add-ons each invent their
+own variable and none of them is that one — Vercel Postgres and Neon set
+`POSTGRES_URL`, Vercel's Prisma preset sets `POSTGRES_PRISMA_URL` — so those
+are read too, and `postgres://` is normalised to the `postgresql://` psycopg
+expects. `DATABASE_URL` still wins when you set it. Without this, attaching a
+database appeared to do nothing and the app fell back to a SQLite file that
+does not persist, which is the worst failure available because it looks like
+it worked.
 
 ### Probably what you actually want
 

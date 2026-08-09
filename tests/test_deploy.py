@@ -78,6 +78,32 @@ def test_sqlite_on_a_serverless_host_is_not_durable(monkeypatch):
     assert deploy.storage_is_durable() is True
 
 
+def test_a_database_attached_under_the_hosts_own_name_counts(monkeypatch):
+    """Vercel and Neon set POSTGRES_URL, not DATABASE_URL.
+
+    Reading only DATABASE_URL meant attaching a database appeared to do
+    nothing and the app fell back to SQLite on a disk that does not persist —
+    the worst failure available, because it looks like it worked.
+    """
+    monkeypatch.setenv("MVV_PUBLIC", "1")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_URL", "postgres://u:p@host/db")
+    assert deploy.storage_is_durable() is True
+
+    from src.config import Config
+
+    # `postgres://` is normalised: psycopg wants `postgresql://`.
+    assert Config().database_url == "postgresql://u:p@host/db"
+
+
+def test_an_explicit_database_url_still_wins(monkeypatch):
+    monkeypatch.setenv("POSTGRES_URL", "postgres://u:p@host/db")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///./chosen.db")
+    from src.config import Config
+
+    assert Config().database_url == "sqlite:///./chosen.db"
+
+
 # =========================================================================
 # hosted: shows everything, changes nothing
 # =========================================================================
