@@ -141,7 +141,8 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<button class=go>Run a tick</button></form>"
         "<form method=post action='/village/actions/apply-approvals'>"
         "<button>Carry out approved decisions</button></form>"
-        "<a href='/village/flow'><button>Walk the village &rarr;</button></a>",
+        "<a href='/village/flow'><button>Walk the village &rarr;</button></a>"
+        "<a href='/village/solar'><button>Solar system &rarr;</button></a>",
     )
     if not reconciliation.ok:
         header += (
@@ -487,7 +488,8 @@ def firm_detail(firm_key: str) -> HTMLResponse:
                    + "<p class=muted>Blocked proposals are stored too — "
                    "&ldquo;why didn't it?&rdquo; is answerable from a row.</p>"),
             f"<p class=muted>genome: <code>{e(firm.genome)}</code></p>",
-            "<p><a href='/village'>&larr; Mission Control</a></p>",
+            "<p><a href='/village'>&larr; Mission Control</a> · "
+        "<a href='/village/solar'>the same firms as a solar system</a></p>",
         ])
     finally:
         eco.db.close()
@@ -1072,6 +1074,22 @@ def flow_page() -> HTMLResponse:
     return HTMLResponse(
         html_page.body.decode().replace("<body>", f"<body data-after='{after}'>")
     )
+
+
+@router.get("/village/solar", response_class=HTMLResponse)
+def solar_page() -> HTMLResponse:
+    """The village as a solar system — one planet per firm.
+
+    Served from the app rather than opened as a file so the page's fetch of
+    ``/api/firms`` is same-origin. A ``file://`` page polling localhost is a
+    CORS request, and the fix for that is either a browser flag or opening the
+    API to arbitrary origins; serving it here needs neither.
+    """
+    page = Path(__file__).parent / "static" / "solar.html"
+    if not page.exists():  # pragma: no cover - only if the file is deleted
+        return HTMLResponse("<p>solar.html is missing from src/trading/static/</p>",
+                            status_code=404)
+    return HTMLResponse(page.read_text())
 
 
 @router.get("/village/flow/events")

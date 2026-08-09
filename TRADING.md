@@ -609,6 +609,60 @@ see your database, so it seeds one and simulates against the deterministic
 synthetic feed: what it produces is a **demo**, labelled as one in the banner.
 For your own numbers, run the command locally.
 
+### The JSON API
+
+Mission Control renders HTML because a dashboard needing a gateway and an npm
+install to show a table is three more things that can be down when you want to
+know whether a firm is bleeding. For everything that is *not* this browser —
+another dashboard, a notebook, a status board on a spare monitor — the same
+numbers are available as JSON:
+
+| | |
+|---|---|
+| `GET /api/status` | the one-screen health check, including `reconciled` |
+| `GET /api/firms` | every firm as the brokerage currently scores it |
+| `GET /api/council` | recent rulings |
+| `GET /api/tokens` | the standings |
+
+**Read-only by construction, not by convention.** There is no POST in that
+router and no route that takes a decision — there is a test that enumerates the
+routes and asserts the method set is `{GET, HEAD}`. Capital still moves only
+through the approval gate.
+
+Two things it will not do to a number. **Money stays a string** — `"49448.85"`,
+not `49448.85` — because JSON has no decimal type and every parser on the other
+end will hand you a float, undoing the reason `src/money.py` exists. And
+**`sufficient_data` rides along on every scorecard**, so a consumer can tell
+"score 42 on four trades" from "score 42 on forty". Anything that drops that
+flag and plots the number is drawing a conclusion the ledger refused to draw.
+
+### The solar system
+
+`/village/solar` is the same firms as planets: one per firm, sized by the
+capital it holds, orbiting in rank order, colour by status — a killed firm
+keeps its orbit and loses its colour. It polls `/api/firms` every fifteen
+seconds.
+
+The rendering engine is [solar-system-agents](https://github.com/Audazia/solar-system-agents)
+(MIT), vendored into `src/trading/static/solar.html`. Four things changed:
+
+* **The eight invented demo agents are gone.** A planet is a firm on the ledger
+  or it is not drawn.
+* **The polling is written here.** Upstream's README advertises "API Polling
+  (built-in)" and ships a `gateway` config block, but the project contains no
+  `fetch()`, `XMLHttpRequest` or `WebSocket` — none of it is implemented, and
+  the gateway config is read by nothing.
+* **An upstream `ReferenceError` is fixed.** A trail-drawing line reads `i`
+  after the `let`-scoped loop that declared it, throwing inside
+  `requestAnimationFrame` on every frame — which is why nothing orbits. The
+  line was dead; its value was overwritten two lines later.
+* **The Google Fonts import is removed.** It was the only outbound request on
+  the page, and nothing else in this repository phones anywhere.
+
+It is served by the app rather than opened as a file, so the fetch is
+same-origin — a `file://` page polling localhost is a CORS request, and the
+fixes for that are a browser flag or opening the API to arbitrary origins.
+
 ---
 
 ## The strategy court

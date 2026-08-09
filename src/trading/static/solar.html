@@ -1,0 +1,1000 @@
+<!--
+  The village as a solar system — one planet per trading firm.
+
+  Vendored from https://github.com/Audazia/solar-system-agents (MIT, per its
+  README: "MIT License. Use it however you want."). The rendering engine,
+  layout and styling are theirs. Three things are changed here:
+
+    1. The eight invented demo agents are gone. AGENTS is filled from
+       /api/firms, so a planet is a firm on the ledger or it is not drawn.
+    2. The polling is written from scratch. Upstream's README advertises
+       "API Polling (built-in)" and a `gateway` config block, but the project
+       contains no fetch(), XMLHttpRequest or WebSocket — none of it is
+       implemented, and the gateway config is read by nothing.
+    3. A win rate below the sample gate reads "n/a" instead of a number. The
+       ledger refuses to call twelve trades a verdict and so does this page.
+
+  Served from the app itself at /village/solar so the fetch is same-origin.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOLAR SYSTEM - AI Agent Command Center</title>
+<style>
+  /* Upstream pulls Orbitron and Exo 2 from Google Fonts. Removed: it is the
+     only outbound request the page makes, nothing else in this repository
+     phones anywhere, and a dashboard for a trading ledger should not tell a
+     third party when you are looking at it. The stacks below fall back to
+     what macOS, Windows and Linux already ship. */
+
+  :root {
+    --void: #020208;
+    --deep: #060612;
+    --panel: rgba(8,12,28,0.85);
+    --border: rgba(60,80,140,0.25);
+    --sun-core: #fff8e0;
+    --sun-glow: #ffaa00;
+    --sun-corona: #ff6600;
+    --mercury: #b0b0b0;
+    --venus: #e8c86a;
+    --earth: #4488ff;
+    --mars: #d44;
+    --jupiter: #d4a44c;
+    --saturn: #c8a86c;
+    --uranus: #66cccc;
+    --neptune: #4466dd;
+    --text: #c8d4e8;
+    --text-dim: #4a5a7a;
+    --accent: #00ccff;
+    --success: #00ff88;
+    --warning: #ffaa00;
+    --danger: #ff3355;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--void);
+    color: var(--text);
+    font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    cursor: default;
+  }
+
+  /* ===== STARFIELD ===== */
+  .starfield {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+  }
+  .star {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+  }
+
+  /* ===== TOP HUD ===== */
+  .hud-top {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: linear-gradient(180deg, rgba(6,6,18,0.95) 0%, rgba(6,6,18,0.7) 80%, transparent 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    z-index: 100;
+    border-bottom: 1px solid var(--border);
+  }
+  .hud-title {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-weight: 900;
+    font-size: 14px;
+    letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--sun-glow), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hud-subtitle {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+  }
+  .hud-stats {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .hud-stat {
+    text-align: center;
+  }
+  .hud-stat-value {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .hud-stat-label {
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .hud-clock {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+  }
+
+  /* ===== SOLAR SYSTEM CANVAS ===== */
+  .solar-viewport {
+    position: fixed;
+    top: 48px; left: 0; right: 320px; bottom: 0;
+    z-index: 1;
+    overflow: hidden;
+  }
+  #solar-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ===== RIGHT PANEL ===== */
+  .right-panel {
+    position: fixed;
+    top: 48px; right: 0; bottom: 0;
+    width: 320px;
+    background: var(--panel);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-left: 1px solid var(--border);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-section {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+  .panel-section-title {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .panel-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+  .panel-scroll::-webkit-scrollbar { width: 3px; }
+  .panel-scroll::-webkit-scrollbar-track { background: transparent; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ===== AGENT CARDS ===== */
+  .agent-card {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--agent-color, var(--accent));
+    opacity: 0.6;
+    transition: opacity 0.3s;
+  }
+  .agent-card:hover {
+    background: rgba(255,255,255,0.03);
+  }
+  .agent-card:hover::before {
+    opacity: 1;
+    box-shadow: 0 0 8px var(--agent-color, var(--accent));
+  }
+  .agent-card.selected {
+    background: rgba(255,255,255,0.05);
+  }
+  .agent-card.selected::before {
+    opacity: 1;
+    width: 4px;
+    box-shadow: 0 0 12px var(--agent-color, var(--accent));
+  }
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .agent-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--agent-color, var(--accent));
+    box-shadow: 0 0 6px var(--agent-color, var(--accent));
+    flex-shrink: 0;
+  }
+  .agent-dot.idle {
+    background: var(--text-dim);
+    box-shadow: none;
+    animation: none;
+  }
+  .agent-dot.active {
+    animation: dotPulse 2s infinite;
+  }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--agent-color, var(--accent)); }
+    50% { opacity: 0.5; box-shadow: 0 0 2px var(--agent-color, var(--accent)); }
+  }
+  .agent-name {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text);
+  }
+  .agent-orbit-tag {
+    margin-left: auto;
+    font-size: 8px;
+    color: var(--text-dim);
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    letter-spacing: 1px;
+  }
+  .agent-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding-left: 14px;
+    line-height: 1.4;
+  }
+  .agent-meta {
+    display: flex;
+    gap: 8px;
+    padding-left: 14px;
+    margin-top: 4px;
+  }
+  .agent-tag {
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    letter-spacing: 1px;
+  }
+  .tag-active { background: rgba(0,255,136,0.12); color: var(--success); border: 1px solid rgba(0,255,136,0.2); }
+  .tag-cron { background: rgba(255,170,0,0.12); color: var(--warning); border: 1px solid rgba(255,170,0,0.2); }
+  .tag-idle { background: rgba(74,90,122,0.2); color: var(--text-dim); border: 1px solid rgba(74,90,122,0.3); }
+
+  /* ===== SELECTED PLANET DETAIL ===== */
+  .planet-detail {
+    padding: 16px;
+    display: none;
+  }
+  .planet-detail.visible { display: block; }
+  .planet-detail-name {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    margin-bottom: 4px;
+  }
+  .planet-detail-role {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .detail-label { color: var(--text-dim); }
+  .detail-value {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 10px;
+    color: var(--text);
+  }
+  .detail-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .detail-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  /* ===== BOTTOM HUD ===== */
+  .hud-bottom {
+    position: fixed;
+    bottom: 0; left: 0; right: 320px;
+    height: 32px;
+    background: linear-gradient(0deg, rgba(6,6,18,0.95) 0%, rgba(6,6,18,0.7) 80%, transparent 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    z-index: 100;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+  }
+  .hud-bottom span { opacity: 0.6; }
+
+  /* ===== TOOLTIP ===== */
+  .tooltip {
+    position: fixed;
+    background: rgba(6,6,18,0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 200;
+    display: none;
+    max-width: 200px;
+  }
+  .tooltip.visible { display: block; }
+  .tooltip-name {
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .tooltip-role {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ===== ZOOM CONTROLS ===== */
+  .zoom-controls {
+    position: fixed;
+    bottom: 48px; left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 100;
+  }
+  .zoom-btn {
+    width: 32px; height: 32px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: 'Avenir Next Condensed', 'Futura', 'Impact', system-ui, sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .zoom-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<!-- STARFIELD -->
+<div class="starfield" id="starfield"></div>
+
+<!-- TOP HUD -->
+<div class="hud-top">
+  <div>
+    <div class="hud-title">SOLAR SYSTEM</div>
+    <div class="hud-subtitle">AI AGENT COMMAND CENTER</div>
+  </div>
+  <div class="hud-stats">
+    <div class="hud-stat">
+      <div class="hud-stat-value" id="stat-agents">8</div>
+      <div class="hud-stat-label">AGENTS</div>
+    </div>
+    <div class="hud-stat">
+      <div class="hud-stat-value" id="stat-active" style="color:var(--success);">0</div>
+      <div class="hud-stat-label">ACTIVE</div>
+    </div>
+    <div class="hud-stat">
+      <div class="hud-stat-value" id="stat-tasks" style="color:var(--warning);">0</div>
+      <div class="hud-stat-label">TASKS/24H</div>
+    </div>
+    <div class="hud-stat">
+      <div class="hud-stat-value" id="stat-uptime" style="color:var(--sun-glow);">--</div>
+      <div class="hud-stat-label">UPTIME</div>
+    </div>
+  </div>
+  <div class="hud-clock" id="clock">00:00:00</div>
+</div>
+
+<!-- SOLAR SYSTEM -->
+<div class="solar-viewport">
+  <canvas id="solar-canvas"></canvas>
+</div>
+
+<!-- ZOOM -->
+<div class="zoom-controls">
+  <button class="zoom-btn" onclick="zoomIn()">+</button>
+  <button class="zoom-btn" onclick="zoomOut()">&minus;</button>
+  <button class="zoom-btn" onclick="resetView()" style="font-size:10px;">R</button>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-name" id="tooltip-name"></div>
+  <div class="tooltip-role" id="tooltip-role"></div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div class="right-panel">
+  <!-- Planet detail (shown on click) -->
+  <div class="planet-detail" id="planet-detail">
+    <div class="planet-detail-name" id="detail-name" style="color:var(--accent);">--</div>
+    <div class="planet-detail-role" id="detail-role">--</div>
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value" id="detail-status">--</span></div>
+    <div class="detail-row"><span class="detail-label">Model</span><span class="detail-value" id="detail-model">--</span></div>
+    <div class="detail-row"><span class="detail-label">Tasks (24h)</span><span class="detail-value" id="detail-tasks">--</span></div>
+    <div class="detail-row"><span class="detail-label">Success Rate</span><span class="detail-value" id="detail-success">--</span></div>
+    <div class="detail-bar"><div class="detail-bar-fill" id="detail-bar" style="width:0%;background:var(--accent);"></div></div>
+    <div class="detail-row"><span class="detail-label">Orbit</span><span class="detail-value" id="detail-orbit">--</span></div>
+    <div class="detail-row"><span class="detail-label">Last Active</span><span class="detail-value" id="detail-last">--</span></div>
+  </div>
+
+  <div class="panel-section" style="padding:10px 16px;">
+    <div class="panel-section-title">ORBITAL ROSTER</div>
+  </div>
+
+  <div class="panel-scroll" id="agent-list"></div>
+</div>
+
+<!-- BOTTOM HUD -->
+<div class="hud-bottom">
+  <span>SOLAR SYSTEM v0.1.0</span>
+  <span id="hud-status">INITIALIZING...</span>
+  <span id="hud-fps">-- FPS</span>
+</div>
+
+<script>
+// ============================================================
+// SOLAR SYSTEM ENGINE
+// ============================================================
+
+// ---- AGENT / PLANET DEFINITIONS ----
+// Each agent is a planet. The Sun is the gateway/core.
+// Orbit radius determines importance/proximity to core.
+// ---- AGENTS ----
+// Emptied on purpose. Upstream ships eight invented agents here; this copy
+// fills the array from /api/firms instead, so every planet is a firm that
+// actually exists on the ledger.
+let AGENTS = [];
+
+// ---- STATE ----
+let canvas, ctx;
+let W, H, cx, cy;
+let zoom = 1, targetZoom = 1;
+let panX = 0, panY = 0, targetPanX = 0, targetPanY = 0;
+let dragging = false, dragStartX, dragStartY, dragPanX, dragPanY;
+let hoveredAgent = null, selectedAgent = null;
+let time = 0;
+let stars = [];
+let frameCount = 0, lastFpsTime = 0, fps = 0;
+
+// ---- INIT ----
+function init() {
+  canvas = document.getElementById('solar-canvas');
+  ctx = canvas.getContext('2d');
+  resize();
+  generateStars(400);
+  buildAgentList();
+  updateHudStats();
+
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('click', onClick);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('mousedown', onDragStart);
+  canvas.addEventListener('mousemove', onDragMove);
+  canvas.addEventListener('mouseup', onDragEnd);
+  canvas.addEventListener('mouseleave', onDragEnd);
+  window.addEventListener('resize', resize);
+
+  requestAnimationFrame(loop);
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  document.getElementById('hud-status').textContent = 'SYSTEM NOMINAL';
+}
+
+function resize() {
+  const vp = document.querySelector('.solar-viewport');
+  W = vp.clientWidth;
+  H = vp.clientHeight;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  cx = W / 2;
+  cy = H / 2;
+}
+
+function generateStars(count) {
+  stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * 4000 - 2000,
+      y: Math.random() * 4000 - 2000,
+      size: Math.random() * 1.5 + 0.3,
+      brightness: Math.random() * 0.6 + 0.2,
+      twinkleSpeed: Math.random() * 0.02 + 0.005,
+      twinkleOffset: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+// ---- RENDER LOOP ----
+function loop(ts) {
+  time += 0.016;
+  frameCount++;
+  if (ts - lastFpsTime > 1000) {
+    fps = frameCount;
+    frameCount = 0;
+    lastFpsTime = ts;
+    document.getElementById('hud-fps').textContent = fps + ' FPS';
+  }
+
+  // Smooth zoom & pan
+  zoom += (targetZoom - zoom) * 0.08;
+  panX += (targetPanX - panX) * 0.08;
+  panY += (targetPanY - panY) * 0.08;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(cx + panX, cy + panY);
+  ctx.scale(zoom, zoom);
+
+  drawStars();
+  drawOrbits();
+  drawSun();
+  drawAgents();
+
+  ctx.restore();
+  requestAnimationFrame(loop);
+}
+
+// ---- DRAW FUNCTIONS ----
+function drawStars() {
+  stars.forEach(s => {
+    const brightness = s.brightness + Math.sin(time * s.twinkleSpeed * 60 + s.twinkleOffset) * 0.15;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size / zoom, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200,210,230,${Math.max(0, brightness)})`;
+    ctx.fill();
+  });
+}
+
+function drawOrbits() {
+  AGENTS.forEach(a => {
+    ctx.beginPath();
+    ctx.arc(0, 0, a.orbit, 0, Math.PI * 2);
+    ctx.strokeStyle = a === hoveredAgent || a === selectedAgent
+      ? `rgba(${hexToRgb(a.color)},0.25)`
+      : 'rgba(40,55,90,0.15)';
+    ctx.lineWidth = a === selectedAgent ? 1.5 : 0.5;
+    if (a !== selectedAgent && a !== hoveredAgent) {
+      ctx.setLineDash([4, 8]);
+    } else {
+      ctx.setLineDash([]);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+}
+
+function drawSun() {
+  // Corona glow
+  const gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, 45);
+  gradient.addColorStop(0, 'rgba(255,200,50,0.4)');
+  gradient.addColorStop(0.4, 'rgba(255,140,20,0.15)');
+  gradient.addColorStop(1, 'rgba(255,100,0,0)');
+  ctx.beginPath();
+  ctx.arc(0, 0, 45, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Outer glow pulse
+  const pulse = 0.7 + Math.sin(time * 2) * 0.15;
+  const outerGlow = ctx.createRadialGradient(0, 0, 12, 0, 0, 28);
+  outerGlow.addColorStop(0, `rgba(255,220,100,${0.8 * pulse})`);
+  outerGlow.addColorStop(0.6, `rgba(255,160,40,${0.3 * pulse})`);
+  outerGlow.addColorStop(1, 'rgba(255,100,0,0)');
+  ctx.beginPath();
+  ctx.arc(0, 0, 28, 0, Math.PI * 2);
+  ctx.fillStyle = outerGlow;
+  ctx.fill();
+
+  // Sun core
+  const coreGrad = ctx.createRadialGradient(-3, -3, 2, 0, 0, 14);
+  coreGrad.addColorStop(0, '#fffbe8');
+  coreGrad.addColorStop(0.5, '#ffcc44');
+  coreGrad.addColorStop(1, '#ee8800');
+  ctx.beginPath();
+  ctx.arc(0, 0, 14, 0, Math.PI * 2);
+  ctx.fillStyle = coreGrad;
+  ctx.fill();
+
+  // Label
+  ctx.fillStyle = 'rgba(255,200,100,0.5)';
+  ctx.font = '600 8px Orbitron';
+  ctx.textAlign = 'center';
+  ctx.fillText('CORE', 0, 30);
+}
+
+function drawAgents() {
+  AGENTS.forEach(a => {
+    const angle = time * a.speed * 60 + (a.orbit * 0.1);
+    const px = Math.cos(angle) * a.orbit;
+    const py = Math.sin(angle) * a.orbit;
+    a._x = px;
+    a._y = py;
+
+    const isHovered = a === hoveredAgent;
+    const isSelected = a === selectedAgent;
+    const isActive = a.status === 'active';
+
+    // Trail
+    if (isActive) {
+      ctx.beginPath();
+      for (let i = 0; i < 20; i++) {
+        const ta = angle - (i * 0.01);
+        const tx = Math.cos(ta) * a.orbit;
+        const ty = Math.sin(ta) * a.orbit;
+        if (i === 0) ctx.moveTo(tx, ty);
+        else ctx.lineTo(tx, ty);
+      }
+      // Upstream sets strokeStyle here using `i`, which is let-scoped to the
+      // loop above and therefore out of scope — a ReferenceError thrown inside
+      // requestAnimationFrame, every frame, which is why nothing orbits. The
+      // line is dead anyway: the next assignment overwrites it. Removed.
+      ctx.lineWidth = a.size * 0.4;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(${hexToRgb(a.color)},0.15)`;
+      ctx.stroke();
+    }
+
+    // Glow
+    if (isActive || isHovered || isSelected) {
+      const glowSize = a.size * (isSelected ? 4 : isHovered ? 3.5 : 2.5);
+      const glow = ctx.createRadialGradient(px, py, a.size * 0.5, px, py, glowSize);
+      glow.addColorStop(0, `rgba(${hexToRgb(a.color)},${isSelected ? 0.35 : 0.2})`);
+      glow.addColorStop(1, `rgba(${hexToRgb(a.color)},0)`);
+      ctx.beginPath();
+      ctx.arc(px, py, glowSize, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+    }
+
+    // Rings (Saturn)
+    if (a.rings) {
+      ctx.beginPath();
+      ctx.ellipse(px, py, a.size * 2.2, a.size * 0.7, 0.3, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${hexToRgb(a.color)},0.35)`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Planet body
+    const bodyGrad = ctx.createRadialGradient(
+      px - a.size * 0.3, py - a.size * 0.3, a.size * 0.1,
+      px, py, a.size
+    );
+    bodyGrad.addColorStop(0, lightenColor(a.color, 40));
+    bodyGrad.addColorStop(1, a.color);
+    ctx.beginPath();
+    ctx.arc(px, py, a.size, 0, Math.PI * 2);
+    ctx.fillStyle = isActive ? bodyGrad : `rgba(${hexToRgb(a.color)},0.4)`;
+    ctx.fill();
+
+    // Planet border
+    if (isSelected) {
+      ctx.strokeStyle = `rgba(${hexToRgb(a.color)},0.8)`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Moons
+    if (a.moons) {
+      a.moons.forEach(m => {
+        const mAngle = time * m.speed * 60;
+        const mx = px + Math.cos(mAngle) * m.orbit;
+        const my = py + Math.sin(mAngle) * m.orbit;
+        ctx.beginPath();
+        ctx.arc(mx, my, m.size, 0, Math.PI * 2);
+        ctx.fillStyle = m.color;
+        ctx.fill();
+      });
+    }
+
+    // Label
+    const labelAlpha = isHovered || isSelected ? 0.9 : zoom > 0.8 ? 0.4 : 0;
+    if (labelAlpha > 0) {
+      ctx.fillStyle = `rgba(${hexToRgb(a.color)},${labelAlpha})`;
+      ctx.font = `700 ${isSelected ? 9 : 8}px Orbitron`;
+      ctx.textAlign = 'center';
+      ctx.fillText(a.name, px, py + a.size + 12);
+    }
+  });
+}
+
+// ---- INTERACTIONS ----
+function getAgentAtPos(mx, my) {
+  const sx = (mx - cx - panX) / zoom;
+  const sy = (my - cy - panY) / zoom;
+  for (let i = AGENTS.length - 1; i >= 0; i--) {
+    const a = AGENTS[i];
+    if (a._x === undefined) continue;
+    const dx = sx - a._x;
+    const dy = sy - a._y;
+    const hitRadius = Math.max(a.size * 1.5, 12);
+    if (dx * dx + dy * dy < hitRadius * hitRadius) return a;
+  }
+  return null;
+}
+
+function onMouseMove(e) {
+  if (dragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const agent = getAgentAtPos(mx, my);
+  hoveredAgent = agent;
+  canvas.style.cursor = agent ? 'pointer' : 'grab';
+
+  const tip = document.getElementById('tooltip');
+  if (agent) {
+    tip.classList.add('visible');
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top = (e.clientY - 10) + 'px';
+    document.getElementById('tooltip-name').textContent = agent.name;
+    document.getElementById('tooltip-name').style.color = agent.color;
+    document.getElementById('tooltip-role').textContent = agent.role;
+  } else {
+    tip.classList.remove('visible');
+  }
+}
+
+function onClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const agent = getAgentAtPos(mx, my);
+  selectAgent(agent);
+}
+
+function selectAgent(agent) {
+  selectedAgent = agent;
+  // Update agent list selection
+  document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
+  if (agent) {
+    const card = document.querySelector(`.agent-card[data-id="${agent.id}"]`);
+    if (card) card.classList.add('selected');
+    showDetail(agent);
+  } else {
+    document.getElementById('planet-detail').classList.remove('visible');
+  }
+}
+
+function showDetail(a) {
+  const d = document.getElementById('planet-detail');
+  d.classList.add('visible');
+  document.getElementById('detail-name').textContent = a.name;
+  document.getElementById('detail-name').style.color = a.color;
+  document.getElementById('detail-role').textContent = a.planet + ' — ' + a.role;
+  document.getElementById('detail-status').textContent = a.status.toUpperCase();
+  document.getElementById('detail-status').style.color = a.status === 'active' ? 'var(--success)' : 'var(--text-dim)';
+  document.getElementById('detail-model').textContent = a.model;
+  document.getElementById('detail-tasks').textContent = a.tasks24h;
+  // Insufficient data is shown as insufficient data, not as 0%.
+  const rate = a.successRate;
+  document.getElementById('detail-success').textContent =
+    rate === null ? 'n/a (below sample gate)' : rate + '%';
+  document.getElementById('detail-bar').style.width = (rate === null ? 0 : rate) + '%';
+  document.getElementById('detail-bar').style.background = a.color;
+  document.getElementById('detail-orbit').textContent = a.planet + ' (r=' + a.orbit + ')';
+  document.getElementById('detail-last').textContent = a.status === 'active' ? 'NOW' : '2h ago';
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  targetZoom = Math.max(0.3, Math.min(4, targetZoom * delta));
+}
+
+function onDragStart(e) {
+  if (hoveredAgent) return;
+  dragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragPanX = targetPanX;
+  dragPanY = targetPanY;
+  canvas.style.cursor = 'grabbing';
+}
+function onDragMove(e) {
+  if (!dragging) return;
+  targetPanX = dragPanX + (e.clientX - dragStartX);
+  targetPanY = dragPanY + (e.clientY - dragStartY);
+}
+function onDragEnd() {
+  dragging = false;
+  canvas.style.cursor = hoveredAgent ? 'pointer' : 'grab';
+}
+
+function zoomIn() { targetZoom = Math.min(4, targetZoom * 1.3); }
+function zoomOut() { targetZoom = Math.max(0.3, targetZoom * 0.7); }
+function resetView() { targetZoom = 1; targetPanX = 0; targetPanY = 0; selectedAgent = null; document.getElementById('planet-detail').classList.remove('visible'); }
+
+// ---- AGENT LIST (RIGHT PANEL) ----
+function buildAgentList() {
+  const list = document.getElementById('agent-list');
+  let html = '';
+  AGENTS.forEach(a => {
+    const statusTag = a.status === 'active'
+      ? '<span class="agent-tag tag-active">ACTIVE</span>'
+      : '<span class="agent-tag tag-idle">IDLE</span>';
+    const cronTag = a.tasks24h > 50 ? '<span class="agent-tag tag-cron">HIGH</span>' : '';
+    html += `
+      <div class="agent-card" data-id="${a.id}" style="--agent-color:${a.color};" onclick="selectAgentById('${a.id}')">
+        <div class="agent-header">
+          <div class="agent-dot ${a.status === 'active' ? 'active' : 'idle'}" style="--agent-color:${a.color};background:${a.color};${a.status === 'active' ? 'box-shadow:0 0 6px '+a.color : ''}"></div>
+          <span class="agent-name">${a.name}</span>
+          <span class="agent-orbit-tag">${a.planet}</span>
+        </div>
+        <div class="agent-desc">${a.role}</div>
+        <div class="agent-meta">${statusTag}${cronTag}</div>
+      </div>
+    `;
+  });
+  list.innerHTML = html;
+}
+
+function selectAgentById(id) {
+  const agent = AGENTS.find(a => a.id === id);
+  if (agent) {
+    selectAgent(agent);
+    // Smooth pan to agent
+    if (agent._x !== undefined) {
+      targetPanX = -agent._x * zoom;
+      targetPanY = -agent._y * zoom;
+    }
+  }
+}
+
+// ---- HUD ----
+function updateClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
+}
+
+function updateHudStats() {
+  document.getElementById('stat-agents').textContent = AGENTS.length;
+  document.getElementById('stat-active').textContent = AGENTS.filter(a => a.status === 'active').length;
+  document.getElementById('stat-tasks').textContent = AGENTS.reduce((s, a) => s + (a.tasks24h || 0), 0);
+  document.getElementById('stat-uptime').textContent = '99.8%';
+}
+
+// ---- UTILS ----
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
+function lightenColor(hex, amt) {
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.min(255, r + amt);
+  g = Math.min(255, g + amt);
+  b = Math.min(255, b + amt);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ---- BOOT ----
+// Upstream calls init() against its hardcoded demo array. The README advertises
+// "API Polling (built-in)", but there is no fetch(), XMLHttpRequest or
+// WebSocket anywhere in the project — the `gateway` config block is read by
+// nothing. So the polling is written here.
+//
+// Served same-origin from the village app, which is why a relative URL works
+// and there is no CORS dance.
+
+const PLANETS = [
+  { planet: 'Mercury', color: '#b0b0b0' }, { planet: 'Venus',   color: '#e8c86a' },
+  { planet: 'Earth',   color: '#4488ff' }, { planet: 'Mars',    color: '#dd6644' },
+  { planet: 'Jupiter', color: '#d8a06a' }, { planet: 'Saturn',  color: '#e0d090' },
+  { planet: 'Uranus',  color: '#88d8d8' }, { planet: 'Neptune', color: '#4466cc' },
+];
+const DEAD = '#5a5a6a';
+
+function toAgent(firm, index, biggest) {
+  const skin = PLANETS[index % PLANETS.length];
+  const allocation = Number(firm.allocation || 0);
+  const trades = Number(firm.closed_trades || 0);
+  const killed = firm.status === 'killed';
+  const paused = firm.status === 'paused';
+  return {
+    id: firm.key,
+    name: (firm.key || '').toUpperCase(),
+    planet: skin.planet,
+    // A killed firm keeps its orbit and loses its colour: it is still part of
+    // the record, it just is not trading any more.
+    color: killed ? DEAD : skin.color,
+    // Size is the capital it holds, so the picture cannot flatter a small firm.
+    size: 5 + Math.round(9 * (biggest ? allocation / biggest : 0)),
+    orbit: 70 + index * 45,
+    // Speed is how much it actually trades. A paused firm barely moves.
+    speed: paused || killed ? 0.0015 : 0.004 + Math.min(0.012, trades * 0.0004),
+    role: `${firm.name || firm.key} — ${firm.asset_class || 'unclassified'}`,
+    model: firm.venue || 'paper',
+    status: killed ? 'error' : paused ? 'idle' : 'active',
+    tasks24h: trades,
+    // Below the sample gate a win rate is not a verdict, so it is not shown as
+    // one. The rest of this system refuses to draw that conclusion and so does
+    // the picture of it.
+    successRate: firm.sufficient_data ? Math.round(Number(firm.win_rate_pct || 0)) : null,
+    equity: firm.equity,
+    allocation: firm.allocation,
+    sufficientData: !!firm.sufficient_data,
+  };
+}
+
+async function loadFirms() {
+  const res = await fetch('/api/firms');
+  if (!res.ok) throw new Error('/api/firms returned ' + res.status);
+  const data = await res.json();
+  const firms = data.firms || [];
+  const biggest = Math.max(1, ...firms.map(f => Number(f.allocation || 0)));
+  return { agents: firms.map((f, i) => toAgent(f, i, biggest)), as_of: data.as_of,
+           source: data.source };
+}
+
+function saySystem(text) {
+  const el = document.getElementById('hud-status');
+  if (el) el.textContent = text;
+}
+
+async function refresh(first) {
+  try {
+    const { agents, as_of, source } = await loadFirms();
+    AGENTS.length = 0;
+    agents.forEach(a => AGENTS.push(a));
+    if (first) init(); else { buildAgentList(); updateHudStats(); }
+    saySystem(AGENTS.length
+      ? `${AGENTS.length} FIRM(S) · ${String(source || '').toUpperCase()} · ${as_of}`
+      : 'NO FIRMS — RUN `trade init`');
+  } catch (err) {
+    if (first) init();
+    saySystem('LEDGER UNREACHABLE — ' + err.message);
+  }
+}
+
+refresh(true);
+setInterval(() => refresh(false), 15000);
+
+</script>
+</body>
+</html>

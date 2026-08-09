@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 752 tests, no database server, no network
+python -m pytest            # 770 tests, no database server, no network
 ```
 
 ---
@@ -122,13 +122,15 @@ src/
 │   ├── sandbox/            alliances, betrayal — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
 │   ├── web.py              Mission Control, mounted at /village
+│   ├── api.py              the same numbers as read-only JSON
+│   ├── static/solar.html   the firms as a solar system (vendored, MIT)
 │   ├── council/            the village ruling on its own pending decisions
 │   ├── flow.py             the village map, and the tick's telemetry
 │   ├── snapshot.py         the same village, frozen into one HTML file
 │   └── ecosystem.py        the tick, in order
 └── db/
     ├── connection.py
-    └── migrations/         001-006 products, 007-015 trading; Postgres + sqlite/
+    └── migrations/         001-006 products, 007-016 trading; Postgres + sqlite/
 ```
 
 Deliberately **not** built (spec §2.1): sharks, government, alliances, black
