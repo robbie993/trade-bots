@@ -389,10 +389,16 @@ class Ecosystem:
             for done in report.carried_out:
                 flow.move("gate", "brokerage", str(done)[:110])
 
-        report.lessons = self.learner.record(self.learner.lessons(report.oversight.cards))
+        drawn = self.learner.lessons(report.oversight.cards)
+        fresh = self.learner.new_lessons(drawn)
+        report.lessons = self.learner.record(fresh)
         self.audit.log_oversight(report.oversight, market.as_of())
+        self.log_brain(fresh, market)
         self.audit.rebuild_index()
         flow.move("brokerage", "audit", "vault written")
+        if fresh:
+            flow.move("ledger", "brain", f"{len(fresh)} lesson(s) learned",
+                      detail="; ".join(str(lesson)[:80] for lesson in fresh[:3]))
 
         if report.oversight.halted:
             flow.move("brokerage", "halt", report.oversight.halted["reason"][:100],
@@ -566,6 +572,62 @@ class Ecosystem:
             asked.append(approval)
         return asked
 
+    # =====================================================================
+    # the brain, in the vault
+    #
+    # The database is where memory is kept; the vault is where it can be
+    # *read*. Every link written here is a relationship already in the data —
+    # a lesson to the symbol it is about, a symbol to the firms that traded
+    # it, a genome to the genome it was mutated from — which is what makes a
+    # graph view over this vault worth opening.
+    #
+    # Best-effort, like the flow recorder: a tick does not fail because a note
+    # could not be written.
+    # =====================================================================
+    def log_brain(self, lessons: Sequence = (), market: Optional[MarketData] = None) -> dict:
+        """Write what the village has learned into the vault."""
+        written = {"lessons": 0, "symbols": 0, "genomes": 0}
+        try:
+            firms = self.store.firms()
+            for lesson in lessons:
+                self.audit.log_lesson(lesson, firm_key=_firm_for(lesson, firms))
+                written["lessons"] += 1
+
+            traded_by: dict = {}
+            for firm in firms:
+                for symbol in firm.universe or ():
+                    traded_by.setdefault(symbol.upper(), []).append(firm.firm_key)
+
+            keys_by_symbol = self._lesson_keys_by_symbol()
+            for symbol, keys in traded_by.items():
+                record = self.memory.track_record(symbol)
+                if not record.get("trades") and symbol not in keys_by_symbol:
+                    continue  # nothing has happened in this name yet
+                self.audit.write_symbol(record, firms=keys,
+                                        lesson_keys=keys_by_symbol.get(symbol, ()))
+                written["symbols"] += 1
+
+            by_id = {f.id: f.firm_key for f in firms}
+            for row in self.db.query(
+                "SELECT * FROM strategy_genomes ORDER BY id DESC LIMIT 200"
+            ):
+                if self.audit.write_genome(row, by_id.get(row.get("firm_id"), "")):
+                    written["genomes"] += 1
+
+            self.audit.rebuild_brain()
+        except Exception as exc:  # noqa: BLE001 - the vault never breaks a tick
+            self.flow.emit("brain", "vault note failed", kind="blocked", detail=str(exc)[:200])
+        return written
+
+    def _lesson_keys_by_symbol(self) -> dict:
+        out: dict = {}
+        for memory in self.memory.lessons(limit=500):
+            symbol = (memory.symbol or "").upper()
+            key = memory.payload.get("key")
+            if symbol and key:
+                out.setdefault(symbol, []).append(key)
+        return out
+
     def apply_approvals(self) -> list:
         """Carry out decisions a human has already made.
 
@@ -632,6 +694,9 @@ class Ecosystem:
             for generation in range(1, generations + 1):
                 out.append(self.evolver.evolve(record, market, generation, analysts))
                 record = self.store.require_firm_by_id(record.id)
+        if out:
+            # New genomes exist; the lineage in the vault should show them.
+            self.log_brain()
         return out
 
     def simulate(self, days: int = 30, on_tick=None) -> list:
@@ -743,6 +808,12 @@ class Ecosystem:
         for event in self.store.events(limit=40):
             lines.append(f"- `{event.get('created_at')}` **{event.get('event_type')}**: {event.get('detail')}")
         return "\n".join(lines)
+
+
+def _firm_for(lesson, firms) -> str:
+    """Which firm a lesson is about, when it is about one at all."""
+    topic = getattr(lesson, "topic", "") or ""
+    return next((f.firm_key for f in firms if f.firm_key == topic), "")
 
 
 __all__ = ["Ecosystem", "TickReport"]

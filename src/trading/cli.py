@@ -378,8 +378,10 @@ def cmd_audit(args) -> int:
     report = eco.audit_report()
     if args.write:
         path = eco.audit.log_note("Audit report", report)
+        brain = eco.log_brain()
         eco.audit.rebuild_index()
         print(f"written to {path}")
+        print(f"brain: {brain['symbols']} symbol note(s), {brain['genomes']} new genome note(s)")
     else:
         print(report)
     return 0

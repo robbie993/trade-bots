@@ -415,6 +415,56 @@ genome, an allocation change, or a human does that. A system that silently
 rewrote its own strategy from its own conclusions is exactly what a kill
 switch cannot see coming.
 
+### Seeing it — the vault as a graph
+
+The database is where memory is *kept*; the vault is where it can be *read*.
+Every tick writes the brain into `vault/brain/` as plain Markdown:
+
+```
+vault/brain/
+  index.md
+  lessons/SPY-loser.md          a conclusion, and when it was drawn
+  symbols/SPY.md                what the trades in that name actually say
+  genomes/g00042.md             one candidate strategy, and its parent
+```
+
+These are cross-linked, and **the links are relationships out of the
+database, not decoration**. A lesson links to the symbol it is about; the
+symbol links back to every firm that traded it; a genome links to the genome
+it was mutated from. That last one is the interesting edge: `parent_id` now
+records which genome each mutant descends from, so a firm's strategy has a
+recoverable lineage instead of an undated pile of candidates.
+
+Which means you get the graph view for free, with nothing to install and no
+data leaving the machine:
+
+```bash
+python -m src.main trade audit --write     # refresh the brain notes
+```
+
+Then open `vault/` as an Obsidian vault and use its **Graph View** — lessons,
+symbols, firms and genome lineages as one network. The
+[obsidian-galaxy](https://github.com/agentage/obsidian-galaxy) plugin renders
+the same thing as a 3D force graph if you want the galaxy version. Neither
+needs an integration, because the vault was already the right shape.
+
+**Records are appended; views are regenerated, and they live in different
+folders.** `firms/`, `brokerage/` and `brain/lessons/` are append-only — a
+decision that has been written cannot be quietly amended, and a lesson's note
+gains a dated entry each time it is re-concluded, so you can see *when* the
+village came to believe something. `brain/symbols/` and `brain/genomes/` are
+rebuilt from the database: a symbol's track record moves with every closed
+trade, and regenerating it loses nothing because the trades it counts are
+recorded in the firm notes. Every regenerated note says so at the top.
+
+A symbol note also separates fills from closed trades, because "20 trades
+(1 won, 1 lost)" reads as though eighteen went missing. They did not — an
+opening buy is remembered with a realised P&L of zero, and only the closing
+leg of a round trip settles.
+
+Writing the vault is best-effort, like the flow recorder: a tick does not fail
+because a note could not be written.
+
 ---
 
 ## Mission Control
@@ -834,7 +884,7 @@ src/trading/
 ├── sandbox/             alliances, betrayal, espionage — read-only guard
 ├── gateway/             OmniRoute, with an offline fallback
 ├── execution/           paper (default) and the live venues that refuse
-└── audit/               the Obsidian vault
+└── audit/               the Obsidian vault, including brain/ as a graph
 ```
 
 Configuration lives in `config/firm_config.yaml` (the firms) and is documented
