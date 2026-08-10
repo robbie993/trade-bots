@@ -219,7 +219,13 @@ def cmd_run(args) -> int:  # pragma: no cover - long-running
     print(f"running every {interval}s — Ctrl-C to stop")
     while True:
         try:
-            print(eco.tick().summary(), flush=True)
+            # Read every pass, not at startup: the switch is flipped from a
+            # different process, and a pause you have to restart to apply is
+            # not a pause.
+            if eco.settings.get("paused"):
+                print("paused — nothing ticked", flush=True)
+            else:
+                print(eco.tick().summary(), flush=True)
         except KeyboardInterrupt:
             print("\nstopped")
             return 0

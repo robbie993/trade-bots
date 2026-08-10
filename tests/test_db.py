@@ -143,8 +143,8 @@ def test_postgres_migrations_match_the_sqlite_ones():
     assert pg_files == lite_files
     # 001-006 the product village, 007-010 the trading edition,
     # 011-014 the court, competition, market and sandbox, 015 the flow,
-    # 016 the council.
-    assert len(pg_files) == 16
+    # 016 the council, 017 the switches on the wall.
+    assert len(pg_files) == 17
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())

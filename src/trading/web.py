@@ -156,6 +156,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         header,
         _firms_panel(eco, firms, by_id),
         _brokerage_panel(eco, firms),
+        _switches_panel(eco),
         _council_panel(eco),
         _court_panel(eco),
         _arena_panel(eco),
@@ -185,6 +186,20 @@ def _firms_panel(eco, firms, by_id) -> str:
         state = firm.status
         if card and not card.sufficient_data and not firm.is_killed:
             state = f"{state} <span class=muted>(measuring)</span>"
+        if firm.status == "paused":
+            # The one decision you could not make from the page you were
+            # looking at: the CLI and the council could un-pause a firm, and
+            # Mission Control could only watch it sit there.
+            state += (
+                f"<form method=post action='/village/actions/resume'>"
+                f"<input type=hidden name=firm value='{e(firm.firm_key)}'>"
+                f"<button class=go>Bring back</button></form>"
+            )
+        elif firm.is_killed:
+            state += (
+                " <span class=muted>(killed — a kill does not reverse; "
+                "resubmit the strategy to the court to start it again)</span>"
+            )
         rows.append({
             "firm": f"<a href='/village/firms/{e(firm.firm_key)}'>{e(firm.firm_key)}</a>",
             "state": state,
@@ -220,6 +235,62 @@ def _brokerage_panel(eco, firms) -> str:
         + (f"<ul>{recent}</ul>" if recent else "")
         + "<p class=muted>Capital is cut automatically and raised only by an approval.</p>",
     )
+
+
+def _switches_panel(eco) -> str:
+    """The controls on the wall: what is running, and what you can stop.
+
+    These are switches rather than settings because they take effect on the
+    next tick of a process that is not this one — they are written to the
+    database, and the loop reads them each pass. Flipping one here stops or
+    starts something already running, without a restart and without a terminal.
+    """
+    default = eco.config.living.enabled
+    paused = eco.settings.get("paused", default=False)
+
+    def switch(name: str, label: str, about: str, on: bool,
+               words: tuple, action: tuple) -> str:
+        """One row: what it is, whether it is on, and the button to flip it.
+
+        `action` is the button's label in each state rather than a generic
+        "Turn off", because "Pause" and "Close the bazaar" are what you are
+        actually about to do, and a control should say so.
+        """
+        state = (f"<span class=good>{words[0]}</span>" if on
+                 else f"<span class=muted>{words[1]}</span>")
+        return (
+            f"<tr><td><strong>{e(label)}</strong><br>"
+            f"<span class=muted>{e(about)}</span></td>"
+            f"<td>{state}</td><td>"
+            f"<form method=post action='/village/actions/switch'>"
+            f"<input type=hidden name=name value='{e(name)}'>"
+            f"<button class={'kill' if on else 'go'}>"
+            f"{e(action[0] if on else action[1])}</button></form></td></tr>"
+        )
+
+    body = (
+        "<table>"
+        # Inverted on purpose: the stored switch is `paused`, but what a reader
+        # wants to see is whether the village is running.
+        + switch("paused", "The village",
+                 "trading, scoring, the council — the whole loop",
+                 not paused, ("running", "paused"), ("Pause", "Start again"))
+        + switch("arena", "Arena", "seasons of head-to-head, and titles",
+                 eco.settings.get("arena", default),
+                 ("open", "closed"), ("Close", "Open"))
+        + switch("bazaar", "Bazaar", "idle firms sell the books they are not using",
+                 eco.settings.get("bazaar", default),
+                 ("open", "closed"), ("Close", "Open"))
+        + switch("tavern", "Tavern", "alliances form, and rivals scheme",
+                 eco.settings.get("tavern", default),
+                 ("open", "closed"), ("Close", "Open"))
+        + "</table>"
+        "<p class=muted>These reach the background loop, not this page: they are "
+        "stored in the database and read on every tick, so a switch you flip is "
+        "already in effect. Pausing stops the village trading; it does not close "
+        "the gate, and nothing already approved is undone.</p>"
+    )
+    return _panel("Switches", body)
 
 
 def _council_panel(eco) -> str:
@@ -578,6 +649,54 @@ def action_tick() -> RedirectResponse:
             said += f" — {report.errors[0][:120]}"
     except Exception as exc:  # noqa: BLE001 - a failed tick is a message, not a 500
         said = f"tick failed: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said)
+
+
+@router.post("/village/actions/resume")
+def action_resume(firm: str = Form(...)) -> RedirectResponse:
+    """Un-pause a firm. A human decision, and only ever a human decision.
+
+    `resume_firm` refuses a killed firm, and that refusal is left alone. A
+    pause is the system saying "this tripped a limit, look at it"; a kill is
+    the answer to having looked. Reversing the second from a web button would
+    make the kill switch a suggestion.
+    """
+    eco = ecosystem()
+    try:
+        result = eco.brokerage.resume_firm(firm, "web")
+        said = f"{result['firm']} is active again"
+        eco.flow.emit("brokerage", f"{firm} brought back", firm=firm,
+                      detail="resumed by a human from Mission Control")
+    except Exception as exc:  # noqa: BLE001 - the reason belongs on the page
+        said = f"refused: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said)
+
+
+@router.post("/village/actions/switch")
+def action_switch(name: str = Form(...)) -> RedirectResponse:
+    """Flip one of the wall switches — a quarter, or the whole loop.
+
+    Written to the database rather than the environment because the process
+    that ticks is not the process serving this page. See src/trading/settings.py.
+    """
+    from .settings import UnknownSetting
+
+    eco = ecosystem()
+    try:
+        default = eco.config.living.enabled if name != "paused" else False
+        now_on = eco.settings.toggle(name, default=default, by="web")
+        if name == "paused":
+            said = "the village is paused" if now_on else "the village is running again"
+        else:
+            said = f"the {name} is {'open' if now_on else 'closed'}"
+    except UnknownSetting:
+        said = f"refused: there is no switch called {name!r}"
+    except Exception as exc:  # noqa: BLE001
+        said = f"refused: {exc}"
     finally:
         eco.db.close()
     return _back(said)

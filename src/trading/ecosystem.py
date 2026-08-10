@@ -122,6 +122,7 @@ class Ecosystem:
         self._tokens = None
         self._arena = None
         self._living = None
+        self._settings = None
         self._market = None
         self._sandbox = None
 
@@ -157,6 +158,14 @@ class Ecosystem:
 
             self._tokens = TokenLedger(self.db)
         return self._tokens
+
+    @property
+    def settings(self):
+        if self._settings is None:
+            from .settings import Settings
+
+            self._settings = Settings(self.db)
+        return self._settings
 
     @property
     def living(self):

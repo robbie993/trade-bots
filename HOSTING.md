@@ -162,6 +162,45 @@ history produces the same village — the same alliance on the same day. Tune it
 with `TRADE_SEASON_EVERY`, `TRADE_BAZAAR_EVERY`, `TRADE_TAVERN_EVERY`, or turn
 the whole thing off by leaving `TRADE_LIVING` unset.
 
+### The switches, without a terminal
+
+Mission Control has a **Switches** panel. It can pause the whole village, and
+open or close each quarter, while everything is running:
+
+| switch | what it stops |
+|---|---|
+| **The village** | trading, scoring, the council — the loop keeps running and does nothing |
+| **Arena** | seasons and titles |
+| **Bazaar** | listings and sales |
+| **Tavern** | alliances and schemes |
+
+These are not environment variables. The process that ticks is not the process
+serving the page, so setting an environment variable in one would change
+nothing in the other. They are stored in `village_settings` and read on every
+pass, which means a switch you flip is already in effect — no restart, and no
+Terminal once the village is up.
+
+An unset switch defers to `TRADE_LIVING`, so the environment still decides the
+default and clearing an override hands the decision back to it. Every flip
+records who made it.
+
+Pausing stops the village trading. It does not close the gate, and nothing
+already approved is undone.
+
+### Bringing a firm back
+
+A paused firm now has a **Bring back** button next to it in Mission Control.
+That was the one decision you could not make from the page you were looking
+at — `trade resume` could do it, and so could the council, but Mission Control
+could only watch the firm sit there.
+
+**A killed firm does not come back**, and the button does not appear for one.
+A pause is the system saying "this tripped a limit, go and look"; a kill is the
+answer to having looked. Reversing that from a web button would make the kill
+switch a suggestion. The legitimate route is the one that any strategy takes:
+submit it to the court, and if it clears, it becomes a new firm — created
+paused and unfunded, with an approval waiting for you.
+
 ---
 
 ## What the page is telling you

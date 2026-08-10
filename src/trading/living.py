@@ -135,20 +135,29 @@ class Living:
         self.living = getattr(self.config, "living", None) or LivingConfig()
         self.seed = int(getattr(self.config.brain, "seed", 0) or 0)
 
+    def _open(self, quarter: str) -> bool:
+        """Whether a quarter is open right now.
+
+        The switch on the wall wins over the environment, because it is the
+        more recent decision and the one made by a person looking at the
+        village. An unset switch means nobody has overridden the config, so
+        the environment decides — which is how this stays off by default.
+        """
+        return self.eco.settings.get(quarter, default=self.living.enabled)
+
     # =====================================================================
     def run(self, market, report) -> None:
         """Ask each quarter whether anything happens today."""
-        if not self.living.enabled:
-            return
         day = _clock(market)
         if day is None:
             return
 
-        if self.living.season_every and day % self.living.season_every == 0:
+        every = self.living
+        if every.season_every and day % every.season_every == 0 and self._open("arena"):
             self._guard("arena", report, self._season)
-        if self.living.bazaar_every and day % self.living.bazaar_every == 0:
+        if every.bazaar_every and day % every.bazaar_every == 0 and self._open("bazaar"):
             self._guard("bazaar", report, self._bazaar, day)
-        if self.living.tavern_every and day % self.living.tavern_every == 0:
+        if every.tavern_every and day % every.tavern_every == 0 and self._open("tavern"):
             self._guard("tavern", report, self._tavern, day)
 
     def _guard(self, where: str, report, func, *args) -> None:
