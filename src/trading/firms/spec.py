@@ -31,6 +31,19 @@ class FirmSpecError(ValueError):
     """The firm config could not be read, or is missing something required."""
 
 
+def _strategy(raw: dict) -> str:
+    """A firm's strategy label, or the bot it delegates to.
+
+    `bot: bots/mine.py` means the village runs that file instead of its own
+    analysts — see src/trading/adapter.py. It is stored in the same column as
+    the free-text label because it is the same thing: what this firm does.
+    """
+    bot = str(raw.get("bot") or "").strip()
+    if bot:
+        return f"bot:{bot}"
+    return str(raw.get("strategy") or "")
+
+
 @dataclass
 class FirmSpec:
     firm_key: str
@@ -78,7 +91,7 @@ class FirmSpec:
             firm_key=key,
             name=str(raw.get("name") or key),
             asset_class=str(raw.get("asset_class") or ""),
-            strategy=str(raw.get("strategy") or ""),
+            strategy=_strategy(raw),
             venue=str(raw.get("venue") or limits.venue),
             risk_limit=D(raw.get("risk_limit", limits.risk_limit)),
             allocation=D(raw.get("capital_allocation", raw.get("allocation", limits.allocation))),

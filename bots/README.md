@@ -22,6 +22,70 @@ python -m src.main approve <id> --by you
 python -m src.main trade apply-approvals   # funds it and sets it trading
 ```
 
+## When your strategy is not seven numbers
+
+Everything above translates a bot *into* the village's seven genes, which works
+when your strategy really is seven numbers and fails quietly when it is not.
+Most real strategies are not: the logic lives in a function, and no amount of
+matching on module-level constants will find it.
+
+So there is a second way in. Declare a function, and the village runs it:
+
+```python
+def propose(context):
+    orders = []
+    for symbol in context.universe:
+        if context.quantity(symbol) == 0 and context.price(symbol):
+            orders.append({"symbol": symbol, "side": "buy", "notional": 5000,
+                           "rationale": "why I want this"})
+    return orders
+```
+
+Point a firm at the file in `config/firm_config.yaml`:
+
+```yaml
+firms:
+  my_desk:
+    name: "My Desk"
+    capital_allocation: 50000
+    universe: [SPY, QQQ]
+    bot: bots/my_bot.py
+```
+
+See `example_adapter.py` for a working one.
+
+**What you get.** One argument, holding what a strategy needs and nothing else:
+
+| | |
+|---|---|
+| `context.universe` | the symbols this firm may trade |
+| `context.cash` / `context.equity` | Decimals |
+| `context.price(symbol)` | the latest mark, or `None` |
+| `context.closes(symbol, n)` | the last n closes, oldest first |
+| `context.quantity(symbol)` | how much you hold — `0` if nothing |
+| `context.as_of` | the timestamp of the latest bar |
+
+Not the store, not the database, not the gate, not the other firms' books.
+
+**What you return.** A list of dicts with `symbol`, `side`, and either
+`quantity` or `notional`. `rationale` is optional and worth writing — it is
+what the audit trail shows when somebody asks why the firm bought that.
+
+**What the village still does.** Everything: your order meets the same risk
+manager, the same conscience, the same position sizing and the same audit row
+as anything the built-in analysts produce. You decide what you want. You do not
+decide what happens.
+
+**This runs your file**, which nothing else here does — the court and the
+importer parse with `ast` and never execute, because they read files you might
+have been handed. A bot runs only when a firm's config names it. Dropping a
+file in this folder never causes it to be executed.
+
+A bot that raises is reported and skipped. One that hangs is abandoned after
+ten seconds. One that returns nonsense has the nonsense dropped and the rest
+kept. In every case the firm has a quiet tick, the reason appears in the tick
+summary, and the village carries on.
+
 ## Bringing in a bot written for something else
 
 If your file does not already have `GENOME` and `UNIVERSE`, adapt it first:

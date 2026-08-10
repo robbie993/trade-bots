@@ -66,6 +66,7 @@ class TickReport:
     rulings: list = field(default_factory=list)
     carried_out: list = field(default_factory=list)
     village: list = field(default_factory=list)
+    bot_notes: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -87,6 +88,8 @@ class TickReport:
             lines.append(f"  CARRIED OUT: {done}")
         for happening in self.village:
             lines.append(f"  VILLAGE: {happening}")
+        for note in self.bot_notes:
+            lines.append(f"  BOT: {note}")
         return "\n".join(lines)
 
 
@@ -450,7 +453,17 @@ class Ecosystem:
         venue = build_venue(record.venue, self.config, self.gate)
 
         flow = self.flow
-        for proposal in firm.propose(market, positions):
+        raw = firm.propose(market, positions)
+
+        # A bot that returned nothing usable looks exactly like a quiet day.
+        # Say which it was, or the first thing you do when a firm stops trading
+        # is go looking in the wrong place.
+        for complaint in getattr(firm, "bot_complaints", []):
+            report.bot_notes.append(f"{record.firm_key}: {complaint}")
+            flow.emit("firms", f"{record.firm_key}'s bot: {complaint[:70]}",
+                      kind="blocked", firm=record.firm_key, detail=complaint)
+
+        for proposal in raw:
             report.proposals += 1
             what = f"{proposal.side} {proposal.symbol}"
             flow.move("market", "firms", what, firm=record.firm_key,

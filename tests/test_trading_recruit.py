@@ -242,17 +242,54 @@ def test_the_shipped_example_bots_are_readable_and_safe():
     from src.trading.brain.evolver import BASE_GENOME
     from src.trading.court.evidence import gather
 
+    from src.trading import adapter
+
     files = [p for p in Path("bots").iterdir()
              if p.suffix.lower() in (".py", ".yaml", ".yml", ".json")]
     assert files, "bots/ should ship example strategies"
+
+    # Two kinds of example live here now, and they are judged differently. A
+    # genome file declares seven numbers and the court reads them without ever
+    # running the file. An adapter file declares a function, and the village
+    # runs it — see src/trading/adapter.py. Both must parse and both must
+    # reach outside nothing; only the first can be asked for a genome.
+    genome_files, adapter_files = [], []
     for path in files:
         evidence = gather(path)
         assert evidence.syntax_error is None, path.name
         assert evidence.is_safe, (path.name, evidence.dangerous_imports)
         assert not evidence.out_of_range, (path.name, evidence.out_of_range)
         assert not evidence.unknown_genes, (path.name, evidence.unknown_genes)
+
+        if path.suffix.lower() == ".py" and _has_entry_point(path):
+            adapter_files.append(path)
+            continue
+        genome_files.append(path)
         assert set(BASE_GENOME) <= set(evidence.genome), path.name
         assert evidence.universe, path.name
+
+    assert genome_files, "at least one genome example"
+    assert adapter_files, "at least one adapter example"
+    for path in adapter_files:
+        assert callable(adapter.load(path)), path.name
+
+
+def _has_entry_point(path) -> bool:
+    """Does this file define a function the village would call?
+
+    Read with `ast` rather than imported: deciding *whether* a file is an
+    adapter must not require running it.
+    """
+    import ast
+
+    from src.trading.adapter import ENTRY_POINTS
+
+    tree = ast.parse(path.read_text())
+    names = {
+        node.name for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    return bool(names & set(ENTRY_POINTS))
 
 
 # =========================================================================
