@@ -215,6 +215,49 @@ def test_a_reachable_database_is_served_even_in_public_mode(village, monkeypatch
     assert village().get("/village").status_code == 200
 
 
+def test_an_empty_database_is_told_apart_from_a_missing_one(monkeypatch, tmp_path):
+    """A freshly attached database connects fine and has no tables.
+
+    The first version of the probe only checked that a connection opened,
+    which an empty database does perfectly well — so the page rendered and
+    then crashed on the first real query with `no such table: firms`. That is
+    the state every new deployment starts in, so it needed its own answer and
+    its own instruction.
+    """
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'never-migrated.db'}")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    client = TestClient(web.app, raise_server_exceptions=False)
+
+    assert deploy.database_state() == "empty"
+    response = client.get("/village")
+    assert response.status_code == 503
+    assert "database is empty" in response.text
+    assert "init-db" in response.text          # and what to do about it
+    assert client.get("/api/status").json()["error"] == "the database is empty"
+
+
+def test_a_migrated_database_is_served(monkeypatch, tmp_path):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'good.db'}")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    from src.cli import main
+
+    main(["init-db"])
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    assert deploy.database_state() == "ok"
+    assert TestClient(web.app).get("/village").status_code == 200
+
+
 def test_an_unreachable_postgres_is_named_as_such(monkeypatch, tmp_path):
     monkeypatch.setenv("MVV_PUBLIC", "1")
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nope")

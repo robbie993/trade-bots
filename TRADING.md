@@ -837,6 +837,27 @@ from the scheme alone was wrong in both directions: it refused a perfectly
 good SQLite file when previewing the mirror locally, and it would have served
 pages against a Postgres URL that does not answer.
 
+The probe distinguishes three states, because they need different actions:
+
+| | |
+|---|---|
+| **unreachable** | nothing answers — wrong host, wrong credentials, no disk |
+| **empty** | it connects, but nobody has run the migrations against it |
+| **ok** | serve the mirror |
+
+**Empty** is the state every new deployment starts in — a freshly attached
+database has no tables — and it is the one that used to get through. Checking
+only that a connection *opened* let an empty database pass, and the page then
+crashed on the first real query with `no such table: firms`. Point the
+migrations at it once, from anywhere that can reach it:
+
+```bash
+DATABASE_URL=<your url> python -m src.main init-db
+```
+
+The deployment will not do it for you. It is read-only, and running schema
+changes from a public URL is not read-only.
+
 You do not have to name it `DATABASE_URL`. Managed add-ons each invent their
 own variable and none of them is that one — Vercel Postgres and Neon set
 `POSTGRES_URL`, Vercel's Prisma preset sets `POSTGRES_PRISMA_URL` — so those

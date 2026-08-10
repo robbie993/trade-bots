@@ -76,6 +76,17 @@ UNREACHABLE = (
 )
 
 
+NO_SCHEMA = (
+    "<div class='card alarm'><strong>The database is empty.</strong> "
+    "It connects, but the tables have never been created — a freshly attached "
+    "database is empty by definition. Point the migrations at it once, from "
+    "anywhere that can reach it:<br>"
+    "<code>DATABASE_URL=&lt;your url&gt; python -m src.main init-db</code><br>"
+    "This deployment will not do it for you: it is read-only, and running "
+    "schema changes from a public URL is not read-only.</div>"
+)
+
+
 def is_public() -> bool:
     """Whether this process should refuse to change anything."""
     forced = os.environ.get("MVV_PUBLIC", "").strip().lower()
@@ -100,40 +111,51 @@ def storage_is_durable() -> bool:
     return not is_public()
 
 
-_REACHABLE: Optional[bool] = None
+# "ok" | "unreachable" | "empty". Cached: a serverless invocation is short,
+# and probing per request costs more than it tells you.
+_STATE: Optional[str] = None
+
+# Enough of the schema to know `init-db` has been run. Not the full list —
+# this is a liveness check, not a migration checker.
+CORE_TABLES = ("experiments", "human_approvals", "cash_flow")
 
 
-def database_ok(force: bool = False) -> bool:
-    """Whether the database can actually be opened.
+def database_state(force: bool = False) -> str:
+    """Whether the database can be opened, and whether it has been migrated.
 
-    Probed rather than inferred from the URL. The first version decided from
-    the scheme alone, which was wrong in both directions: it refused a
-    perfectly good SQLite file when previewing the mirror locally, and it would
-    have happily served pages against a Postgres URL that does not answer.
-
-    Cached for the life of the process. A serverless invocation is short and a
-    connection check per request would cost more than it tells you.
+    Two failures, not one, and they need different instructions. The first
+    version only checked that a connection opened — which an empty database
+    does perfectly well, so the page then crashed on the first real query with
+    `no such table: firms`. A freshly attached Postgres is empty by
+    definition, so that was the state every new deployment would land in.
     """
-    global _REACHABLE
-    if _REACHABLE is not None and not force:
-        return _REACHABLE
+    global _STATE
+    if _STATE is not None and not force:
+        return _STATE
     try:
         from .config import Config
         from .db.connection import Database
 
         db = Database.from_url(Config().database_url)
         try:
-            db.table_names()
+            tables = set(db.table_names())
         finally:
             db.close()
-        _REACHABLE = True
-    except Exception:  # noqa: BLE001 - any failure is the same answer here
-        _REACHABLE = False
-    return _REACHABLE
+    except Exception:  # noqa: BLE001 - any failure to connect is one answer
+        _STATE = "unreachable"
+        return _STATE
+    _STATE = "ok" if set(CORE_TABLES) <= tables else "empty"
+    return _STATE
+
+
+def database_ok(force: bool = False) -> bool:
+    return database_state(force) == "ok"
 
 
 def unavailable_notice() -> str:
     """Why there is nothing to show, in the terms that actually apply."""
+    if database_state() == "empty":
+        return NO_SCHEMA
     if not storage_is_durable():
         return NO_DATABASE
     return UNREACHABLE
@@ -209,7 +231,7 @@ def install(app) -> None:
         # is in a log nobody reads.
         if not database_ok():
             return _explain(request, unavailable_notice() + BANNER, 503,
-                            "the database is not reachable")
+                            f"the database is {database_state()}")
 
         try:
             response = await call_next(request)
@@ -237,8 +259,10 @@ def install(app) -> None:
 __all__ = [
     "BANNER",
     "NO_DATABASE",
+    "NO_SCHEMA",
     "UNREACHABLE",
     "database_ok",
+    "database_state",
     "unavailable_notice",
     "install",
     "is_public",
