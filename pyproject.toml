@@ -8,10 +8,29 @@ version = "1.0.0"
 description = "Minimum Viable Village Phase 1 — the Experiment Ledger"
 readme = "README.md"
 requires-python = ">=3.10"
-# The core loop runs on the standard library alone. Everything else is an
-# extra, so the thing that decides whether to spend money has no supply chain.
-# requirements.txt installs the full stack from spec section 11.2.
-dependencies = []
+
+# What a *deployed* copy of this application needs in order to answer a
+# request. Nothing more: no pandas, no analysis stack, no test tooling.
+#
+# This list used to be empty, with everything in extras, on the grounds that
+# the thing deciding whether to spend money should have no supply chain. The
+# core loop still has none — that is a property of the code, and `mvv tick`,
+# the ledger, the kill criteria and the whole trading loop import nothing
+# outside the standard library. But an empty list is read by a host as
+# "nothing to install", which is exactly what Vercel did: it installed no
+# packages, and the deployment died on `No module named 'fastapi'`.
+#
+# So the four things the web tier genuinely cannot run without are declared
+# here, and everything optional stays an extra.
+dependencies = [
+    "fastapi>=0.100.0",           # the app itself
+    "uvicorn>=0.23.0",            # `mvv serve`; a host supplies its own server
+    "python-multipart>=0.0.6",    # FastAPI raises at import if Form/UploadFile
+                                  # are declared without it — the next failure
+                                  # after fastapi, and a confusing one
+    "psycopg[binary]>=3.1",       # any hosted deployment needs Postgres, since
+                                  # serverless disks do not persist
+]
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
@@ -30,14 +49,20 @@ mvv = "src.cli:main"
 include = ["src*"]
 
 # Vercel could not work out which of several FastAPI apps to serve — there is
-# one in src/agents/web.py and one in the tests. This names it.
+# one in src/agents/web.py and one in the tests. This names one.
+#
+# It points at src/asgi.py rather than the app itself: that module loads the
+# real application and, if the import fails, serves the traceback instead of
+# letting the platform report FUNCTION_INVOCATION_FAILED with the cause in a
+# log. The fallback imports nothing, so it still answers when the reason is
+# that the dependencies are missing.
 #
 # Read src/deploy.py before pointing a real deployment at this: a hosted app
 # runs read-only, because the approval gate has no authentication and does not
 # belong on a public URL. It also needs DATABASE_URL to be Postgres; serverless
 # disks do not persist, so the default SQLite file would lose every write.
 [tool.vercel]
-entrypoint = "src.agents.web:app"
+entrypoint = "src.asgi:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

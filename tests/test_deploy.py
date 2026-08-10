@@ -154,12 +154,181 @@ def test_the_page_says_it_is_a_mirror(village, monkeypatch):
 
 
 def test_an_ephemeral_database_is_called_out(village, monkeypatch):
-    """Serverless disks do not persist; SQLite there loses every write."""
+    """Serverless disks do not persist; SQLite there cannot be written."""
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.delenv("MVV_PUBLIC", raising=False)
     body = village().get("/village").text
-    assert "No database" in body
+    assert "does not update" in body
     assert "DATABASE_URL" in body
+
+
+def test_a_page_that_rendered_never_claims_there_is_no_database(
+    village, monkeypatch
+):
+    """The banner used to contradict the page it was sitting on top of.
+
+    This notice is only ever reached after `database_ok()` has passed, so the
+    firms below it were just read out of a database. Saying "No database"
+    there was simply false — it asked `storage_is_durable()`, which judges the
+    URL scheme rather than the database, and calls a working SQLite file
+    not durable.
+    """
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    body = village().get("/village").text
+
+    assert "No database" not in body
+    assert "alpha" in body          # the page did render, out of the database
+
+
+# =========================================================================
+# a database it cannot open
+#
+# The build went green and then every request returned
+# FUNCTION_INVOCATION_FAILED. The handler opens the database before rendering
+# anything, so on a host with no writable disk it raised while connecting —
+# and a banner rendered *after* the handler never got written, because there
+# was no response to write it into.
+# =========================================================================
+@pytest.fixture
+def unopenable(monkeypatch, tmp_path):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////proc/nonexistent/mvv.db")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    return TestClient(web.app, raise_server_exceptions=False)
+
+
+def test_an_unopenable_database_explains_itself_instead_of_crashing(unopenable):
+    for path in ("/", "/village", "/village/flow"):
+        response = unopenable.get(path)
+        assert response.status_code == 503, path
+        assert "No database" in response.text, path
+
+
+def test_the_api_says_it_in_json(unopenable):
+    response = unopenable.get("/api/status")
+    assert response.status_code == 503
+    assert response.json()["ok"] is False
+    assert response.json()["read_only"] is True
+
+
+def test_writes_are_still_refused_before_anything_else(unopenable):
+    """The 403 does not depend on the database being readable."""
+    assert unopenable.post("/village/actions/tick").status_code == 403
+
+
+def test_a_reachable_database_is_served_even_in_public_mode(village, monkeypatch):
+    """Previewing the mirror locally must not report a missing database.
+
+    The first version decided from the URL scheme alone, which refused a
+    perfectly good SQLite file and would have served pages against a Postgres
+    URL that does not answer. It is probed now.
+    """
+    monkeypatch.setenv("MVV_PUBLIC", "1")
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert village().get("/village").status_code == 200
+
+
+def test_an_empty_database_is_told_apart_from_a_missing_one(monkeypatch, tmp_path):
+    """A freshly attached database connects fine and has no tables.
+
+    The first version of the probe only checked that a connection opened,
+    which an empty database does perfectly well — so the page rendered and
+    then crashed on the first real query with `no such table: firms`. That is
+    the state every new deployment starts in, so it needed its own answer and
+    its own instruction.
+    """
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'never-migrated.db'}")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    client = TestClient(web.app, raise_server_exceptions=False)
+
+    assert deploy.database_state() == "empty"
+    response = client.get("/village")
+    assert response.status_code == 503
+    assert "database is empty" in response.text
+    assert "init-db" in response.text          # and what to do about it
+    assert client.get("/api/status").json()["error"] == "the database is empty"
+
+
+def test_a_broken_database_is_explained_even_when_the_host_is_not_detected(
+    monkeypatch, tmp_path
+):
+    """The guard must not depend on guessing the platform.
+
+    Everything here used to be installed only when `is_public()` returned
+    true, so when the platform guess was wrong the middleware was simply
+    absent and the handler crashed exactly as it had before — which is the
+    failure this module exists to prevent. Refusing writes is about being
+    public; a database that cannot be opened is not.
+    """
+    for marker in deploy.HOSTED_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.setenv("MVV_PUBLIC", "0")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////proc/nonexistent/mvv.db")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    client = TestClient(web.app, raise_server_exceptions=False)
+
+    assert deploy.is_public() is False
+    response = client.get("/village")
+    assert response.status_code == 503
+    # "did not answer", not "no writable disk": the ephemeral-storage
+    # explanation is about serverless hosts and would be wrong here.
+    assert "did not answer" in response.text
+    # ...and no public-mode banner, because it is not public.
+    assert "Read-only mirror" not in response.text
+
+
+def test_a_runtime_only_marker_is_enough(monkeypatch):
+    """VERCEL is set at build time; VERCEL_URL is what exists at invoke time."""
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    for marker in deploy.HOSTED_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.setenv("VERCEL_URL", "trade-bots.vercel.app")
+    assert deploy.is_public() is True
+
+
+def test_a_migrated_database_is_served(monkeypatch, tmp_path):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'good.db'}")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    from src.cli import main
+
+    main(["init-db"])
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    assert deploy.database_state() == "ok"
+    assert TestClient(web.app).get("/village").status_code == 200
+
+
+def test_an_unreachable_postgres_is_named_as_such(monkeypatch, tmp_path):
+    monkeypatch.setenv("MVV_PUBLIC", "1")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nope")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    response = TestClient(web.app, raise_server_exceptions=False).get("/village")
+    assert response.status_code == 503
+    assert "did not answer" in response.text
 
 
 # =========================================================================
@@ -196,10 +365,42 @@ def test_stripping_leaves_navigation_alone():
     assert "<form" not in out and "<button" not in out and "type=file" not in out
 
 
-def test_the_vercel_entrypoint_is_declared():
-    """Vercel found several FastAPI apps and could not choose. This names one."""
+def test_a_button_that_is_really_a_link_keeps_its_link():
+    """The bug this catches: the mirror deleted its own way into the village.
+
+    Mission Control was reached through a <button> wrapped in an <a>, which is
+    navigation wearing a button's clothes. The stripper saw a button and
+    removed it, taking the label and the only prominent link with it — on the
+    one page where a reader has nothing else to click.
+    """
+    html = "<a class='btn go' href='/village'><button>Mission Control</button></a>"
+    out = deploy.strip_controls(html)
+
+    assert "href='/village'" in out
+    assert "Mission Control" in out
+    assert "<button" not in out          # the element still goes
+
+
+def test_the_hosted_mirror_can_still_reach_mission_control(village, monkeypatch):
+    """End to end: the link survives on the page a visitor actually lands on."""
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    body = village().get("/").text
+
+    assert "/village" in body
+    assert "Mission Control" in body
+    assert "<button" not in body
+
+
+def test_the_vercel_entrypoint_goes_through_the_shim():
+    """Not the app directly — see src/asgi.py and tests/test_asgi.py.
+
+    Pointing the platform at the app means an import failure is reported as
+    FUNCTION_INVOCATION_FAILED with the cause in a log. The shim loads the app
+    and serves the traceback when it cannot.
+    """
     import tomllib
     from pathlib import Path
 
     config = tomllib.loads(Path("pyproject.toml").read_text())
-    assert config["tool"]["vercel"]["entrypoint"] == "src.agents.web:app"
+    assert config["tool"]["vercel"]["entrypoint"] == "src.asgi:app"

@@ -785,12 +785,21 @@ wrong warning teaches you to ignore the section that matters.
 
 The build error Vercel gives you is real and its suggested fix is the right
 one — there are two FastAPI apps in the tree and it cannot pick. That is now
-declared:
+declared, pointing at a shim rather than at the app itself:
 
 ```toml
 [tool.vercel]
-entrypoint = "src.agents.web:app"
+entrypoint = "src.asgi:app"
 ```
+
+`src/asgi.py` loads the real application and, when that import fails, serves
+the traceback instead. A serverless platform reports *any* failure to load as
+one opaque `FUNCTION_INVOCATION_FAILED`, with the cause in a log you have to
+go and find — three rounds were spent guessing at one. **The fallback imports
+nothing**: not FastAPI, not Starlette, nothing from this repository, because
+the most likely reason an app fails to load on a new host is that its
+dependencies were never installed, and a fallback built on those dependencies
+would say nothing at all. When the import succeeds, this module *is* the app.
 
 But making the build pass is the easy half. **A hosted deployment runs
 read-only**, and that is not a limitation to work around — it is the point.
@@ -825,8 +834,38 @@ the part you can verify by reading `src/deploy.py`.
 Serverless filesystems are read-only apart from a per-instance `/tmp` that
 disappears between requests, so the default SQLite file cannot work: every
 tick, approval and fill would be written to storage that is about to vanish.
-Attach Postgres. If you do not, the page says so rather than half-working, and
-the audit vault is off there for the same reason.
+Attach Postgres. If you do not, **every page answers 503 with the reason**
+before the handler runs — checked up front rather than after, because every
+page opens the database to render, so a handler on a host with no writable
+disk raises while connecting and there is no response left to put a banner in.
+That is what `FUNCTION_INVOCATION_FAILED` was. The audit vault is off there for
+the same reason.
+
+Whether the database works is *probed*, not inferred from the URL. Deciding
+from the scheme alone was wrong in both directions: it refused a perfectly
+good SQLite file when previewing the mirror locally, and it would have served
+pages against a Postgres URL that does not answer.
+
+The probe distinguishes three states, because they need different actions:
+
+| | |
+|---|---|
+| **unreachable** | nothing answers — wrong host, wrong credentials, no disk |
+| **empty** | it connects, but nobody has run the migrations against it |
+| **ok** | serve the mirror |
+
+**Empty** is the state every new deployment starts in — a freshly attached
+database has no tables — and it is the one that used to get through. Checking
+only that a connection *opened* let an empty database pass, and the page then
+crashed on the first real query with `no such table: firms`. Point the
+migrations at it once, from anywhere that can reach it:
+
+```bash
+DATABASE_URL=<your url> python -m src.main init-db
+```
+
+The deployment will not do it for you. It is read-only, and running schema
+changes from a public URL is not read-only.
 
 You do not have to name it `DATABASE_URL`. Managed add-ons each invent their
 own variable and none of them is that one — Vercel Postgres and Neon set

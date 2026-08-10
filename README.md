@@ -45,6 +45,11 @@ export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
 ./scripts/reset_db.sh
 ```
 
+Putting it on a public URL: see **[HOSTING.md](HOSTING.md)**. The short version
+is that a hosted copy is a read-only mirror — it shows the village and changes
+nothing — because the approval gate has no authentication and does not belong
+on the internet. The console stays on your machine.
+
 Running it on **real products**, with no API credentials — enter them by hand:
 
 ```bash
@@ -80,7 +85,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 826 tests, no database server, no network
+python -m pytest            # 847 tests, no database server, no network
 ```
 
 ---
@@ -90,6 +95,7 @@ python -m pytest            # 826 tests, no database server, no network
 ```
 src/
 ├── config.py               all tunables, the whole risk surface in one file
+├── asgi.py                 the deploy entrypoint; reports its own import failure
 ├── deploy.py               hosted = read-only; the gate is not a public URL
 ├── money.py                Decimal helpers — no float ever touches cash
 ├── kill_criteria.py        §4 thresholds, pure functions

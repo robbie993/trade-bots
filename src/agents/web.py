@@ -52,10 +52,6 @@ try:
 except Exception:  # pragma: no cover - the gate must serve with or without it
     _village_router = None
 
-# A hosted deployment runs read-only: see src/deploy.py. Installed last so the
-# middleware wraps every router mounted above it, including any added later.
-from ..deploy import install as _install_public  # noqa: E402
-
 # The same numbers as JSON, for anything that is not this browser. Read-only:
 # there is no POST in that router, so mounting it cannot widen what the web
 # tier is able to do.
@@ -66,7 +62,31 @@ try:
 except Exception:  # pragma: no cover
     _api_router = None
 
-_install_public(app)
+# A hosted deployment runs read-only, and a broken one says why: see
+# src/deploy.py. Installed last so the middleware wraps every router above it.
+#
+# Wrapped, because a serverless platform reports an import failure as a generic
+# crash with the cause in a log nobody reads. If setting this up fails, the app
+# still answers — with the traceback that explains it.
+_BOOT_ERROR = ""
+try:
+    from ..deploy import install as _install_public
+
+    _install_public(app)
+except Exception:  # pragma: no cover - the point is to survive the unexpected
+    import traceback
+
+    _BOOT_ERROR = traceback.format_exc()
+
+    @app.get("/{_path:path}", response_class=HTMLResponse)
+    def _boot_failed(_path: str = "") -> HTMLResponse:
+        return HTMLResponse(
+            "<h1>The Village did not start</h1>"
+            "<p>The application imported but could not finish setting itself "
+            "up. This is the reason:</p>"
+            f"<pre>{html.escape(_BOOT_ERROR)}</pre>",
+            status_code=500,
+        )
 
 
 def context():
@@ -108,11 +128,12 @@ th { color: var(--muted); font-weight: 600; }
 .good { color: var(--good); }
 .warn { color: var(--warn); }
 form { display: inline; }
-button { font: inherit; padding: .5rem 1rem; margin: .25rem .25rem 0 0;
+button, a.btn { font: inherit; padding: .5rem 1rem; margin: .25rem .25rem 0 0;
          border-radius: 6px; border: 1px solid var(--line); cursor: pointer;
          background: var(--bg); color: var(--fg); }
+a.btn { display: inline-block; text-decoration: none; }
 button.kill { border-color: var(--bad); color: var(--bad); }
-button.go { border-color: var(--good); color: var(--good); }
+button.go, a.btn.go { border-color: var(--good); color: var(--good); }
 footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 """
 
@@ -237,8 +258,8 @@ def index() -> HTMLResponse:
             f"<h1>Human Approval Gate</h1>"
             f"<p class=muted>Nothing here spends money. Decisions are recorded; the "
             f"orchestrator acts on them on its next tick.</p>"
-            f"<div class=card><a href='/village'><button class=go>"
-            f"Mission Control &rarr;</button></a> "
+            f"<div class=card><a class='btn go' href='/village'>"
+            f"Mission Control &rarr;</a> "
             f"<span class=muted>firms, brokerage, court, competition, market, "
             f"sandbox</span></div>"
             f"{stop_html}"
