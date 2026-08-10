@@ -37,7 +37,17 @@ INTERVAL="${MVV_TICK_INTERVAL:-60}"
 # Local, always. See the note above about the gate.
 unset VERCEL VERCEL_URL VERCEL_ENV VERCEL_REGION
 export MVV_PUBLIC=0
-export DATABASE_URL="${MVV_LOCAL_DB:-sqlite:///./data/village.db}"
+# Deliberately NOT setting DATABASE_URL to some private path. The CLI has its
+# own default (data/mvv.db), and a script that invents a different one gives you
+# two databases: the village runs on one, and every command you type by hand
+# talks to the other. That failure is silent and reads as "no such table".
+#
+# So: clear anything pointing at a hosted database, and let the same default
+# everything else in this repository uses apply. MVV_LOCAL_DB still overrides it
+# when you want a separate book on purpose.
+if [ -n "${MVV_LOCAL_DB:-}" ]; then
+  export DATABASE_URL="$MVV_LOCAL_DB"
+fi
 export TRADE_AUTONOMY="${TRADE_AUTONOMY:-council}"
 export TRADE_LIVING="${TRADE_LIVING:-on}"
 
@@ -80,7 +90,29 @@ stop_one() {  # stop_one <name> <pidfile>
 case "${1:-start}" in
 
 start)
-  echo "==> database: $DATABASE_URL"
+  echo "==> database: ${DATABASE_URL:-the default (data/mvv.db)}"
+  # An earlier version of this script invented its own database file, so the
+  # village ran on one book while every command typed by hand read another.
+  # If that file is still here, say so rather than quietly leaving it behind.
+  if [ -z "${MVV_LOCAL_DB:-}" ] && [ -f data/village.db ]; then
+    cat <<'EOF'
+
+    NOTE: data/village.db is left over from an earlier version of this script,
+    which used its own database file. Everything now shares the one the CLI
+    uses (data/mvv.db), so `trade recruit-watch` and friends see the same
+    village as the page does.
+
+    That old file still holds whatever it recorded. To carry it over, stop the
+    village and run:
+
+        mv data/mvv.db data/mvv.db.bak 2>/dev/null
+        mv data/village.db data/mvv.db
+        ./scripts/village.sh start      # init-db brings the schema up to date
+
+    Or ignore this and start fresh — nothing is lost until you delete it.
+
+EOF
+  fi
   python -m src.main init-db >/dev/null
   python -m src.main trade init >/dev/null
   echo "==> starting"
@@ -127,7 +159,6 @@ status)
   done
   python - <<'PY'
 import os
-os.environ.setdefault("DATABASE_URL", "sqlite:///./data/village.db")
 try:
     from src.config import Config
     from src.db.connection import Database
