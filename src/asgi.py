@@ -73,12 +73,11 @@ def _escape(text: str) -> str:
 # left as a traceback to interpret.
 MISSING_DEPS = (
     "<p><strong>This is a dependency that was never installed</strong>, not a "
-    "bug in the village. The host did not install <code>requirements.txt</code> "
-    "— often because <code>pyproject.toml</code> declares "
-    "<code>dependencies = []</code>, which is deliberate here (the core loop "
-    "runs on the standard library) and is read as \u201cnothing to install\u201d. "
-    "Declare the web extra for the deployment, or point the build at "
-    "<code>requirements.txt</code>.</p>"
+    "bug in the village. The host built the application without installing "
+    "what it imports. Check that the build read the <code>dependencies</code> "
+    "in <code>pyproject.toml</code> \u2014 an empty list there is read as "
+    "\u201cnothing to install\u201d \u2014 or point the build at "
+    "<code>requirements.txt</code>, which lists the full stack.</p>"
 )
 
 
