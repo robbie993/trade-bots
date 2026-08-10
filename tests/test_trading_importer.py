@@ -229,3 +229,65 @@ def test_an_unreadable_file_is_a_report_not_an_exception(tmp_path):
     report = scan(path)
     assert report.error
     assert "cannot be read" in report.summary()
+
+
+# =========================================================================
+# symbols, spelled the way the feed spells them
+#
+# A bot written against a crypto exchange says BTC/USD. The village's feed
+# says BTC-USD. Left alone the symbol resolves to nothing and the firm arrives
+# holding an empty universe with no explanation — which surfaces days later as
+# a leaderboard row that never trades.
+# =========================================================================
+def test_a_pair_is_respelled_for_the_feed():
+    from src.trading.importer import _feed_symbol
+
+    assert _feed_symbol("BTC/USD") == "BTC-USD"
+    assert _feed_symbol("ETH_USD") == "ETH-USD"
+    assert _feed_symbol("BTC:USD") == "BTC-USD"
+
+
+def test_a_venue_prefix_is_dropped():
+    from src.trading.importer import _feed_symbol
+
+    assert _feed_symbol("BINANCE:BTC/USDT") == "BTC-USD"
+    assert _feed_symbol("COINBASE-ETH-USD") == "ETH-USD"
+
+
+def test_a_stablecoin_quote_becomes_dollars():
+    from src.trading.importer import _feed_symbol
+
+    assert _feed_symbol("BTC/USDT") == "BTC-USD"
+    assert _feed_symbol("SOL/USDC") == "SOL-USD"
+
+
+def test_a_symbol_the_feed_already_understands_is_left_alone():
+    from src.trading.importer import _feed_symbol
+
+    for symbol in ("SPY", "AAPL", "BTC-USD", "QQQ"):
+        assert _feed_symbol(symbol) == symbol
+
+
+def test_the_respelling_is_reported_not_silent(tmp_path):
+    """A symbol quietly rewritten is a symbol you cannot check."""
+    from src.trading.importer import scan
+
+    path = tmp_path / "exchange_bot.py"
+    path.write_text('SYMBOLS = ["BTC/USD", "SPY"]\nparams = {"fast_ma": 9}\n')
+
+    report = scan(path)
+    assert report.universe == ("BTC-USD", "SPY")
+    assert report.renamed == {"BTC/USD": "BTC-USD"}
+    assert "respelled" in report.summary()
+    assert "BTC/USD -> BTC-USD" in report.summary()
+
+
+def test_nothing_respelled_says_nothing(tmp_path):
+    from src.trading.importer import scan
+
+    path = tmp_path / "equity_bot.py"
+    path.write_text('TICKERS = ["SPY", "QQQ"]\nparams = {"fast_ma": 9}\n')
+
+    report = scan(path)
+    assert report.renamed == {}
+    assert "respelled" not in report.summary()
