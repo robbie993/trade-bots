@@ -45,6 +45,11 @@ export DATABASE_URL=postgresql://mvv:mvv@localhost:5432/mvv
 ./scripts/reset_db.sh
 ```
 
+Putting it on a public URL: see **[HOSTING.md](HOSTING.md)**. The short version
+is that a hosted copy is a read-only mirror — it shows the village and changes
+nothing — because the approval gate has no authentication and does not belong
+on the internet. The console stays on your machine.
+
 Running it on **real products**, with no API credentials — enter them by hand:
 
 ```bash
