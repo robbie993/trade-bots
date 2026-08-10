@@ -57,6 +57,14 @@ _FORM = re.compile(r"<form\b.*?</form>", re.S)
 _BUTTON = re.compile(r"<button\b.*?</button>", re.S)
 _FILE_INPUT = re.compile(r"<input\b[^>]*type=file[^>]*>", re.I)
 
+# A <button> inside an <a> is navigation wearing a button's clothes. Deleting
+# it removes a link, not a control — which is how the hosted mirror lost its
+# only prominent way into Mission Control. Unwrap those first, keeping the
+# label and the link, and let the deletion below have the rest.
+_LINK_BUTTON = re.compile(
+    r"(<a\b[^>]*>\s*)<button\b[^>]*>(.*?)</button>(\s*</a>)", re.S
+)
+
 BANNER = (
     "<div class='card alarm'><strong>Read-only mirror.</strong> "
     "This deployment can show the village and change nothing: every write is "
@@ -80,6 +88,17 @@ UNREACHABLE = (
     "<div class='card alarm'><strong>The database did not answer.</strong> "
     "A database is configured but the connection failed — wrong host, wrong "
     "credentials, or it is not reachable from this deployment.</div>"
+)
+
+
+FROZEN_DATA = (
+    "<div class='card alarm'><strong>This data does not update.</strong> "
+    "The database being read is a SQLite file on a host with no writable disk, "
+    "so it can only be the snapshot that was deployed with the build. It is "
+    "real and it is readable — it just stopped at the moment it was uploaded. "
+    "Attach Postgres (<code>DATABASE_URL</code>, or the "
+    "<code>POSTGRES_URL</code> a managed add-on sets) for a village that keeps "
+    "moving.</div>"
 )
 
 
@@ -170,6 +189,7 @@ def unavailable_notice() -> str:
 
 def strip_controls(html: str) -> str:
     """Remove every control. Anchors survive — navigation is not a write."""
+    html = _LINK_BUTTON.sub(r"\1\2\3", html)
     html = _FORM.sub("", html)
     html = _BUTTON.sub("", html)
     html = _FILE_INPUT.sub("", html)
@@ -177,8 +197,19 @@ def strip_controls(html: str) -> str:
 
 
 def announce(html: str) -> str:
-    """Put the notice at the top of the page, wherever the page starts."""
-    notice = BANNER if storage_is_durable() else NO_DATABASE + BANNER
+    """Put the notice at the top of the page, wherever the page starts.
+
+    This runs only after ``database_ok()`` has passed — an unusable database
+    is answered before the handler, and never reaches a rendered page. So the
+    banner here must not claim there is *no* database: the page underneath it
+    was just read out of one. It used to say exactly that, because it asked
+    ``storage_is_durable()``, which judges the URL scheme rather than the
+    database, and answers "not durable" for a working SQLite file.
+
+    What is worth saying in that case is the true thing: the data is real but
+    frozen, because nothing can write to it here.
+    """
+    notice = BANNER if storage_is_durable() else FROZEN_DATA + BANNER
     if "<body>" in html:
         return html.replace("<body>", "<body>" + notice, 1)
     return notice + html
@@ -277,6 +308,7 @@ def install(app) -> None:
 
 __all__ = [
     "BANNER",
+    "FROZEN_DATA",
     "NO_DATABASE",
     "NO_SCHEMA",
     "UNREACHABLE",

@@ -154,12 +154,31 @@ def test_the_page_says_it_is_a_mirror(village, monkeypatch):
 
 
 def test_an_ephemeral_database_is_called_out(village, monkeypatch):
-    """Serverless disks do not persist; SQLite there loses every write."""
+    """Serverless disks do not persist; SQLite there cannot be written."""
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.delenv("MVV_PUBLIC", raising=False)
     body = village().get("/village").text
-    assert "No database" in body
+    assert "does not update" in body
     assert "DATABASE_URL" in body
+
+
+def test_a_page_that_rendered_never_claims_there_is_no_database(
+    village, monkeypatch
+):
+    """The banner used to contradict the page it was sitting on top of.
+
+    This notice is only ever reached after `database_ok()` has passed, so the
+    firms below it were just read out of a database. Saying "No database"
+    there was simply false — it asked `storage_is_durable()`, which judges the
+    URL scheme rather than the database, and calls a working SQLite file
+    not durable.
+    """
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    body = village().get("/village").text
+
+    assert "No database" not in body
+    assert "alpha" in body          # the page did render, out of the database
 
 
 # =========================================================================
@@ -344,6 +363,33 @@ def test_stripping_leaves_navigation_alone():
     out = deploy.strip_controls(html)
     assert "<a href='/village/firms/alpha'>alpha</a>" in out
     assert "<form" not in out and "<button" not in out and "type=file" not in out
+
+
+def test_a_button_that_is_really_a_link_keeps_its_link():
+    """The bug this catches: the mirror deleted its own way into the village.
+
+    Mission Control was reached through a <button> wrapped in an <a>, which is
+    navigation wearing a button's clothes. The stripper saw a button and
+    removed it, taking the label and the only prominent link with it — on the
+    one page where a reader has nothing else to click.
+    """
+    html = "<a class='btn go' href='/village'><button>Mission Control</button></a>"
+    out = deploy.strip_controls(html)
+
+    assert "href='/village'" in out
+    assert "Mission Control" in out
+    assert "<button" not in out          # the element still goes
+
+
+def test_the_hosted_mirror_can_still_reach_mission_control(village, monkeypatch):
+    """End to end: the link survives on the page a visitor actually lands on."""
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    body = village().get("/").text
+
+    assert "/village" in body
+    assert "Mission Control" in body
+    assert "<button" not in body
 
 
 def test_the_vercel_entrypoint_goes_through_the_shim():
