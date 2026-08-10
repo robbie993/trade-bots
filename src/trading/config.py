@@ -21,11 +21,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from decimal import Decimal
 from pathlib import Path
 
 from ..config import REPO_ROOT, _env_bool, _env_decimal, _env_int
 from ..money import D
+
+
+if TYPE_CHECKING:  # the real import lives in living.py, which imports this module
+    from .living import LivingConfig
 
 
 @dataclass(frozen=True)
@@ -293,10 +298,18 @@ class TradingConfig:
     kill: FirmKillConfig = field(default_factory=FirmKillConfig)
     brokerage: BrokerageConfig = field(default_factory=BrokerageConfig)
     autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
+    living: "LivingConfig" = field(default_factory=lambda: _living_config())
     brain: BrainConfig = field(default_factory=BrainConfig)
     heart: HeartConfig = field(default_factory=HeartConfig)
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     data: DataConfig = field(default_factory=DataConfig)
+
+
+def _living_config():
+    """Imported late: living.py reads TradingConfig, so this cannot be a cycle."""
+    from .living import LivingConfig
+
+    return LivingConfig()
 
 
 def load_trading_config() -> TradingConfig:

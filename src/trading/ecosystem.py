@@ -65,6 +65,7 @@ class TickReport:
     lessons: int = 0
     rulings: list = field(default_factory=list)
     carried_out: list = field(default_factory=list)
+    village: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -84,6 +85,8 @@ class TickReport:
             lines.append(f"  COUNCIL: {ruling}")
         for done in self.carried_out:
             lines.append(f"  CARRIED OUT: {done}")
+        for happening in self.village:
+            lines.append(f"  VILLAGE: {happening}")
         return "\n".join(lines)
 
 
@@ -118,6 +121,7 @@ class Ecosystem:
         self._court = None
         self._tokens = None
         self._arena = None
+        self._living = None
         self._market = None
         self._sandbox = None
 
@@ -153,6 +157,14 @@ class Ecosystem:
 
             self._tokens = TokenLedger(self.db)
         return self._tokens
+
+    @property
+    def living(self):
+        if self._living is None:
+            from .living import Living
+
+            self._living = Living(self)
+        return self._living
 
     @property
     def arena(self):
@@ -388,6 +400,10 @@ class Ecosystem:
             report.carried_out = self.apply_approvals()
             for done in report.carried_out:
                 flow.move("gate", "brokerage", str(done)[:110])
+
+        # The arena, the bazaar and the tavern. Off unless TRADE_LIVING is set,
+        # and incapable of moving cash when it is on — see src/trading/living.py.
+        self.living.run(market, report)
 
         drawn = self.learner.lessons(report.oversight.cards)
         fresh = self.learner.new_lessons(drawn)

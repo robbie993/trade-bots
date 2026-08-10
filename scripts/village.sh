@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# The village, running on its own.
+#
+#     ./scripts/village.sh start     the loop and the console, in the background
+#     ./scripts/village.sh status    what is alive, and when it last ticked
+#     ./scripts/village.sh logs      follow what it is doing
+#     ./scripts/village.sh stop      stop both
+#
+# `local_console.sh` serves pages and nothing else: close the browser and the
+# village stops, because the only thing ticking was a button in a tab. This
+# starts two processes instead — the tick loop and the web console — so the
+# village keeps running while you look at Mission Control, look at the solar
+# view, look at nothing, or close the laptop lid.
+#
+# What it turns on, deliberately and visibly:
+#
+#   TRADE_AUTONOMY=council   the council rules on what the evidence settles,
+#                            and defers the rest to you. It has no panel for
+#                            live trading, by construction.
+#   TRADE_LIVING=on          the arena, bazaar and tavern run themselves. None
+#                            of them can move cash.
+#
+# Neither grants a dollar. Capital still stops at the gate, which is why this
+# is safe to leave running and why you will still find things waiting for you.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+RUN_DIR="run"
+LOG_DIR="logs"
+mkdir -p "$RUN_DIR" "$LOG_DIR" data
+
+HOST="${MVV_GATE_HOST:-127.0.0.1}"
+PORT="${MVV_GATE_PORT:-8000}"
+INTERVAL="${MVV_TICK_INTERVAL:-60}"
+
+# Local, always. See the note above about the gate.
+unset VERCEL VERCEL_URL VERCEL_ENV VERCEL_REGION
+export MVV_PUBLIC=0
+export DATABASE_URL="${MVV_LOCAL_DB:-sqlite:///./data/village.db}"
+export TRADE_AUTONOMY="${TRADE_AUTONOMY:-council}"
+export TRADE_LIVING="${TRADE_LIVING:-on}"
+
+LOOP_PID="$RUN_DIR/loop.pid"
+WEB_PID="$RUN_DIR/web.pid"
+
+alive() {  # alive <pidfile>
+  [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null
+}
+
+start_one() {  # start_one <name> <pidfile> <logfile> <command...>
+  local name="$1" pidfile="$2" logfile="$3"; shift 3
+  if alive "$pidfile"; then
+    echo "    $name already running (pid $(cat "$pidfile"))"
+    return
+  fi
+  nohup "$@" >>"$logfile" 2>&1 &
+  echo $! >"$pidfile"
+  echo "    $name started (pid $!) -> $logfile"
+}
+
+stop_one() {  # stop_one <name> <pidfile>
+  local name="$1" pidfile="$2"
+  if ! alive "$pidfile"; then
+    echo "    $name not running"
+    rm -f "$pidfile"
+    return
+  fi
+  local pid; pid="$(cat "$pidfile")"
+  kill "$pid" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.3
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  rm -f "$pidfile"
+  echo "    $name stopped"
+}
+
+case "${1:-start}" in
+
+start)
+  echo "==> database: $DATABASE_URL"
+  python -m src.main init-db >/dev/null
+  python -m src.main trade init >/dev/null
+  echo "==> starting"
+  start_one "tick loop" "$LOOP_PID" "$LOG_DIR/loop.log" \
+    python -m src.main trade run --interval "$INTERVAL"
+  start_one "console"   "$WEB_PID"  "$LOG_DIR/web.log" \
+    python -m src.main serve --host "$HOST" --port "$PORT"
+  sleep 2
+  cat <<EOF
+
+==> Mission Control:  http://${HOST}:${PORT}/village
+    Solar view:       http://${HOST}:${PORT}/village/solar
+
+The village is ticking every ${INTERVAL}s on its own. Close the browser, close
+this terminal — it keeps going. Capital still stops at the gate, so expect to
+find decisions waiting for you.
+
+    ./scripts/village.sh status
+    ./scripts/village.sh logs
+    ./scripts/village.sh stop
+
+EOF
+  ;;
+
+stop)
+  echo "==> stopping"
+  stop_one "tick loop" "$LOOP_PID"
+  stop_one "console"   "$WEB_PID"
+  ;;
+
+restart)
+  "$0" stop
+  "$0" start
+  ;;
+
+status)
+  for pair in "tick loop:$LOOP_PID" "console:$WEB_PID"; do
+    name="${pair%%:*}"; pidfile="${pair##*:}"
+    if alive "$pidfile"; then
+      echo "  $name: running (pid $(cat "$pidfile"))"
+    else
+      echo "  $name: stopped"
+    fi
+  done
+  python - <<'PY'
+import os
+os.environ.setdefault("DATABASE_URL", "sqlite:///./data/village.db")
+try:
+    from src.config import Config
+    from src.db.connection import Database
+
+    db = Database.from_url(Config().database_url)
+    if "flow_events" not in set(db.table_names()):
+        db.close()
+        print("  last tick: never (no database yet — run `village.sh start`)")
+        raise SystemExit(0)
+    row = db.query_one("SELECT MAX(created_at) AS last FROM flow_events")
+    db.close()
+    print(f"  last tick: {(row or {}).get('last') or 'never'}")
+except SystemExit:
+    raise
+except Exception as exc:
+    print(f"  last tick: unknown ({type(exc).__name__}: {exc})")
+PY
+  echo "  waiting on you:"
+  python -m src.main approvals 2>/dev/null | sed 's/^/    /' || true
+  ;;
+
+logs)
+  tail -f "$LOG_DIR/loop.log" "$LOG_DIR/web.log"
+  ;;
+
+*)
+  echo "usage: $0 {start|stop|restart|status|logs}" >&2
+  exit 1
+  ;;
+esac

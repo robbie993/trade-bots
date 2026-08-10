@@ -10,6 +10,8 @@ venv/
 .env
 data/*.db
 data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 data/notifications.log
 data/metrics.json
 data/products.json
@@ -25,6 +27,7 @@ htmlcov/
 uploads/
 processed/
 logs/
+run/
 CodeTribunal/
 
 # Trading Edition — the audit vault is this operator's trading record, and

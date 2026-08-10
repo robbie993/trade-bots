@@ -103,6 +103,67 @@ MVV_SEED_DAYS=45 ./scripts/local_console.sh
 
 ---
 
+## Leaving it running
+
+`local_console.sh` serves pages and nothing else. The autoplay button in
+Mission Control ticks the village from the browser, so closing the tab stops
+it — the only thing ticking was a page.
+
+To leave the village running on its own:
+
+```bash
+./scripts/village.sh start      # the tick loop and the console, in the background
+./scripts/village.sh status     # what is alive, when it last ticked, what waits on you
+./scripts/village.sh logs       # follow it
+./scripts/village.sh stop
+```
+
+That starts two processes. The village keeps ticking while you look at Mission
+Control, look at the solar view, look at nothing, or shut the laptop. Both
+write to the same SQLite file, which is why the connection now opens in WAL
+mode — the default journal makes a reader and a writer block each other and
+fail with "database is locked".
+
+It turns on two things, deliberately:
+
+| | |
+|---|---|
+| `TRADE_AUTONOMY=council` | the council rules on what the evidence settles and defers the rest to you. It has no panel for live trading, by construction |
+| `TRADE_LIVING=on` | the arena, bazaar and tavern run themselves |
+
+**Neither grants a dollar.** Capital still stops at the gate, which is what
+makes this safe to leave running — and why you will still come back to
+decisions waiting for you.
+
+### What the village does on its own
+
+With `TRADE_LIVING=on`, three quarters of the map that used to be scenery
+start doing things:
+
+| quarter | what happens | how often |
+|---|---|---|
+| **Arena** | a season of head-to-head bouts, and milestone awards | every 10 bars |
+| **Bazaar** | an idle firm lists the genome it is not using; someone with tokens to spare buys it | every 4 bars |
+| **Tavern** | firms with overlapping universes form an alliance; someone behind spies on someone ahead | every 3 bars |
+
+Two limits, both deliberate:
+
+- **The bazaar trades in tokens only.** Capital listings still exist and still
+  stop at the gate before a dollar moves — but the village will not file those
+  requests on its own, because a gate that fills up while you sleep becomes an
+  inbox to clear rather than a decision to make.
+- **The tavern cannot reach the money.** It is handed a read-only store and a
+  writer restricted to two tables, enforced in `sandbox/guard.py`. Espionage
+  copies a genome into a record; using it still means submitting it to the
+  strategy court like anything else.
+
+The clock is the market's bar date, not the wall clock, so replaying the same
+history produces the same village — the same alliance on the same day. Tune it
+with `TRADE_SEASON_EVERY`, `TRADE_BAZAAR_EVERY`, `TRADE_TAVERN_EVERY`, or turn
+the whole thing off by leaving `TRADE_LIVING` unset.
+
+---
+
 ## What the page is telling you
 
 The mirror always says which of these it is, so you never have to guess.
