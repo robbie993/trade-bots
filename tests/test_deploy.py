@@ -242,6 +242,47 @@ def test_an_empty_database_is_told_apart_from_a_missing_one(monkeypatch, tmp_pat
     assert client.get("/api/status").json()["error"] == "the database is empty"
 
 
+def test_a_broken_database_is_explained_even_when_the_host_is_not_detected(
+    monkeypatch, tmp_path
+):
+    """The guard must not depend on guessing the platform.
+
+    Everything here used to be installed only when `is_public()` returned
+    true, so when the platform guess was wrong the middleware was simply
+    absent and the handler crashed exactly as it had before — which is the
+    failure this module exists to prevent. Refusing writes is about being
+    public; a database that cannot be opened is not.
+    """
+    for marker in deploy.HOSTED_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.setenv("MVV_PUBLIC", "0")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////proc/nonexistent/mvv.db")
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    client = TestClient(web.app, raise_server_exceptions=False)
+
+    assert deploy.is_public() is False
+    response = client.get("/village")
+    assert response.status_code == 503
+    # "did not answer", not "no writable disk": the ephemeral-storage
+    # explanation is about serverless hosts and would be wrong here.
+    assert "did not answer" in response.text
+    # ...and no public-mode banner, because it is not public.
+    assert "Read-only mirror" not in response.text
+
+
+def test_a_runtime_only_marker_is_enough(monkeypatch):
+    """VERCEL is set at build time; VERCEL_URL is what exists at invoke time."""
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    for marker in deploy.HOSTED_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.setenv("VERCEL_URL", "trade-bots.vercel.app")
+    assert deploy.is_public() is True
+
+
 def test_a_migrated_database_is_served(monkeypatch, tmp_path):
     monkeypatch.setenv("VERCEL", "1")
     monkeypatch.delenv("MVV_PUBLIC", raising=False)

@@ -43,8 +43,15 @@ import re
 from typing import Optional
 
 # Set by the platform, not by us. Any of these means "you are not on a laptop".
-HOSTED_MARKERS = ("VERCEL", "AWS_LAMBDA_FUNCTION_NAME", "FUNCTIONS_WORKER_RUNTIME",
-                  "K_SERVICE", "RAILWAY_ENVIRONMENT", "FLY_APP_NAME", "DYNO")
+# Any of these means "you are not on a laptop". More than one per platform on
+# purpose: VERCEL is reliable at build time and VERCEL_URL/VERCEL_ENV at invoke
+# time, and getting this wrong used to disable the guard entirely.
+HOSTED_MARKERS = (
+    "VERCEL", "VERCEL_URL", "VERCEL_ENV", "VERCEL_REGION",
+    "AWS_LAMBDA_FUNCTION_NAME", "LAMBDA_TASK_ROOT",
+    "FUNCTIONS_WORKER_RUNTIME", "K_SERVICE", "RAILWAY_ENVIRONMENT",
+    "FLY_APP_NAME", "DYNO",
+)
 
 _FORM = re.compile(r"<form\b.*?</form>", re.S)
 _BUTTON = re.compile(r"<button\b.*?</button>", re.S)
@@ -199,21 +206,31 @@ def _explain(request, html: str, status: int, detail: str):
 
 
 def install(app) -> None:
-    """Refuse writes in middleware, so nothing has to remember to guard itself.
+    """Guard every request. Installed unconditionally, on purpose.
 
-    Deliberately a blanket rule on the HTTP method rather than a list of paths:
-    a route added next month is covered without anybody thinking about it,
-    which is the opposite of how the approval gate would otherwise erode.
+    The first version returned early unless ``is_public()`` — which made every
+    protection here depend on correctly guessing the platform from environment
+    variables. When the guess was wrong the middleware was simply absent and
+    the handler crashed exactly as it had before, which is the failure this
+    module exists to prevent.
+
+    So the split is by *what*, not by *where*:
+
+    * refusing writes and stripping controls are about being public, and stay
+      gated on ``is_public()``;
+    * a database that cannot be used is a known condition with a clear answer,
+      and gets that answer everywhere;
+    * an unexpected exception is only swallowed when public. Locally a
+      traceback belongs in your terminal, not behind a friendly page.
     """
-    if not is_public():
-        return
-
     from fastapi import Request
-    from fastapi.responses import HTMLResponse, PlainTextResponse
+    from fastapi.responses import PlainTextResponse
 
     @app.middleware("http")
-    async def read_only(request: Request, call_next):
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
+    async def guard(request: Request, call_next):
+        public = is_public()
+
+        if public and request.method not in ("GET", "HEAD", "OPTIONS"):
             return PlainTextResponse(
                 "This deployment is read-only.\n\n"
                 "It can show the village and change nothing. The approval gate "
@@ -223,21 +240,19 @@ def install(app) -> None:
                 status_code=403,
             )
 
-        # Answered before the handler runs, not after. Every page opens the
-        # database, so on a host with no writable disk and no Postgres attached
-        # the handler raises while connecting — and a banner rendered *after*
-        # the handler never gets written, because there is no response to write
-        # it into. The platform shows FUNCTION_INVOCATION_FAILED and the reason
-        # is in a log nobody reads.
+        # Answered before the handler runs. Every page opens the database to
+        # render, so on a host with no writable disk the handler raises while
+        # connecting — and a message rendered afterwards never gets written,
+        # because there is no response to write it into.
         if not database_ok():
-            return _explain(request, unavailable_notice() + BANNER, 503,
-                            f"the database is {database_state()}")
+            return _explain(request, unavailable_notice() + (BANNER if public else ""),
+                            503, f"the database is {database_state()}")
 
         try:
             response = await call_next(request)
         except Exception as exc:  # noqa: BLE001
-            # A readable page beats the platform's generic crash screen. Only
-            # in public mode: locally an exception should reach the terminal.
+            if not public:
+                raise
             return _explain(
                 request,
                 "<div class='card alarm'><strong>The village could not be "
@@ -247,8 +262,12 @@ def install(app) -> None:
                 f"{type(exc).__name__}: {exc}",
             )
 
+        if not public:
+            return response
         if not response.headers.get("content-type", "").startswith("text/html"):
             return response
+        from fastapi.responses import HTMLResponse
+
         body = b"".join([chunk async for chunk in response.body_iterator])
         return HTMLResponse(
             announce(strip_controls(body.decode())),

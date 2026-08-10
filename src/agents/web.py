@@ -52,10 +52,6 @@ try:
 except Exception:  # pragma: no cover - the gate must serve with or without it
     _village_router = None
 
-# A hosted deployment runs read-only: see src/deploy.py. Installed last so the
-# middleware wraps every router mounted above it, including any added later.
-from ..deploy import install as _install_public  # noqa: E402
-
 # The same numbers as JSON, for anything that is not this browser. Read-only:
 # there is no POST in that router, so mounting it cannot widen what the web
 # tier is able to do.
@@ -66,7 +62,31 @@ try:
 except Exception:  # pragma: no cover
     _api_router = None
 
-_install_public(app)
+# A hosted deployment runs read-only, and a broken one says why: see
+# src/deploy.py. Installed last so the middleware wraps every router above it.
+#
+# Wrapped, because a serverless platform reports an import failure as a generic
+# crash with the cause in a log nobody reads. If setting this up fails, the app
+# still answers — with the traceback that explains it.
+_BOOT_ERROR = ""
+try:
+    from ..deploy import install as _install_public
+
+    _install_public(app)
+except Exception:  # pragma: no cover - the point is to survive the unexpected
+    import traceback
+
+    _BOOT_ERROR = traceback.format_exc()
+
+    @app.get("/{_path:path}", response_class=HTMLResponse)
+    def _boot_failed(_path: str = "") -> HTMLResponse:
+        return HTMLResponse(
+            "<h1>The Village did not start</h1>"
+            "<p>The application imported but could not finish setting itself "
+            "up. This is the reason:</p>"
+            f"<pre>{html.escape(_BOOT_ERROR)}</pre>",
+            status_code=500,
+        )
 
 
 def context():

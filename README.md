@@ -80,7 +80,7 @@ Setup and the corrected component list are in [VILLAGE.md](VILLAGE.md).
 Tests:
 
 ```bash
-python -m pytest            # 826 tests, no database server, no network
+python -m pytest            # 837 tests, no database server, no network
 ```
 
 ---
