@@ -785,12 +785,21 @@ wrong warning teaches you to ignore the section that matters.
 
 The build error Vercel gives you is real and its suggested fix is the right
 one — there are two FastAPI apps in the tree and it cannot pick. That is now
-declared:
+declared, pointing at a shim rather than at the app itself:
 
 ```toml
 [tool.vercel]
-entrypoint = "src.agents.web:app"
+entrypoint = "src.asgi:app"
 ```
+
+`src/asgi.py` loads the real application and, when that import fails, serves
+the traceback instead. A serverless platform reports *any* failure to load as
+one opaque `FUNCTION_INVOCATION_FAILED`, with the cause in a log you have to
+go and find — three rounds were spent guessing at one. **The fallback imports
+nothing**: not FastAPI, not Starlette, nothing from this repository, because
+the most likely reason an app fails to load on a new host is that its
+dependencies were never installed, and a fallback built on those dependencies
+would say nothing at all. When the import succeeds, this module *is* the app.
 
 But making the build pass is the easy half. **A hosted deployment runs
 read-only**, and that is not a limitation to work around — it is the point.

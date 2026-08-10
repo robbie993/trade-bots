@@ -30,14 +30,20 @@ mvv = "src.cli:main"
 include = ["src*"]
 
 # Vercel could not work out which of several FastAPI apps to serve — there is
-# one in src/agents/web.py and one in the tests. This names it.
+# one in src/agents/web.py and one in the tests. This names one.
+#
+# It points at src/asgi.py rather than the app itself: that module loads the
+# real application and, if the import fails, serves the traceback instead of
+# letting the platform report FUNCTION_INVOCATION_FAILED with the cause in a
+# log. The fallback imports nothing, so it still answers when the reason is
+# that the dependencies are missing.
 #
 # Read src/deploy.py before pointing a real deployment at this: a hosted app
 # runs read-only, because the approval gate has no authentication and does not
 # belong on a public URL. It also needs DATABASE_URL to be Postgres; serverless
 # disks do not persist, so the default SQLite file would lose every write.
 [tool.vercel]
-entrypoint = "src.agents.web:app"
+entrypoint = "src.asgi:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

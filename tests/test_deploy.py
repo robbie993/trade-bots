@@ -346,10 +346,15 @@ def test_stripping_leaves_navigation_alone():
     assert "<form" not in out and "<button" not in out and "type=file" not in out
 
 
-def test_the_vercel_entrypoint_is_declared():
-    """Vercel found several FastAPI apps and could not choose. This names one."""
+def test_the_vercel_entrypoint_goes_through_the_shim():
+    """Not the app directly — see src/asgi.py and tests/test_asgi.py.
+
+    Pointing the platform at the app means an import failure is reported as
+    FUNCTION_INVOCATION_FAILED with the cause in a log. The shim loads the app
+    and serves the traceback when it cannot.
+    """
     import tomllib
     from pathlib import Path
 
     config = tomllib.loads(Path("pyproject.toml").read_text())
-    assert config["tool"]["vercel"]["entrypoint"] == "src.agents.web:app"
+    assert config["tool"]["vercel"]["entrypoint"] == "src.asgi:app"
