@@ -21,6 +21,12 @@ python-multipart>=0.0.6  # FastAPI form posts: the KILL / CONTINUE buttons
 # Configuration from .env (section 11).
 python-dotenv>=1.0.0
 
+# Real exchange bars, TRADE_DATA_SOURCE=ccxt (src/trading/data/feeds.py).
+# Optional like everything else here: the default feed is the seeded synthetic
+# one, because the tests, backtests and evolution loop are replays and a replay
+# that depends on an exchange being up is not a replay.
+ccxt>=4.0.0
+
 # Platform connectors (src/agents/sources/) once you implement fetch_raw().
 requests>=2.28.0
 
