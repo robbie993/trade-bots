@@ -50,6 +50,27 @@ class FirmDefaults:
         default_factory=lambda: _env_decimal("TRADE_MAX_POSITION_PCT", "0.25")
     )
     max_positions: int = field(default_factory=lambda: _env_int("TRADE_MAX_POSITIONS", 8))
+    # Short selling. Off by default, and that is not squeamishness: a long
+    # position's worst case is losing what you put in, and a short's worst case
+    # has no floor at all. A system whose whole claim is that it can be stopped
+    # should not open unbounded risk because nobody said otherwise.
+    allow_short: bool = field(
+        default_factory=lambda: os.environ.get("TRADE_ALLOW_SHORT", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    # Gross exposure — longs *plus* the absolute value of shorts — as a
+    # fraction of allocation. Net exposure is the wrong measure once shorts
+    # exist: a book that is long 100 and short 100 is flat on paper and can
+    # still lose on both legs at once.
+    max_gross_exposure: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_MAX_GROSS_EXPOSURE", "1.50")
+    )
+    # What it costs to borrow, per year, charged per tick on short notional.
+    # Shorting is not free, and a backtest that treats it as free is a
+    # backtest of a strategy nobody can run.
+    borrow_rate_annual: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_BORROW_RATE", "0.05")
+    )
     # Cash the firm may never dip below, as a fraction of its allocation.
     cash_floor_pct: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_CASH_FLOOR_PCT", "0.05")

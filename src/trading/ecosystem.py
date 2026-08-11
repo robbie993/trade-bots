@@ -375,6 +375,7 @@ class Ecosystem:
             if record.is_killed and not self.store.positions(record.id):
                 continue  # dead and flat: nothing left to do
             try:
+                self._charge_borrow(record, market, report)
                 self._run_firm(record, market, report)
             except TradingLedgerError as exc:
                 report.errors.append(f"{record.firm_key}: {exc}")
@@ -445,6 +446,54 @@ class Ecosystem:
                 "  python -m src.main approve <id> --by you\n",
             )
         return report
+
+    def _charge_borrow(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
+        """Charge one tick of borrow on whatever this firm is short.
+
+        Shorting is not free, and a backtest that treats it as free is a
+        backtest of a strategy nobody can run. The charge is a fill with no
+        quantity and a fee, which is not a trick: both reconciliation
+        identities are stated in terms of fills and fees, so a cost expressed
+        this way is already accounted for everywhere, and a cost expressed any
+        other way would break the books.
+        """
+        rate = D(self.config.firm.borrow_rate_annual)
+        if rate <= 0:
+            return
+        shorts = [p for p in self.store.positions(record.id) if p.quantity < 0]
+        if not shorts:
+            return
+
+        from .models import Fill, Side
+
+        for position in shorts:
+            try:
+                mark = D(market.mark(position.symbol))
+            except Exception:  # noqa: BLE001 - no mark, no charge this tick
+                continue
+            fee = money(abs(position.quantity) * mark * rate / D(365))
+            if fee <= 0:
+                continue
+            # A firm that cannot pay its borrow is in trouble, but overdrawing
+            # it is not how this system says so — the kill switch is.
+            if money(record.cash - fee) < 0:
+                report.errors.append(
+                    f"{record.firm_key}: cannot pay {fmt_money(fee)} borrow on "
+                    f"{position.symbol}"
+                )
+                continue
+            self.store.settle(record, Fill(
+                firm_id=record.id,
+                symbol=position.symbol,
+                side=Side.BUY.value,
+                quantity=ZERO,
+                price=ZERO,
+                fee=fee,
+                venue=record.venue,
+                as_of=market.as_of(),
+            ))
+            self.flow.emit("ledger", f"borrow on {position.symbol}", firm=record.firm_key,
+                           detail=f"{fmt_money(fee)} at {rate * 100}% a year")
 
     def _run_firm(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
         firm = self.build_firm(record)

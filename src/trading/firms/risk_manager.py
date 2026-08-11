@@ -59,20 +59,30 @@ class RiskManager:
         held = existing.quantity if existing else ZERO
 
         # -- reducing exposure: solvency check only ------------------------
-        if held > 0 and side is Side.SELL:
-            allowed = min(quantity, held)
-            if allowed < quantity:
+        # Closing is always allowed and never sized down: the system may stop
+        # the bleeding whatever the limits say. `held` is signed, so this
+        # covers buying back a short as well as selling a long.
+        reducing = (held > 0 and side is Side.SELL) or (held < 0 and side is Side.BUY)
+        if reducing:
+            allowed = min(quantity, abs(held))
+            if allowed < quantity and not self.limits.allow_short:
                 return RiskDecision(
                     RiskVerdict.RESIZE.value,
                     f"cut to the {allowed} held (this system does not sell short)",
                     allowed,
                 )
-            return RiskDecision(RiskVerdict.ALLOW.value, "reducing an open position", allowed)
+            if allowed >= quantity:
+                return RiskDecision(
+                    RiskVerdict.ALLOW.value, "reducing an open position", allowed
+                )
+            # Shorting is on and this sell goes through the position and out
+            # the other side. The part that closes is free; the part that opens
+            # a short meets every limit below, like any other new risk.
 
         # -- opening or increasing: every limit applies --------------------
-        if side is Side.SELL:
-            # No short selling. A firm may only sell what it owns, so a bear
-            # verdict on a name it does not hold is simply "do nothing".
+        if side is Side.SELL and not self.limits.allow_short:
+            # A firm may only sell what it owns, so a bear verdict on a name it
+            # does not hold is simply "do nothing".
             return RiskDecision(
                 RiskVerdict.BLOCK.value, "no position to sell and shorting is disabled", ZERO
             )
@@ -99,7 +109,10 @@ class RiskManager:
             reasons.append(f"risk limit {percent(D(firm.risk_limit) * 100)}% of allocation")
 
         # 2. Position cap: total holding in one name against equity.
-        existing_value = money(held * reference_price)
+        # `abs`, because `held` is signed. Without it a short position makes
+        # its own cap bigger — existing_value goes negative, room grows, and
+        # the more short you are the more you may short.
+        existing_value = money(abs(held) * reference_price)
         position_cap = money(self.limits.max_position_pct * D(equity))
         room = position_cap - existing_value
         if room <= 0:
@@ -113,9 +126,44 @@ class RiskManager:
             quantity = qty(room / reference_price)
             reasons.append(f"position cap {percent(self.limits.max_position_pct * 100)}% of equity")
 
+        # 2b. Gross exposure: longs plus the absolute value of shorts.
+        # The cash floor below cannot restrain a short at all — selling adds
+        # cash — so without this a firm with shorting on has no ceiling on
+        # how much risk it can open. Net exposure would not do either: long
+        # 100 and short 100 is flat on paper and can lose on both legs.
+        if self.limits.allow_short:
+            # At cost, not at mark: the risk manager is handed one symbol's
+            # price and the other positions carry no mark, so pricing them all
+            # at this symbol's price would be arithmetic dressed as a limit.
+            gross = sum(
+                (money(abs(p.quantity) * p.avg_price) for p in positions if p.is_open),
+                ZERO,
+            )
+            gross_cap = money(self.limits.max_gross_exposure * firm.allocation)
+            gross_room = gross_cap - gross
+            if gross_room <= 0:
+                return RiskDecision(
+                    RiskVerdict.BLOCK.value,
+                    f"gross exposure is at the "
+                    f"{percent(self.limits.max_gross_exposure * 100)}% cap",
+                    ZERO,
+                )
+            if money(quantity * reference_price) > gross_room:
+                quantity = qty(gross_room / reference_price)
+                reasons.append(
+                    f"gross exposure cap "
+                    f"{percent(self.limits.max_gross_exposure * 100)}% of allocation"
+                )
+
         # 3. Cash floor: never spend the firm's last reserve. `available` is
         # the shared definition (models.CashView) — the allocator withdraws
         # against `withdrawable`, which deliberately differs.
+        #
+        # This applies to shorts too, which looks odd — selling adds cash — and
+        # is deliberate. A short needs collateral, and requiring the firm to
+        # hold the notional in cash is the margin rule, at 100% rather than the
+        # 50% a broker would ask. That is the conservative direction, which is
+        # the one this system errs in everywhere else.
         purse = CashView(
             cash=money(firm.cash),
             reserve=money(self.limits.cash_floor_pct * firm.allocation),

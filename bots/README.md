@@ -86,6 +86,30 @@ ten seconds. One that returns nonsense has the nonsense dropped and the rest
 kept. In every case the firm has a quiet tick, the reason appears in the tick
 summary, and the village carries on.
 
+## Selling short
+
+Off by default. Turn it on with `TRADE_ALLOW_SHORT=1`, and then a bot may
+return `{"side": "sell"}` on a symbol it does not hold.
+
+That default is not squeamishness. A long position's worst case is losing what
+you put in; a short's has no floor, and a system whose whole claim is that it
+can be stopped should not open unbounded risk because nobody said otherwise.
+
+Three things come with it:
+
+| | |
+|---|---|
+| `TRADE_MAX_GROSS_EXPOSURE` | longs **plus** the absolute value of shorts, against allocation. Default 1.5x |
+| `TRADE_BORROW_RATE` | charged per tick on short notional. Default 5% a year |
+| the cash floor | applies to shorts too — that is the margin rule, at 100% |
+
+Gross rather than net, because long 100 and short 100 is flat on paper and can
+lose on both legs at once. Borrow, because a backtest that treats shorting as
+free is a backtest of a strategy nobody can run.
+
+**Closing is always allowed**, including when shorting is switched off — turning
+it off must never trap a firm in a position it already holds.
+
 ## Bringing in a bot written for something else
 
 If your file does not already have `GENOME` and `UNIVERSE`, adapt it first:
