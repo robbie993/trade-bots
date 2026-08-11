@@ -120,7 +120,36 @@ EOF
     python -m src.main trade run --interval "$INTERVAL"
   start_one "console"   "$WEB_PID"  "$LOG_DIR/web.log" \
     python -m src.main serve --host "$HOST" --port "$PORT"
+  # Both processes are given a moment to fall over before this claims they
+  # are up. The first version printed the Mission Control URL unconditionally,
+  # so a console that died on a busy port looked exactly like one that started
+  # — and the URL it printed was for a process that no longer existed.
   sleep 2
+  failed=0
+  for pair in "tick loop:$LOOP_PID:$LOG_DIR/loop.log" "console:$WEB_PID:$LOG_DIR/web.log"; do
+    name="${pair%%:*}"; rest="${pair#*:}"
+    pidfile="${rest%%:*}"; logfile="${rest##*:}"
+    if ! alive "$pidfile"; then
+      failed=1
+      echo
+      echo "    $name DIED on startup. The last of $logfile:"
+      tail -6 "$logfile" 2>/dev/null | sed 's/^/      /'
+      rm -f "$pidfile"
+    fi
+  done
+  if [ "$failed" = "1" ]; then
+    cat <<EOF
+
+Not everything started, so the village is not fully up.
+
+A console that dies immediately is usually the port: something else is already
+on ${PORT}. Find it with \`lsof -i :${PORT}\`, or just use another one:
+
+    MVV_GATE_PORT=8010 ./scripts/village.sh restart
+
+EOF
+    exit 1
+  fi
   cat <<EOF
 
 ==> Mission Control:  http://${HOST}:${PORT}/village
