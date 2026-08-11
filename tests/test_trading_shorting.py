@@ -272,3 +272,108 @@ def test_a_firm_that_cannot_pay_borrow_is_not_overdrawn(db, tmp_path, firms_yaml
     report = eco.tick()
     assert eco.store.get_firm("bear").cash >= 0
     assert not any("overdraw" in e for e in report.errors)
+
+
+# =========================================================================
+# a kill that should not have happened
+#
+# A real village killed a firm on "Sharpe -1.6733 below 0.5" while it had an
+# 80% win rate, a 1.27% drawdown, zero consecutive losses and a positive
+# return. Nothing had gone wrong with the strategy; the measurement was wrong.
+#
+# The village ticks every sixty seconds against a daily feed, so it wrote a
+# performance row a minute, and between bars the only thing that moves is
+# fees. That is a series of tiny, nearly identical negative steps: a small
+# negative mean over a near-zero deviation. `sharpe()` annualises assuming
+# each observation is a trading day, so root-252 turned fee drift into a
+# confident number, and the kill switch acted on it.
+# =========================================================================
+def test_many_ticks_on_one_bar_do_not_manufacture_a_sharpe(
+    db, tmp_path, firms_yaml, notifier
+):
+    """Two ticks against the same bar are one observation, not two."""
+    from src.config import Config
+    from src.trading.config import DataConfig, TradingConfig
+    from src.trading.ecosystem import Ecosystem
+
+    eco = Ecosystem(
+        db,
+        TradingConfig(firms_config=firms_yaml, audit_vault=tmp_path / "v",
+                      vendor_dir=tmp_path / "d",
+                      data=DataConfig(source="synthetic", seed=12345, history_days=180)),
+        Config(database_url=db.url, notification_log=tmp_path / "n.log"),
+        notifier,
+    )
+    eco.init_firms()
+
+    market = eco.market()
+    bar = market.as_of()
+    for _ in range(30):
+        eco.tick(market)
+    assert market.as_of() == bar, "the bar must not move — that is the whole setup"
+
+    firm = eco.store.firms()[0]
+    rows = eco.db.query(
+        "SELECT as_of FROM firm_performance WHERE firm_id = ?", (firm.id,)
+    )
+    assert len(rows) > 5, "it really did write a row per tick"
+    assert len({str(r["as_of"]) for r in rows}) == 1, "all against one bar"
+
+    card = eco.brokerage.evaluator.evaluate(eco.store.get_firm(firm.firm_key), market)
+    assert card.sharpe is None, (
+        f"one bar cannot support a Sharpe ratio, got {card.sharpe}"
+    )
+
+
+def test_a_firm_is_not_killed_by_fees_accruing_between_bars(
+    db, tmp_path, firms_yaml, notifier
+):
+    """The actual failure: a healthy firm killed on a metric of nothing."""
+    from src.config import Config
+    from src.trading.config import DataConfig, TradingConfig
+    from src.trading.ecosystem import Ecosystem
+    from src.trading.firms.kill_switch import KillSwitch
+
+    config = TradingConfig(
+        firms_config=firms_yaml, audit_vault=tmp_path / "v", vendor_dir=tmp_path / "d",
+        data=DataConfig(source="synthetic", seed=12345, history_days=180),
+    )
+    eco = Ecosystem(
+        db, config,
+        Config(database_url=db.url, notification_log=tmp_path / "n.log"),
+        notifier,
+    )
+    eco.init_firms()
+
+    market = eco.market()
+    for _ in range(30):
+        eco.tick(market)
+
+    switch = KillSwitch(config.kill)
+    for firm in eco.store.firms():
+        card = eco.brokerage.evaluator.evaluate(firm, market)
+        should_kill, reason = switch.evaluate(card.to_metrics())
+        assert not (should_kill and "Sharpe" in (reason or "")), (
+            f"{firm.firm_key} killed on {reason}"
+        )
+
+
+def test_a_real_bar_series_still_produces_a_sharpe(db, tmp_path, firms_yaml, notifier):
+    """The fix must not silence the metric — only stop it inventing one."""
+    from src.config import Config
+    from src.trading.config import DataConfig, TradingConfig
+    from src.trading.ecosystem import Ecosystem
+
+    eco = Ecosystem(
+        db,
+        TradingConfig(firms_config=firms_yaml, audit_vault=tmp_path / "v",
+                      vendor_dir=tmp_path / "d",
+                      data=DataConfig(source="synthetic", seed=12345, history_days=180)),
+        Config(database_url=db.url, notification_log=tmp_path / "n.log"),
+        notifier,
+    )
+    eco.init_firms()
+    eco.simulate(30)          # 30 ticks, 30 distinct bars
+
+    cards = [eco.brokerage.evaluator.evaluate(f, eco.market()) for f in eco.store.firms()]
+    assert any(c.sharpe is not None for c in cards), "a real series should measure"

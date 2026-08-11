@@ -140,11 +140,30 @@ class Evaluator:
 
         # Sharpe over the P&L series rather than the equity series, for the
         # same reason: a capital withdrawal is not a bad day of trading.
+        #
+        # **One observation per market bar, not per tick.** A village ticking
+        # every sixty seconds against a daily feed writes a row a minute, and
+        # between bars the only thing that moves is fees. That produced a
+        # series of tiny, almost identical negative steps — a small negative
+        # mean over a near-zero deviation — which the annualisation multiplies
+        # by root-252 into a confident, meaningless number. It killed a firm
+        # with an 80% win rate, a 1.27% drawdown and a positive return.
+        #
+        # The bug was dimensional: `sharpe()` annualises assuming each
+        # observation is a trading day, so two ticks against the same bar have
+        # to be one observation. Collapsing by `as_of` is what makes the ratio
+        # mean what its name says.
         history = self.store.performance_history(firm.id, limit=90)
-        pnl_curve = [
-            D(row["realized_pnl"]) + D(row["unrealized_pnl"]) - D(row.get("fees") or 0)
-            for row in reversed(history)
-        ] + [net_pnl]
+        by_bar: dict = {}
+        for row in reversed(history):          # oldest first; last row per bar wins
+            by_bar[str(row["as_of"])] = (
+                D(row["realized_pnl"]) + D(row["unrealized_pnl"]) - D(row.get("fees") or 0)
+            )
+        # The reading being taken now belongs to the current bar, and replaces
+        # any earlier reading of it rather than being appended beside it.
+        by_bar[str(market.as_of())] = net_pnl
+
+        pnl_curve = list(by_bar.values())
         returns = (
             [(b - a) / capital_base for a, b in zip(pnl_curve, pnl_curve[1:])]
             if capital_base > 0
