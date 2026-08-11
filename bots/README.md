@@ -86,6 +86,48 @@ ten seconds. One that returns nonsense has the nonsense dropped and the rest
 kept. In every case the firm has a quiet tick, the reason appears in the tick
 summary, and the village carries on.
 
+## Real prices
+
+`TRADE_DATA_SOURCE` picks the feed. The default is a seeded synthetic one that
+prices everything instantly with no network — that is what the tests, the
+backtests and the evolution loop run on, and a replay that depends on an
+exchange being up is not a replay.
+
+| source | covers | needs |
+|---|---|---|
+| `synthetic` | everything, invented | nothing |
+| `alpaca` | **stocks and crypto** | free API keys |
+| `yahoo` | stocks, ETFs, indices | nothing |
+| `ccxt` | crypto, 100+ exchanges | `pip install ccxt` |
+| `csv` | whatever you put in `data/market/` | nothing |
+
+**Alpaca is the one to reach for** if your universe is mixed, because it is the
+only one here that covers both halves. Free keys from alpaca.markets, then:
+
+```bash
+export ALPACA_API_KEY_ID='...'
+export ALPACA_API_SECRET_KEY='...'
+TRADE_DATA_SOURCE=alpaca ./scripts/village.sh restart
+```
+
+Those are credentials — export them in your shell, do not put them in a file in
+this repository. They go in a header, never in a URL, and nothing logs them.
+
+Symbols route by the village's own spelling: `BTC-USD` has a quote currency and
+goes to the crypto endpoint, `SPY` is a bare ticker and goes to the stock one.
+The free stock tier is IEX rather than the full tape, which for daily bars is a
+rounding difference; `TRADE_ALPACA_FEED=sip` switches it if you pay for it.
+
+**Several sources chain**, tried per symbol: `ccxt,yahoo` asks the exchange
+first and falls back for what it has never heard of. A symbol nothing in the
+chain can price is reported and skipped — that one symbol stops, not the
+village. Mixing `synthetic` into a chain with real feeds warns, because a book
+priced half on real data and half on invented data is a book that lies.
+
+**A note on Binance**: it does not serve US addresses, and the failure looks
+like every pair being unavailable rather than anything mentioning geography.
+`TRADE_CCXT_EXCHANGE=coinbase` or `alpaca` if you are in the US.
+
 ## Selling short
 
 Off by default. Turn it on with `TRADE_ALLOW_SHORT=1`, and then a bot may

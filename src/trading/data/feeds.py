@@ -351,6 +351,165 @@ class CcxtFeed:
         return bars
 
 
+class AlpacaFeed:
+    """Stocks and crypto from one place.
+
+    Every other real feed here covers half a universe. Yahoo knows SPY and not
+    DOGE; a crypto exchange knows DOGE and not SPY; and Binance, it turns out,
+    does not know a US address at all. A village holding both needs a chain, or
+    it needs one source that does both — which is what this is.
+
+    It is also a broker, which matters later: the same credentials that price
+    the book are the ones that would eventually trade it. Nothing here trades.
+    This is the data API and nothing else.
+
+    **Credentials.** Free, from alpaca.markets, and read from the environment:
+
+        ALPACA_API_KEY_ID       or APCA_API_KEY_ID
+        ALPACA_API_SECRET_KEY   or APCA_API_SECRET_KEY
+
+    They are never logged, never written anywhere, and the failure when they
+    are absent says what to set rather than returning an unexplained 403.
+
+    **Which endpoint.** Decided by the village's own spelling, which already
+    distinguishes them: `BTC-USD` has a quote currency and goes to the crypto
+    endpoint as `BTC/USD`; `SPY` is a bare ticker and goes to the stock one.
+    No list of coins to maintain and nothing to keep in sync.
+
+    The free stock tier is IEX rather than the full consolidated tape. For
+    daily bars that is a rounding difference; for anything intraday it is not,
+    and `TRADE_ALPACA_FEED=sip` switches it if you have the subscription.
+    """
+
+    name = "alpaca"
+    STOCKS = "https://data.alpaca.markets/v2/stocks/{symbol}/bars"
+    CRYPTO = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
+
+    def __init__(self, days: int = 180, timeout_s: int = 20,
+                 timeframe: str = "1Day", stock_feed: str = ""):
+        self.days = int(days)
+        self.timeout_s = timeout_s
+        self.timeframe = timeframe
+        self.stock_feed = stock_feed or os.environ.get("TRADE_ALPACA_FEED", "iex")
+        self._cache: dict[str, list[Bar]] = {}
+
+    # -- credentials ------------------------------------------------------
+    @staticmethod
+    def credentials() -> tuple:
+        key = (os.environ.get("ALPACA_API_KEY_ID")
+               or os.environ.get("APCA_API_KEY_ID") or "").strip()
+        secret = (os.environ.get("ALPACA_API_SECRET_KEY")
+                  or os.environ.get("APCA_API_SECRET_KEY") or "").strip()
+        return key, secret
+
+    def _headers(self) -> dict:
+        key, secret = self.credentials()
+        if not key or not secret:
+            raise FeedNotConfigured(
+                "TRADE_DATA_SOURCE=alpaca needs credentials. They are free from "
+                "alpaca.markets — set ALPACA_API_KEY_ID and "
+                "ALPACA_API_SECRET_KEY in your shell. Do not put them in a file "
+                "in this repository."
+            )
+        return {
+            "APCA-API-KEY-ID": key,
+            "APCA-API-SECRET-KEY": secret,
+            "User-Agent": "ai-village-trading/1.0",
+        }
+
+    # -- symbols ----------------------------------------------------------
+    @staticmethod
+    def is_crypto(symbol: str) -> bool:
+        """The village spells crypto with a quote currency: BTC-USD, not BTC."""
+        return "-" in str(symbol)
+
+    @staticmethod
+    def pair(symbol: str) -> str:
+        return str(symbol).upper().replace("-", "/")
+
+    # -- fetching ---------------------------------------------------------
+    def series(self, symbol: str) -> list[Bar]:
+        if symbol in self._cache:
+            return self._cache[symbol]
+        try:
+            import requests  # type: ignore
+        except ImportError as exc:  # pragma: no cover - env dependent
+            raise FeedNotConfigured(
+                "TRADE_DATA_SOURCE=alpaca needs `pip install requests`"
+            ) from exc
+
+        upper = symbol.upper()
+        crypto = self.is_crypto(upper)
+        if crypto:
+            url = self.CRYPTO
+            params = {"symbols": self.pair(upper), "timeframe": self.timeframe,
+                      "limit": self.days}
+        else:
+            url = self.STOCKS.format(symbol=upper)
+            params = {"timeframe": self.timeframe, "limit": self.days,
+                      "feed": self.stock_feed}
+
+        response = requests.get(url, params=params, headers=self._headers(),
+                                timeout=self.timeout_s)
+        if response.status_code in (401, 403):
+            raise FeedNotConfigured(
+                f"alpaca refused the credentials for {symbol} "
+                f"({response.status_code}). Check ALPACA_API_KEY_ID and "
+                "ALPACA_API_SECRET_KEY"
+                + ("; the free stock tier is 'iex', and 'sip' needs a "
+                   "subscription" if not crypto else "")
+            )
+        if response.status_code != 200:
+            raise FeedNotConfigured(
+                f"alpaca returned {response.status_code} for {symbol}: "
+                f"{response.text[:200]}"
+            )
+
+        payload = response.json() or {}
+        rows = payload.get("bars")
+        if isinstance(rows, dict):          # the crypto endpoint keys by pair
+            rows = rows.get(self.pair(upper)) or []
+        rows = rows or []
+
+        bars: list[Bar] = []
+        for row in rows:
+            close = row.get("c")
+            if close is None:
+                continue
+            bars.append(
+                Bar(
+                    symbol=upper,       # the village's spelling, not the venue's
+                    as_of=_parse_stamp(row.get("t")),
+                    open=D(row.get("o") if row.get("o") is not None else close),
+                    high=D(row.get("h") if row.get("h") is not None else close),
+                    low=D(row.get("l") if row.get("l") is not None else close),
+                    close=D(close),
+                    volume=D(row.get("v") or 0),
+                )
+            )
+        if len(bars) < 30:
+            raise FeedNotConfigured(
+                f"alpaca returned only {len(bars)} usable bars for {symbol} "
+                f"({'crypto' if crypto else self.stock_feed}); refusing to run "
+                "indicators on a truncated history"
+            )
+        bars = bars[-self.days :]
+        self._cache[symbol] = bars
+        return bars
+
+
+def _parse_stamp(value) -> datetime:
+    """RFC3339 out of an API, into an aware datetime."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value or "").strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return datetime.now(tz=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 class ChainFeed:
     """Several feeds, tried in order, per symbol.
 
@@ -428,6 +587,8 @@ def _one_feed(source: str, config: DataConfig) -> MarketFeed:
         return CsvFeed(config.csv_dir)
     if source == "yahoo":
         return YahooFeed(days=config.history_days)
+    if source == "alpaca":
+        return AlpacaFeed(days=config.history_days)
     if source == "ccxt":
         return CcxtFeed(
             exchange=os.environ.get("TRADE_CCXT_EXCHANGE", "binance"),
@@ -435,8 +596,8 @@ def _one_feed(source: str, config: DataConfig) -> MarketFeed:
             timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME", "1d"),
         )
     raise FeedNotConfigured(
-        f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo "
-        "or ccxt, or several separated by commas"
+        f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo, "
+        "alpaca or ccxt, or several separated by commas"
     )
 
 

@@ -195,7 +195,7 @@ def test_the_exchange_is_configurable(monkeypatch, fake_ccxt):
 def test_an_unknown_source_still_names_what_it_expected():
     from src.trading.config import DataConfig
 
-    with pytest.raises(FeedNotConfigured, match="synthetic, csv, yahoo or ccxt"):
+    with pytest.raises(FeedNotConfigured, match="alpaca or ccxt"):
         build_feed(DataConfig(source="carrier_pigeon"))
 
 
@@ -402,3 +402,166 @@ def test_the_tick_survives_and_says_what_it_could_not_price(
     assert any("PEPE-USD" in note for note in report.bot_notes), "and said so"
     # The firm that has nothing to do with PEPE is unaffected.
     assert eco.store.get_firm("alpha").status == "active"
+
+
+# =========================================================================
+# alpaca: one feed for both halves of a universe
+#
+# Every other real feed here covers half. Yahoo knows SPY and not DOGE; a
+# crypto exchange knows DOGE and not SPY; and Binance does not serve a US
+# address at all, which is what actually stopped the village.
+# =========================================================================
+@pytest.fixture
+def alpaca_keys(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY_ID", "key-123")
+    monkeypatch.setenv("ALPACA_API_SECRET_KEY", "secret-456")
+
+
+@pytest.fixture
+def fake_http(monkeypatch):
+    """Stand in for requests.get and record what was asked for."""
+    import types
+
+    state = {"calls": [], "status": 200, "bars": 200, "payload": None}
+
+    class Response:
+        def __init__(self, status, payload, text=""):
+            self.status_code = status
+            self._payload = payload
+            self.text = text
+
+        def json(self):
+            return self._payload
+
+    def rows(n):
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        return [
+            {"t": (base.replace(day=1 + (i % 27))).isoformat().replace("+00:00", "Z"),
+             "o": 100 + i, "h": 101 + i, "l": 99 + i, "c": 100.5 + i, "v": 1000 + i}
+            for i in range(n)
+        ]
+
+    def get(url, params=None, headers=None, timeout=None):
+        state["calls"].append({"url": url, "params": params or {},
+                               "headers": headers or {}})
+        if state["status"] != 200:
+            return Response(state["status"], {}, text="nope")
+        if state["payload"] is not None:
+            return Response(200, state["payload"])
+        if "crypto" in url:
+            pair = (params or {}).get("symbols")
+            return Response(200, {"bars": {pair: rows(state["bars"])}})
+        return Response(200, {"bars": rows(state["bars"])})
+
+    module = types.ModuleType("requests")
+    module.get = get
+    monkeypatch.setitem(sys.modules, "requests", module)
+    return state
+
+
+def test_a_stock_goes_to_the_stock_endpoint(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    bars = AlpacaFeed(days=60).series("SPY")
+
+    assert len(bars) == 60
+    call = fake_http["calls"][0]
+    assert "/v2/stocks/SPY/bars" in call["url"]
+    assert call["params"]["feed"] == "iex", "the free tier, unless told otherwise"
+
+
+def test_a_pair_goes_to_the_crypto_endpoint(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    bars = AlpacaFeed(days=60).series("BTC-USD")
+
+    assert bars
+    call = fake_http["calls"][0]
+    assert "crypto" in call["url"]
+    assert call["params"]["symbols"] == "BTC/USD"
+    assert all(b.symbol == "BTC-USD" for b in bars), "the village's spelling"
+
+
+def test_the_credentials_are_sent_but_never_in_the_url(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    AlpacaFeed(days=60).series("SPY")
+    call = fake_http["calls"][0]
+
+    assert call["headers"]["APCA-API-KEY-ID"] == "key-123"
+    assert call["headers"]["APCA-API-SECRET-KEY"] == "secret-456"
+    assert "secret" not in str(call["params"]).lower()
+
+
+def test_missing_credentials_say_what_to_set(monkeypatch, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    for name in ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
+                 "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(FeedNotConfigured, match="ALPACA_API_KEY_ID"):
+        AlpacaFeed(days=60).series("SPY")
+
+
+def test_alpacas_own_variable_names_also_work(monkeypatch, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    for name in ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("APCA_API_KEY_ID", "k")
+    monkeypatch.setenv("APCA_API_SECRET_KEY", "s")
+
+    assert AlpacaFeed(days=60).series("SPY")
+
+
+def test_a_refused_key_says_so_rather_than_returning_nothing(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["status"] = 403
+    with pytest.raises(FeedNotConfigured, match="refused the credentials"):
+        AlpacaFeed(days=60).series("SPY")
+
+
+def test_a_refused_stock_key_mentions_the_tier(alpaca_keys, fake_http):
+    """403 on stocks is usually asking for SIP on a free account."""
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["status"] = 401
+    with pytest.raises(FeedNotConfigured, match="subscription"):
+        AlpacaFeed(days=60).series("SPY")
+
+
+def test_a_truncated_history_is_refused_here_too(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["bars"] = 12
+    with pytest.raises(FeedNotConfigured, match="truncated history"):
+        AlpacaFeed(days=60).series("SPY")
+
+
+def test_money_stays_decimal(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    bar = AlpacaFeed(days=60).series("SPY")[0]
+    assert isinstance(bar.close, Decimal)
+    assert bar.as_of.tzinfo is not None
+
+
+def test_alpaca_is_reachable_by_configuration(alpaca_keys, fake_http):
+    from src.trading.config import DataConfig
+    from src.trading.data.feeds import build_feed
+
+    feed = build_feed(DataConfig(source="alpaca", history_days=60))
+    assert feed.name == "alpaca"
+    assert feed.series("SPY")
+
+
+def test_one_source_covers_a_mixed_universe(alpaca_keys, fake_http):
+    """The whole point: no chain needed for stocks plus crypto."""
+    from src.trading.data.feeds import AlpacaFeed
+
+    feed = AlpacaFeed(days=60)
+    assert feed.series("SPY")
+    assert feed.series("BTC-USD")
+    assert feed.series("AAPL")
