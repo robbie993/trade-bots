@@ -313,3 +313,92 @@ def test_one_source_is_still_one_feed_not_a_chain_of_one():
     from src.trading.data.feeds import build_feed
 
     assert build_feed(DataConfig(source="synthetic")).name == "synthetic"
+
+
+# =========================================================================
+# one symbol nothing can price
+#
+# The chain fixed SPY by falling through to Yahoo. PEPE-USD had nowhere to
+# fall: Binance does not list it and Yahoo returned an unreadable payload. The
+# refusal came out of `as_of()`, so every tick raised and all eleven firms in a
+# real village went quiet for three hours over one meme coin.
+#
+# A feed refusing is right about a symbol and catastrophic about the market.
+# =========================================================================
+def _blind_market(bad="PEPE-USD"):
+    from src.trading.data.feeds import SyntheticFeed
+    from src.trading.data.market_data import MarketData
+
+    class OneBadSymbol:
+        name = "mostly-fine"
+
+        def __init__(self):
+            self.real = SyntheticFeed(seed=12345, days=180)
+
+        def series(self, symbol):
+            if symbol == bad:
+                raise FeedNotConfigured(f"nothing anywhere lists {symbol}")
+            return self.real.series(symbol)
+
+    return MarketData(OneBadSymbol(), ["SPY", "QQQ", bad])
+
+
+def test_an_unpriceable_symbol_does_not_stop_the_market():
+    market = _blind_market()
+
+    assert market.as_of() is not None, "the other symbols still have a clock"
+    assert market.mark("SPY") > 0
+    assert market.bar("PEPE-USD") is None
+
+
+def test_the_refusal_is_remembered_rather_than_swallowed():
+    """Quietly having no price is how you end up trading on nothing."""
+    market = _blind_market()
+    market.as_of()
+
+    assert "PEPE-USD" in market.unpriceable
+    assert "nothing anywhere lists" in market.unpriceable["PEPE-USD"]
+    assert "SPY" not in market.unpriceable
+
+
+def test_the_tick_survives_and_says_what_it_could_not_price(
+    db, tmp_path, firms_yaml, notifier
+):
+    from src.config import Config
+    from src.trading.config import DataConfig, TradingConfig
+    from src.trading.ecosystem import Ecosystem
+
+    firms_yaml.write_text(
+        "firms:\n"
+        "  alpha:\n"
+        "    name: Alpha\n"
+        "    asset_class: ETF\n"
+        "    capital_allocation: 50000\n"
+        "    universe: [SPY, QQQ]\n"
+        "    analysts: [technical]\n"
+        "  meme:\n"
+        "    name: Meme\n"
+        "    asset_class: Crypto\n"
+        "    capital_allocation: 25000\n"
+        "    universe: [SPY, PEPE-USD]\n"
+        "    analysts: [technical]\n"
+    )
+    eco = Ecosystem(
+        db,
+        TradingConfig(firms_config=firms_yaml, audit_vault=tmp_path / "v",
+                      vendor_dir=tmp_path / "d",
+                      data=DataConfig(source="synthetic", seed=12345, history_days=180)),
+        Config(database_url=db.url, notification_log=tmp_path / "n.log"),
+        notifier,
+    )
+    eco.init_firms()
+
+    market = _blind_market()
+    market.register(["SPY", "QQQ", "PEPE-USD"])
+    report = eco.tick(market)
+
+    # The tick ran. That is the whole point.
+    assert report.oversight is not None, "the tick completed"
+    assert any("PEPE-USD" in note for note in report.bot_notes), "and said so"
+    # The firm that has nothing to do with PEPE is unaffected.
+    assert eco.store.get_firm("alpha").status == "active"

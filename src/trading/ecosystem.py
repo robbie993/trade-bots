@@ -371,9 +371,28 @@ class Ecosystem:
         flow.start_run()
         flow.emit("market", f"bars up to {market.as_of()}", detail=f"source: {self.feed.name}")
 
+        # A symbol the feed cannot price is now a symbol with no bars rather
+        # than an exception out of the whole tick — but it must not pass
+        # unmentioned, and for a firm that *holds* the thing it is not a
+        # detail: a position you cannot value is a book you cannot trust.
+        for symbol, why in sorted(getattr(market, "unpriceable", {}).items()):
+            report.bot_notes.append(f"no price for {symbol}: {why[:160]}")
+            flow.emit("market", f"no price for {symbol}", kind="blocked",
+                      detail=why[:300])
+
         for record in self.store.firms():
             if record.is_killed and not self.store.positions(record.id):
                 continue  # dead and flat: nothing left to do
+            held_blind = [
+                p.symbol for p in self.store.positions(record.id)
+                if p.is_open and p.symbol in getattr(market, "unpriceable", {})
+            ]
+            if held_blind:
+                report.errors.append(
+                    f"{record.firm_key} holds {', '.join(held_blind)} and the feed "
+                    "cannot price it — this firm's equity is not trustworthy "
+                    "until that resolves"
+                )
             try:
                 self._charge_borrow(record, market, report)
                 self._run_firm(record, market, report)

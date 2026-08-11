@@ -24,6 +24,8 @@ class MarketData:
         self.feed = feed
         self.symbols = list(dict.fromkeys(s.upper() for s in symbols))
         self._cursor = cursor  # -1 means "the end of every series"
+        # symbol -> why the feed would not price it. See `_series`.
+        self.unpriceable: dict = {}
 
     @classmethod
     def from_config(cls, config: DataConfig, symbols: Iterable[str] = ()) -> "MarketData":
@@ -49,7 +51,7 @@ class MarketData:
 
     def length(self) -> int:
         """Bars available for the shortest symbol — the honest common history."""
-        lengths = [len(self.feed.series(s)) for s in self.symbols] or [0]
+        lengths = [len(self._series(s)) for s in self.symbols] or [0]
         return min(lengths)
 
     def register(self, symbols: Iterable[str]) -> None:
@@ -59,8 +61,32 @@ class MarketData:
                 self.symbols.append(upper)
 
     # -- reads ------------------------------------------------------------
+    def _series(self, symbol: str) -> list[Bar]:
+        """The feed's bars, or none — remembering which symbols it could not price.
+
+        A feed refuses rather than degrades, which is right about *a symbol* and
+        was catastrophic about *the market*: one meme coin that no exchange
+        lists raised out of `as_of()`, and every firm in the village stopped,
+        including the ten with no opinion about it. Eleven firms went quiet for
+        three hours over PEPE-USD.
+
+        So the refusal is caught and recorded here. A symbol nothing can price
+        becomes a symbol with no bars, which the rest of the system already
+        knows how to be unexcited about: no price, no proposal. What it must
+        not do is disappear quietly — `unpriceable` is read by the tick, which
+        reports it, and reports it as an error for any firm that actually
+        *holds* the thing, because a position you cannot value is a book you
+        cannot trust.
+        """
+        upper = symbol.upper()
+        try:
+            return self.feed.series(upper)
+        except Exception as exc:  # noqa: BLE001 - every feed has its own errors
+            self.unpriceable[upper] = str(exc)
+            return []
+
     def _visible(self, symbol: str) -> list[Bar]:
-        series = self.feed.series(symbol.upper())
+        series = self._series(symbol)
         if self._cursor < 0:
             return series
         return series[: self._cursor + 1]
