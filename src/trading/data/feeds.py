@@ -21,11 +21,12 @@ from __future__ import annotations
 import csv
 import hashlib
 import os
+import warnings
 import random
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Sequence
 
 from ...money import D
 from ..config import DataConfig
@@ -350,8 +351,77 @@ class CcxtFeed:
         return bars
 
 
-def build_feed(config: DataConfig) -> MarketFeed:
-    source = (config.source or "synthetic").strip().lower()
+class ChainFeed:
+    """Several feeds, tried in order, per symbol.
+
+    A real universe is rarely all one thing. Point the village at a crypto
+    exchange and it prices BTC-USD perfectly and cannot price SPY at all —
+    and because a feed refuses rather than degrades, one unlistable symbol
+    stopped every firm, including the ones it had nothing to do with.
+
+    So: `TRADE_DATA_SOURCE=ccxt,yahoo` asks the exchange first and falls back
+    to Yahoo for what the exchange has never heard of.
+
+    **It remembers which feed answered.** `origin(symbol)` says where a bar
+    came from, because the dangerous version of this is the silent one: a
+    village pricing crypto off a real exchange and equities off a random
+    number generator, with nothing on the page to tell them apart. Mixing a
+    synthetic feed into a chain with real ones logs a warning for exactly that
+    reason — it is legitimate for a demo and a lie in production.
+    """
+
+    def __init__(self, feeds: Sequence[MarketFeed]):
+        self.feeds = list(feeds)
+        if not self.feeds:
+            raise FeedNotConfigured("a chain needs at least one feed")
+        self._origin: dict[str, str] = {}
+
+        kinds = {getattr(f, "name", "?") for f in self.feeds}
+        if "synthetic" in kinds and len(kinds) > 1:
+            warnings.warn(
+                "this feed chain mixes synthetic prices with real ones "
+                f"({', '.join(sorted(kinds))}). Some firms will be trading "
+                "invented data and the leaderboard will compare them to firms "
+                "that are not. Check `trade status` for which feed served what.",
+                stacklevel=2,
+            )
+
+    @property
+    def name(self) -> str:
+        return "+".join(getattr(f, "name", "?") for f in self.feeds)
+
+    def origin(self, symbol: str) -> Optional[str]:
+        """Which feed actually served this symbol, once it has been asked."""
+        return self._origin.get(symbol)
+
+    @property
+    def origins(self) -> dict:
+        return dict(self._origin)
+
+    def series(self, symbol: str) -> list[Bar]:
+        refusals = []
+        for feed in self.feeds:
+            try:
+                bars = feed.series(symbol)
+            except FeedNotConfigured as exc:
+                refusals.append(f"{getattr(feed, 'name', '?')}: {exc}")
+                continue
+            except Exception as exc:  # noqa: BLE001 - a feed's own error tree
+                refusals.append(f"{getattr(feed, 'name', '?')}: {type(exc).__name__}: {exc}")
+                continue
+            if bars:
+                self._origin[symbol] = getattr(feed, "name", "?")
+                return bars
+            refusals.append(f"{getattr(feed, 'name', '?')}: returned nothing")
+
+        raise FeedNotConfigured(
+            f"no feed in the chain could price {symbol} — "
+            + "; ".join(refusals)
+        )
+
+
+def _one_feed(source: str, config: DataConfig) -> MarketFeed:
+    source = (source or "synthetic").strip().lower()
     if source == "synthetic":
         return SyntheticFeed(seed=config.seed, days=config.history_days)
     if source == "csv":
@@ -365,5 +435,14 @@ def build_feed(config: DataConfig) -> MarketFeed:
             timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME", "1d"),
         )
     raise FeedNotConfigured(
-        f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo or ccxt"
+        f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo "
+        "or ccxt, or several separated by commas"
     )
+
+
+def build_feed(config: DataConfig) -> MarketFeed:
+    parts = [p for p in (config.source or "synthetic").split(",") if p.strip()]
+    feeds = [_one_feed(part, config) for part in parts] or [
+        _one_feed("synthetic", config)
+    ]
+    return feeds[0] if len(feeds) == 1 else ChainFeed(feeds)

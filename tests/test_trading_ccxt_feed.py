@@ -197,3 +197,119 @@ def test_an_unknown_source_still_names_what_it_expected():
 
     with pytest.raises(FeedNotConfigured, match="synthetic, csv, yahoo or ccxt"):
         build_feed(DataConfig(source="carrier_pigeon"))
+
+
+# =========================================================================
+# a chain, because a real universe is rarely all one thing
+#
+# Pointing the village at a crypto exchange priced BTC-USD perfectly and could
+# not price SPY at all — and because a feed refuses rather than degrades, one
+# unlistable symbol stopped every firm, including the ones it had nothing to
+# do with. Every tick died on `binance returned nothing for SPY`.
+# =========================================================================
+def test_a_chain_falls_through_to_the_next_feed(fake_ccxt, monkeypatch):
+    from src.trading.data.feeds import Bar, ChainFeed
+
+    fake_ccxt.only = {"BTC/USDT"}
+
+    class Equities:
+        name = "pretend-yahoo"
+
+        def series(self, symbol):
+            if symbol == "SPY":
+                return [
+                    Bar(symbol=symbol, as_of=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        open=D1, high=D1, low=D1, close=D1, volume=D1)
+                ]
+            raise FeedNotConfigured(f"no {symbol} here")
+
+    D1 = Decimal("1")
+    chain = ChainFeed([CcxtFeed(days=60), Equities()])
+
+    assert chain.series("BTC-USD"), "the exchange should still serve crypto"
+    assert chain.series("SPY"), "and the fallback should serve the equity"
+
+
+def test_the_chain_remembers_which_feed_answered(fake_ccxt):
+    """The dangerous version of a fallback is the silent one."""
+    from src.trading.data.feeds import Bar, ChainFeed
+
+    fake_ccxt.only = {"BTC/USDT"}
+
+    class Equities:
+        name = "pretend-yahoo"
+
+        def series(self, symbol):
+            one = Decimal("1")
+            return [Bar(symbol=symbol, as_of=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        open=one, high=one, low=one, close=one, volume=one)]
+
+    chain = ChainFeed([CcxtFeed(days=60), Equities()])
+    chain.series("BTC-USD")
+    chain.series("SPY")
+
+    assert chain.origin("BTC-USD") == "ccxt"
+    assert chain.origin("SPY") == "pretend-yahoo"
+    assert chain.name == "ccxt+pretend-yahoo"
+
+
+def test_a_symbol_no_feed_can_price_still_refuses(fake_ccxt):
+    """Falling through every feed is not the same as inventing a price."""
+    from src.trading.data.feeds import ChainFeed
+
+    fake_ccxt.only = {"NOTHING"}
+
+    class Nope:
+        name = "nope"
+
+        def series(self, symbol):
+            raise FeedNotConfigured("not here either")
+
+    chain = ChainFeed([CcxtFeed(days=60), Nope()])
+    with pytest.raises(FeedNotConfigured, match="no feed in the chain could price"):
+        chain.series("DOGE-USD")
+
+
+def test_mixing_synthetic_with_real_prices_warns():
+    """Legitimate for a demo, a lie in production — so it says so out loud."""
+    from src.trading.data.feeds import ChainFeed, SyntheticFeed
+
+    class Real:
+        name = "yahoo"
+
+        def series(self, symbol):
+            return []
+
+    with pytest.warns(UserWarning, match="mixes synthetic prices with real ones"):
+        ChainFeed([Real(), SyntheticFeed(seed=1, days=60)])
+
+
+def test_an_all_real_chain_is_quiet(fake_ccxt):
+    import warnings as w
+
+    from src.trading.data.feeds import ChainFeed
+
+    class Real:
+        name = "yahoo"
+
+        def series(self, symbol):
+            return []
+
+    with w.catch_warnings():
+        w.simplefilter("error")
+        ChainFeed([CcxtFeed(days=60), Real()])
+
+
+def test_a_comma_separated_source_builds_a_chain():
+    from src.trading.config import DataConfig
+    from src.trading.data.feeds import build_feed
+
+    feed = build_feed(DataConfig(source="ccxt,yahoo", history_days=60))
+    assert feed.name == "ccxt+yahoo"
+
+
+def test_one_source_is_still_one_feed_not_a_chain_of_one():
+    from src.trading.config import DataConfig
+    from src.trading.data.feeds import build_feed
+
+    assert build_feed(DataConfig(source="synthetic")).name == "synthetic"
