@@ -67,6 +67,7 @@ class TickReport:
     carried_out: list = field(default_factory=list)
     village: list = field(default_factory=list)
     bot_notes: list = field(default_factory=list)
+    signals: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -90,6 +91,8 @@ class TickReport:
             lines.append(f"  VILLAGE: {happening}")
         for note in self.bot_notes:
             lines.append(f"  BOT: {note}")
+        for note in self.signals:
+            lines.append(f"  SCANNER: {note}")
         return "\n".join(lines)
 
 
@@ -128,6 +131,8 @@ class Ecosystem:
         self._settings = None
         self._market = None
         self._sandbox = None
+        self._signals = None
+        self._scanners = None
 
     # =====================================================================
     # the layers above the ledger
@@ -169,6 +174,34 @@ class Ecosystem:
 
             self._settings = Settings(self.db)
         return self._settings
+
+    @property
+    def signals(self):
+        """The published-signal board. Read by the firms, written by scanners."""
+        if self._signals is None:
+            from .signals import SignalBoard
+
+            self._signals = SignalBoard(self.db)
+        return self._signals
+
+    @property
+    def scanners(self):
+        """The configured scanners. A village with none is the normal case.
+
+        A malformed `scanners:` block is caught here rather than allowed out of
+        a tick: the tick reports it as a scanner note and keeps trading, which
+        is the correct blast radius for a screener that will not load.
+        """
+        if self._scanners is None:
+            from .signals import Scanners, ScannerError, load_scanner_specs
+
+            specs, error = [], ""
+            try:
+                specs = load_scanner_specs(config=self.config)
+            except ScannerError as exc:
+                error = f"scanner config unusable, no scanner is running: {exc}"
+            self._scanners = Scanners(self.signals, specs, error=error)
+        return self._scanners
 
     @property
     def living(self):
@@ -353,7 +386,7 @@ class Ecosystem:
     def build_firm(self, record: FirmRecord) -> Firm:
         spec = self.specs().get(record.firm_key)
         if spec is not None:
-            return Firm.from_spec(spec, record, self.config)
+            return Firm.from_spec(spec, record, self.config, board=self.signals)
         return Firm(record, limits=self.config.firm, kill_config=self.config.kill)
 
     # =====================================================================
@@ -379,6 +412,15 @@ class Ecosystem:
             report.bot_notes.append(f"no price for {symbol}: {why[:160]}")
             flow.emit("market", f"no price for {symbol}", kind="blocked",
                       detail=why[:300])
+
+        # The scanners run before any firm deliberates, because a reading
+        # published after the debate is a reading nobody heard. They publish a
+        # score and nothing else — there is no path from src/trading/signals.py
+        # to an order, so this is the one place in the tick where running a
+        # stranger's file cannot even be refused, only ignored.
+        report.signals = self.scanners.run(market)
+        for note in report.signals:
+            flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 
         for record in self.store.firms():
             if record.is_killed and not self.store.positions(record.id):

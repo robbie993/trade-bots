@@ -49,16 +49,23 @@ class Firm:
         self.trader = Trader(self.limits)
         self.risk_manager = RiskManager(self.limits)
         self.kill_switch = KillSwitch(kill_config or FirmKillConfig())
+        # What the firm's bot got wrong this tick, if it runs one. Set here
+        # rather than in `_from_bot` so a pod firm still answers the question.
+        self.bot_complaints: list = []
 
     # -- construction -----------------------------------------------------
     @classmethod
     def from_spec(
-        cls, spec: FirmSpec, record: FirmRecord, config: Optional[TradingConfig] = None
+        cls,
+        spec: FirmSpec,
+        record: FirmRecord,
+        config: Optional[TradingConfig] = None,
+        board=None,
     ) -> "Firm":
         cfg = config or TradingConfig()
         return cls(
             record=record,
-            analysts=build_analysts(spec.analysts),
+            analysts=build_analysts(spec.analysts, board=board),
             limits=cfg.firm,
             kill_config=cfg.kill,
         )
@@ -202,7 +209,5 @@ class Firm:
         self.record.status = FirmStatus.PAUSED.value
         return self.kill_switch.trigger(self.key, reason)
 
-        # What the firm's bot got wrong this tick, if it runs one.
-        self.bot_complaints: list = []
 
 __all__ = ["Firm"]

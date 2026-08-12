@@ -162,8 +162,14 @@ def build_context(record, market, positions: Sequence[Position], equity, lookbac
 # =========================================================================
 # loading
 # =========================================================================
-def load(path) -> callable:
-    """Import a file and find the function that decides. Raises AdapterError."""
+def load(path, entry_points: Sequence[str] = ENTRY_POINTS) -> callable:
+    """Import a file and find the function that decides. Raises AdapterError.
+
+    ``entry_points`` is a parameter because a scanner is loaded exactly like a
+    strategy but answers to different names — see ``src/trading/signals.py``.
+    The two lists are kept disjoint on purpose: a file defining ``propose`` is
+    telling you it wants to trade, not to publish a score.
+    """
     path = Path(str(path))
     if not path.exists():
         raise AdapterError(f"{path} does not exist")
@@ -179,12 +185,12 @@ def load(path) -> callable:
     except BaseException as exc:  # noqa: BLE001 - importing runs the file
         raise AdapterError(f"{path.name} failed while loading: {exc}") from exc
 
-    for name in ENTRY_POINTS:
+    for name in entry_points:
         func = getattr(module, name, None)
         if callable(func):
             return func
     raise AdapterError(
-        f"{path.name} defines none of {', '.join(ENTRY_POINTS)} — "
+        f"{path.name} defines none of {', '.join(entry_points)} — "
         "the village needs one function it can call"
     )
 

@@ -113,6 +113,12 @@ def load_firm_specs(
         )
     raw = parse_config(target)
     firms = raw.get("firms", raw)
+    if firms is raw and isinstance(raw, dict):
+        # A file without a `firms:` header is treated as the mapping itself,
+        # which was fine until the file grew a second top-level block. A
+        # scanner is not a firm and must not be read as one — see
+        # src/trading/signals.py.
+        firms = {k: v for k, v in raw.items() if k not in ("scanners",)}
     if not isinstance(firms, dict) or not firms:
         raise FirmSpecError(f"{target} defines no firms")
     return [FirmSpec.from_mapping(key, value, cfg.firm) for key, value in firms.items()]

@@ -22,7 +22,7 @@ firms:
     risk_limit: 0.02          # fraction of allocation risked per new position
     capital_allocation: 100000
     universe: [SPY, QQQ, IWM, DIA, EFA]
-    analysts: [fundamental, technical, sentiment]
+    analysts: [fundamental, technical, sentiment, signals]
     genome:
       fast_window: 10
       slow_window: 30
@@ -181,3 +181,30 @@ firms:
       value_window: 35
       fair_band_pct: 24       # "fair value" is close to meaningless here
       calm_vol_pct: 85        # nothing about this is calm
+
+# =========================================================================
+# The scanners — bots that spot things instead of trading them.
+#
+# A screener, a ranker, a whale watcher: anything that reads the market and
+# names a symbol without wanting to place an order. Each one runs once per
+# market bar and publishes a reading — a score from -100 to +100 and a
+# confidence from 0 to 100 — which any firm listing the `signals` analyst
+# hears in its debate. See bots/example_scanner.py and src/trading/signals.py.
+#
+# A scanner cannot move money. Its score is one vote at one seat, and the
+# resulting proposal still meets the risk manager, the conscience, the venue
+# and the approval gate. That is why running somebody else's screener is a
+# smaller decision than running their strategy.
+#
+# A reading is only heard on the bar it was published for, so a scanner that
+# stops running goes silent immediately rather than voting from the grave.
+#
+# One is registered below so the seat is visibly working rather than working
+# once you find the switch. Delete the block for a village with no scanners;
+# `firm_a_etf` is the only firm listening, and it stops listening the moment
+# `signals` comes off its analyst list.
+# =========================================================================
+scanners:
+  example:
+    bot: bots/example_scanner.py
+    # universe: [SPY, QQQ, IWM]   # optional — defaults to the whole village

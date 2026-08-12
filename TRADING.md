@@ -255,6 +255,20 @@ social feed), `fundamental` reads distance from a long-run price anchor (no
 fundamentals vendor), `onchain` reads effort-versus-result in volume (no node).
 An unlabelled proxy is how a system ends up trusting a number nobody can source.
 
+A sixth seat, `signals`, computes nothing of its own: it repeats what the
+configured **scanners** published on this bar. A scanner is somebody else's
+screener, ranker or whale watcher — a file that names a symbol without wanting
+to place an order — and this is how it informs a firm without becoming one. See
+`src/trading/signals.py`, `bots/README.md` and `trade signals`.
+
+    a scanner informs a decision. It never makes one.
+
+There is no path from a published reading to a fill: the score joins a debate,
+and the resulting proposal still meets the risk manager, the conscience, the
+venue and the gate, none of which know a scanner exists. And a reading is heard
+only on the bar it was published for, so a scanner that stopped running goes
+silent immediately rather than voting from the grave.
+
 **Bull and Bear** each get the same signals and may only cite the ones that
 support their side. The winner is decided by weight of evidence, and the
 *margin* becomes the trader's confidence — so a 90/10 argument produces a full
@@ -1122,6 +1136,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade recruit <f>` | drop a bot in; a cleared file becomes a firm |
 | `trade recruit-watch --dir D` | try every bot in a directory |
 | `trade recruits` | recruited firms waiting to be funded |
+| `trade signals` | what the scanners published, and who hears it |
 | `trade dashboard` | freeze it all into one self-contained HTML file |
 | `trade autonomy` | what the village decides for itself |
 | `trade council` | the council's rulings |
@@ -1156,6 +1171,8 @@ src/trading/
 ├── backtest.py          the same pod, the same fills, no database
 ├── ecosystem.py         the tick, in order
 ├── adapters.py          optional bridges to the external frameworks
+├── adapter.py           run a user's own bot as a firm's strategy
+├── signals.py           scanners: bots that publish a score, not an order
 ├── cli.py               `trade ...`
 ├── data/                synthetic / csv / yahoo, behind one cursor
 ├── firms/               analysts, researchers, trader, risk, kill switch, spec
@@ -1188,6 +1205,9 @@ tested, and all of it runs with no network.
 strategy that looks profitable on it has demonstrated nothing about the world.
 The `fundamental`, `sentiment` and `onchain` analysts are price and volume
 proxies wearing the names of the seats they fill; each says so in every note.
+The `signals` seat is real in the sense that it repeats exactly what a scanner
+published — but what that scanner knows is the scanner's problem, not the
+village's.
 No money has moved: the paper venue is a simulation, and every live venue
 refuses to send an order until you personally approve it.
 

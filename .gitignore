@@ -48,3 +48,5 @@ bots/*
 !bots/README.md
 !bots/example_momentum.py
 !bots/example_reversion.yaml
+!bots/example_adapter.py
+!bots/example_scanner.py

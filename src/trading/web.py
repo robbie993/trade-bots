@@ -157,6 +157,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _firms_panel(eco, firms, by_id),
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
+        _signals_panel(eco, market),
         _council_panel(eco),
         _court_panel(eco),
         _arena_panel(eco),
@@ -291,6 +292,60 @@ def _switches_panel(eco) -> str:
         "the gate, and nothing already approved is undone.</p>"
     )
     return _panel("Switches", body)
+
+
+def _signals_panel(eco, market) -> str:
+    """What the scanners published, and whether anyone is still hearing it.
+
+    The one question this panel exists to answer is "is my screener actually
+    doing anything", which has two halves people conflate: did it publish, and
+    is it publishing for *this* bar. A reading from an earlier bar is shown and
+    marked stale, because no firm is hearing it — see src/trading/signals.py.
+    """
+    from .signals import stamp
+
+    specs = eco.scanners.specs
+    if not specs and not eco.scanners.error:
+        return ""                            # a village with no scanners: no panel
+
+    now = stamp(market.as_of())
+    rows = []
+    for row in eco.signals.recent(limit=12):
+        fresh = str(row["as_of"]) == now
+        rows.append({
+            "publisher": e(str(row["publisher"])),
+            "symbol": e(str(row["symbol"])),
+            "score": f"<span class={'good' if D(row['score'] or 0) > 0 else 'warn'}>"
+                     f"{D(row['score'] or 0):+.2f}</span>",
+            "confidence": f"{D(row['confidence'] or 0):.2f}",
+            "heard": ("<span class=good>this bar</span>" if fresh
+                      else "<span class=muted>stale — nobody hears it</span>"),
+            "why": e(str(row["note"] or "")[:60]),
+        })
+
+    listening = sorted(
+        firm.firm_key for firm in eco.store.firms()
+        if "signals" in {
+            str(a).strip().lower()
+            for a in (getattr(eco.specs().get(firm.firm_key), "analysts", ()) or ())
+        }
+    )
+    configured = ", ".join(
+        f"<strong>{e(s.name)}</strong>" + ("" if s.enabled else " (off)") for s in specs
+    ) or "none"
+
+    note = (
+        f"<p class=muted>Scanners: {configured}. "
+        + (f"Heard by {e(', '.join(listening))}." if listening else
+           "<strong>Nobody is listening</strong> — add <code>signals</code> to a "
+           "firm's analysts in the firm config.")
+        + " A scanner publishes a score and nothing else: it joins one debate at "
+        "one seat, and the proposal that results still meets the risk manager, "
+        "the conscience and the gate. It cannot move money.</p>"
+    )
+    if eco.scanners.error:
+        note = f"<p class=bad>{e(eco.scanners.error)}</p>" + note
+    return _panel("What the scanners see", _table(rows) + note)
 
 
 def _council_panel(eco) -> str:

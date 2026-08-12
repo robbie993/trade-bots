@@ -86,6 +86,68 @@ ten seconds. One that returns nonsense has the nonsense dropped and the rest
 kept. In every case the firm has a quiet tick, the reason appears in the tick
 summary, and the village carries on.
 
+## When your bot spots things instead of trading them
+
+A lot of what people have written is not a strategy at all. It is a scanner, a
+screener, a whale watcher, a ranker: it reads the market and *names a symbol*
+without ever wanting to place an order. Wired up as a firm's `bot:` such a file
+looks broken — it returns no orders, so the firm proposes nothing.
+
+It has its own seat. A scanner publishes a **reading** — a symbol, a score from
+-100 to +100, a confidence from 0 to 100 — and any firm that lists the
+`signals` analyst hears it in its debate:
+
+```python
+def scan(context):
+    return {"AAPL": 80, "MSFT": -20}       # symbol -> score
+```
+
+Register it, and give at least one firm the seat:
+
+```yaml
+scanners:
+  whales:
+    bot: bots/whale_stack.py
+    # universe: [BTC-USD, ETH-USD]   # optional — defaults to the whole village
+
+firms:
+  my_desk:
+    universe: [SPY, QQQ]
+    analysts: [technical, macro, signals]
+```
+
+`trade signals` shows what was published and who is listening. See
+`example_scanner.py` for a working one.
+
+**A scanner cannot move money.** Its score joins one debate at one seat; the
+proposal that results still meets the risk manager, the conscience, the venue
+and the approval gate, none of which know a scanner exists. That is why running
+somebody else's screener is a smaller decision than running their strategy —
+and it is why the entry-point names are kept separate. A file defining
+`propose` is telling you it wants to trade, and gets wired up as a firm's bot
+instead.
+
+**A stale reading is silence.** Firms read only the readings stamped with the
+bar they are standing on, so a scanner that crashed, was deleted, or was never
+wired up correctly goes quiet on the next bar rather than voting from the
+grave. There is no grace period. A reading still shown on Mission Control but
+marked *stale* is one nobody is hearing.
+
+**Accepted shapes.** Whichever is most natural for what you already wrote:
+
+```python
+{"AAPL": 80, "MSFT": -20}                       # symbol -> score
+{"AAPL": {"score": 80, "confidence": 60}}       # symbol -> reading
+[{"symbol": "AAPL", "score": 80, "note": "…"}]  # a list of readings
+```
+
+Confidence 0 means silence, not neutrality — say 0 when you have nothing and
+the debate hears nothing. Leave it out and the strength of your own score is
+used. A bare list of tickers is refused: a name with no direction cannot vote,
+and the village will not invent a direction on your behalf.
+
+Entry points tried, in order: `scan`, `signals`, `rank`, `watch`, `publish`.
+
 ## Real prices
 
 `TRADE_DATA_SOURCE` picks the feed. The default is a seeded synthetic one that
@@ -201,9 +263,16 @@ The verdict, juror by juror, is in `trade court-docket` and on the case page at
 
 ## A note on what a "bot" is here
 
-A firm in this village is a **genome** — the parameters the built-in analysts
-read — not arbitrary code. The court will not execute your file, so a bot with
-its own custom logic in Python functions cannot be run as-is; what carries over
-is the configuration. If you have bots with real logic you want to bring in,
-express the behaviour as a genome, or tell me what they do and the analyst
-roster can grow to cover it.
+There are now three ways a file can be one, and picking the wrong one is the
+usual reason something "does nothing":
+
+| your file | wire it up as | it returns |
+|---|---|---|
+| seven parameters and a universe | a genome (`trade recruit`) | nothing — the village reads it |
+| logic in a function that wants to trade | a firm's `bot:` | orders |
+| logic in a function that ranks or screens | a `scanners:` entry | scores |
+
+The court still refuses to execute anything, in all three cases. A file runs
+only because a firm names it as its bot or the `scanners:` block names it, both
+of which are things you typed. Dropping a file in this folder never causes it
+to be executed.

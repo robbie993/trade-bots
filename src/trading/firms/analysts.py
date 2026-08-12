@@ -273,25 +273,84 @@ class OnChainAnalyst:
         )
 
 
+class SignalAnalyst:
+    """The seat where somebody else's scanner sits.
+
+    Every other analyst on this list computes its own number from the bars.
+    This one repeats what the configured scanners published — see
+    ``src/trading/signals.py`` for what a scanner is and why it cannot do
+    anything except talk.
+
+    Two rules make that safe to listen to. It reads **only** the readings
+    stamped with the bar it is standing on, so a scanner that stopped running
+    goes silent immediately instead of voting from the grave. And it is one
+    seat: a scanner screaming +100 wins a share of one debate at one firm, and
+    still has to get past the trader, the risk manager, the conscience and the
+    gate, none of which know it exists.
+
+    With no board wired up, or no scanner speaking, the answer is confidence 0
+    — silence, which the debate already knows how to hear.
+    """
+
+    name = "signals"
+    minimum_bars = 0
+    needs_board = True
+
+    def __init__(self, board=None):
+        self.board = board
+
+    def analyse(self, symbol: str, market: MarketData, genome: dict) -> Signal:
+        if self.board is None:
+            return Signal(self.name, symbol, ZERO, ZERO, "no signal board wired up")
+        reading = self.board.reading(symbol, market.as_of())
+        if reading is None:
+            return Signal(self.name, symbol, ZERO, ZERO, "no scanner spoke on this bar")
+
+        # How much of a stranger's opinion this firm wants. A gene rather than
+        # a constant because trusting an imported screener is a choice the
+        # evolver is allowed to turn down, and turning it to 0 mutes the seat
+        # without editing the firm's analyst list.
+        trust = _genome(genome, "signal_trust", 100) / D(100)
+        return Signal(
+            self.name,
+            symbol,
+            reading.score,
+            _clamp_confidence(reading.confidence * trust),
+            reading.note,
+        )
+
+
 ANALYSTS: dict = {
     "technical": TechnicalAnalyst,
     "fundamental": FundamentalAnalyst,
     "sentiment": SentimentAnalyst,
     "macro": MacroAnalyst,
     "onchain": OnChainAnalyst,
+    "signals": SignalAnalyst,
 }
 
+# What people write when they mean `signals`. Aliases rather than extra entries
+# in ANALYSTS so the error message still lists each seat once.
+ALIASES: dict = {"signal": "signals", "scanner": "signals", "scanners": "signals"}
 
-def build_analysts(names) -> list:
+
+def build_analysts(names, board=None) -> list:
     """Instantiate analysts by name, ignoring unknown seats loudly at config
-    time rather than silently at run time."""
+    time rather than silently at run time.
+
+    ``board`` is the published-signal board, handed to the seats that need one.
+    It is optional so that a firm built outside the ecosystem — a backtest, a
+    test — still assembles, and the signals seat is simply silent there.
+    """
     out = []
     unknown = []
     for raw in names:
         key = str(raw).strip().lower().replace(" ", "").replace("-", "").replace("_", "")
         key = key.replace("analyst", "")
+        key = ALIASES.get(key, key)
         if key in ANALYSTS:
-            out.append(ANALYSTS[key]())
+            seat = ANALYSTS[key]
+            out.append(seat(board) if getattr(seat, "needs_board", False) else seat())
         else:
             unknown.append(raw)
     if unknown:
@@ -313,12 +372,14 @@ def _clamp_confidence(value: Optional[Decimal]) -> Decimal:
 
 
 __all__ = [
+    "ALIASES",
     "ANALYSTS",
     "Analyst",
     "FundamentalAnalyst",
     "MacroAnalyst",
     "OnChainAnalyst",
     "SentimentAnalyst",
+    "SignalAnalyst",
     "TechnicalAnalyst",
     "build_analysts",
 ]

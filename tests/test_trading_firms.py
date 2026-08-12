@@ -32,7 +32,13 @@ def test_every_analyst_stays_silent_without_enough_history(market):
     for factory in ANALYSTS.values():
         signal = factory().analyse("SPY", market, {})
         assert signal.is_silent, f"{factory.__name__} spoke without data"
-        assert "insufficient" in signal.note.lower()
+        # The seats that compute their own number say "insufficient history".
+        # The signals seat has no history of its own to be short of — it is
+        # silent because nothing published — so it says that instead. Both are
+        # confidence 0, which is the only thing the debate reads.
+        assert any(
+            word in signal.note.lower() for word in ("insufficient", "no signal", "no scanner")
+        ), signal.note
 
 
 def test_analysts_produce_bounded_scores(market):
