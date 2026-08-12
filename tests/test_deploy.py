@@ -261,6 +261,52 @@ def test_an_empty_database_is_told_apart_from_a_missing_one(monkeypatch, tmp_pat
     assert client.get("/api/status").json()["error"] == "the database is empty"
 
 
+def test_an_empty_database_is_re_probed_rather_than_remembered(tmp_path, firms_yaml, monkeypatch):
+    """The normal startup order on a container host, which the first version
+    of the cache broke: the web service boots before the worker has migrated,
+    answers "empty" — correctly — and then has to notice when that stops being
+    true. Caching it forever meant a page that was wrong until redeployed."""
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+    monkeypatch.delenv("MVV_PUBLIC", raising=False)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'later.db'}")
+    monkeypatch.setenv("TRADE_FIRMS_CONFIG", str(firms_yaml))
+    monkeypatch.setenv("TRADE_AUDIT_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    import src.agents.web as web
+
+    importlib.reload(deploy)
+    importlib.reload(web)
+    client = TestClient(web.app, raise_server_exceptions=False)
+    assert client.get("/village").status_code == 503
+
+    # The worker comes up and migrates. Same web process, no restart.
+    from src.cli import main
+
+    main(["init-db"])
+    main(["trade", "init"])
+
+    deploy._PROBED_AT = 0.0                    # as if the retry window elapsed
+    assert client.get("/village").status_code == 200
+    assert deploy.database_state() == "ok"
+
+
+def test_a_working_database_is_not_re_probed_every_request(tmp_path, firms_yaml, monkeypatch):
+    """The other half: "ok" is still cached, or every page costs a round trip."""
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'fine.db'}")
+    monkeypatch.setenv("TRADE_FIRMS_CONFIG", str(firms_yaml))
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    importlib.reload(deploy)
+    from src.cli import main
+
+    main(["init-db"])
+    assert deploy.database_state() == "ok"
+
+    deploy._PROBED_AT = 0.0
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody@127.0.0.1:1/nope")
+    assert deploy.database_state() == "ok"     # cached, not re-asked
+    assert deploy.database_state(force=True) == "unreachable"
+
+
 def test_a_broken_database_is_explained_even_when_the_host_is_not_detected(
     monkeypatch, tmp_path
 ):

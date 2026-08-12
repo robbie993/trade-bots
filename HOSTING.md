@@ -1,20 +1,121 @@
 # Putting the village on the internet
 
-There are two copies of this system and they do different jobs.
+There are three ways to run this, and the difference between them is *what may
+change things*.
 
 | | where | what it does |
 |---|---|---|
 | **The console** | your own machine | everything: approve, tick, recruit, kill |
-| **The mirror** | a hosted URL | shows the village, changes nothing |
+| **The mirror** | a hosted URL, no token | shows the village, changes nothing |
+| **The hosted village** | a hosted URL, `MVV_GATE_TOKEN` set | ticks on its own; the console works once you sign in |
 
-The split is not a limitation of the host. The approval gate has no
-authentication — `POST /approvals/3/approve` with a form field of
-`approved_by=web` grants a capital allocation to whoever sent it — so it does
-not go on a public URL. The hosted copy refuses every write in middleware and
-strips the controls out of the HTML, because a button that returns 403 when
-clicked is worse than no button.
+The reason the mirror exists: the approval gate has no authentication of its
+own — `POST /approvals/3/approve` with a form field of `approved_by=web` grants
+a capital allocation to whoever sent it. On a public URL with nothing in front
+of it, that is the whole system's one boundary, open. So the default hosted
+deployment refuses every write in middleware and strips the controls out of the
+HTML, because a button that returns 403 when clicked is worse than no button.
 
-So: **host it to show people, run it locally to use it.**
+**`MVV_GATE_TOKEN` is what changes that**, and nothing else does. Set it and
+`/unlock` will trade the token for a signed, expiring, HttpOnly session cookie;
+writes work for that session and no other. Leave it unset and you have the
+mirror, exactly as before — there is no half-open state, because the code asks
+one question (`access.unlocked(request)`) and a deployment with no token
+configured can only ever answer no. See `src/access.py`.
+
+What signing in does *not* do is widen what the buttons may do. The council
+still may never decide live trading, the live venues still refuse to send an
+order until the venue itself is approved, and the risk manager, the conscience
+and the reconciliation are untouched. It restores the controls; it does not
+change the rules underneath them.
+
+---
+
+## Railway: the whole village, running without you
+
+Railway runs containers rather than functions, so unlike a serverless host it
+can run the part that actually matters — **the tick loop**. That is the
+difference between a hosted picture of a village and a hosted village.
+
+Two services from this one repository, sharing one database:
+
+| service | `MVV_ROLE` | what it is |
+|---|---|---|
+| **worker** | `worker` | migrates, creates the firms, then ticks forever. No HTTP surface at all |
+| **web** | `web` | serves Mission Control and the gate. Never migrates anything |
+
+The split is a safety boundary, not a deployment detail. The worker trades,
+scores, kills, holds the council and runs the living quarters — and none of it
+is reachable from the internet, because it does not listen on a port. The web
+service is the only thing exposed, and it is read-only until somebody signs in.
+
+### Setting it up
+
+1. **Add Postgres.** In your project: *New → Database → PostgreSQL*.
+
+2. **Create the worker service** from this repository. In its *Variables*:
+
+   ```
+   MVV_ROLE=worker
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   MVV_TICK_INTERVAL=300
+   ```
+
+   Railway's `${{Postgres.DATABASE_URL}}` is a reference — type it exactly like
+   that and it resolves to the real connection string without either of you
+   ever seeing it. It needs **no** public domain; it does not serve anything.
+
+3. **Create the web service** from the same repository. In its *Variables*:
+
+   ```
+   MVV_ROLE=web
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   MVV_GATE_TOKEN=<a long random string>
+   ```
+
+   Generate the token — do not invent one by hand:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+   Then *Settings → Networking → Generate Domain*.
+
+4. **Open `https://<your-domain>/village`.** It will show the village. Click
+   **Sign in**, paste the token, and the controls come back.
+
+That is it. The worker is already ticking, and it keeps ticking whether or not
+anybody is signed in or looking — that is the point of it being a separate
+service.
+
+### What you will see while it starts
+
+The web service usually boots before the worker has finished migrating, so the
+first page says **"The database is empty"** with the command to fix it. Ignore
+it and reload in a few seconds: the worker creates the tables, and the web
+service notices on its own. It re-checks every few seconds rather than
+remembering the answer, precisely so this resolves without a redeploy.
+
+### The token, honestly
+
+It is one shared secret, not user accounts, because there is one of you. It is
+signed with HMAC, expires (12 hours by default, `MVV_SESSION_HOURS`), is
+`HttpOnly` and `SameSite=Strict`, is marked `Secure` behind Railway's TLS
+proxy, and wrong guesses are rate-limited to 8 before a 15-minute lockout. A
+token under 16 characters is **refused as a configuration** — the deployment
+stays a mirror and says why, because a short password in front of an approval
+gate is worse than an honest mirror.
+
+Put it in Railway's variables and nowhere else. Not in the repository, not in a
+chat window, not in a file you commit. If it leaks, change the variable and
+redeploy — every existing session is signed with the old one and dies with it.
+
+### What is not persistent
+
+The audit vault writes Markdown to the container's disk, which Railway replaces
+on every deploy. The ledger, the fills, the approvals and the lessons are all
+in Postgres and survive; the vault is a rendering of them and does not. If you
+want it, run `trade audit --write` locally against the same database.
 
 ---
 
@@ -230,9 +331,15 @@ each one exists.
 | `POSTGRES_URL_NON_POOLING` | a managed add-on | preferred over the pooled URL |
 | `POSTGRES_URL` | a managed add-on | used if the non-pooling one is absent |
 | `MVV_PUBLIC` | you, rarely | forces read-only mode on or off |
+| `MVV_GATE_TOKEN` | you | the sign-in token. Unset means the mirror; 16+ characters means `/unlock` works |
+| `MVV_SESSION_HOURS` | you, rarely | how long a sign-in lasts. Default 12 |
+| `MVV_ROLE` | you | `web` (serve pages) or `worker` (tick the village). Container only |
+| `MVV_TICK_INTERVAL` | you | seconds between ticks in the worker. Default 300 |
+| `PORT` | the platform | what the web service listens on. Railway sets it |
 
-Read-only mode turns itself on when the host looks like a serverless platform.
+Read-only mode turns itself on when the host looks like a hosted platform.
 `MVV_PUBLIC=1` forces it on — useful for checking locally what a visitor will
-see. `MVV_PUBLIC=0` forces it off, which you should not do on a public URL: it
-puts the approval gate back on the internet with no authentication in front of
-it.
+see. `MVV_PUBLIC=0` forces it off, and you should not do that on a public URL:
+it puts the approval gate back on the internet with nothing in front of it.
+`MVV_GATE_TOKEN` is the supported way to get the controls back, and unlike
+`MVV_PUBLIC=0` it asks who you are first.

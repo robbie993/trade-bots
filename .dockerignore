@@ -1,0 +1,41 @@
+# What must not end up in the image.
+#
+# The Dockerfile copies named directories rather than `.`, so most of this is
+# belt and braces — except for `data/`, which it does copy. A local SQLite
+# ledger baked into an image is the specific accident worth preventing: the
+# container would start with somebody's real fills in it, and on a host with no
+# writable disk it would look like a working village that never updates. That
+# failure has its own message in src/deploy.py, and it should stay theoretical.
+.git
+.github
+.gitignore
+.env
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# The ledger, in every form.
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/notifications.log
+data/metrics.json
+
+# Written at runtime, never shipped.
+vault/
+logs/
+run/
+dashboard/
+uploads/
+processed/
+
+# Tests and docs do not need to be in a running container.
+tests/
+*.md
+!README.md
