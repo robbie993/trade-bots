@@ -123,6 +123,7 @@ class ImportReport:
     ignored: list = field(default_factory=list)     # literals that meant nothing here
     logic: list = field(default_factory=list)       # functions/classes not carried
     unsupported: dict = field(default_factory=dict) # feature -> the words that hinted
+    renamed: dict = field(default_factory=dict)     # symbol as written -> as the feed spells it
     secrets: bool = False
     error: str = ""
 
@@ -138,6 +139,12 @@ class ImportReport:
             lines.append("  ⚠ looks like it holds a credential. Nothing was written.")
             return "\n".join(lines)
         lines.append(f"  symbols   : {', '.join(self.universe) or '(none found)'}")
+        if self.renamed:
+            lines.append(
+                "  respelled : "
+                + ", ".join(f"{was} -> {now}" for was, now in sorted(self.renamed.items()))
+                + "   (the feed's spelling)"
+            )
         for gene, source in sorted(self.mapped.items()):
             lines.append(f"  mapped    : {gene:15} <- {source}")
         for gene, source in sorted(self.guessed.items()):
@@ -195,6 +202,31 @@ def scan(path) -> ImportReport:
     return report
 
 
+# Exchanges spell the same pair differently and none of them is wrong. The
+# village's feed uses BTC-USD; a bot written against a crypto exchange API
+# almost always says BTC/USD. Left alone the symbol resolves to nothing and the
+# firm arrives holding an empty universe with no explanation — a failure that
+# shows up days later as a leaderboard row that never trades.
+SEPARATORS = ("/", ":", "_")
+
+
+def _feed_symbol(symbol: str, report=None) -> str:
+    """Spell a symbol the way the market feed does, and say so when it changed."""
+    out = symbol.strip()
+    for sep in SEPARATORS:
+        out = out.replace(sep, "-")
+    # BINANCE-BTC-USD and the like: keep the pair, drop the venue prefix.
+    parts = [p for p in out.split("-") if p]
+    if len(parts) > 2:
+        parts = parts[-2:]
+    if len(parts) == 2 and parts[1] in ("USDT", "USDC"):
+        parts[1] = "USD"
+    out = "-".join(parts)
+    if out != symbol and report is not None:
+        report.renamed[symbol] = out
+    return out
+
+
 def _firm_name(path: Path) -> str:
     from .recruit import firm_key_for
 
@@ -250,7 +282,8 @@ def _find_symbols(values: dict, report: ImportReport) -> None:
             value = [s.strip() for s in value.split(",") if s.strip()]
         if isinstance(value, (list, tuple)) and value:
             report.universe = tuple(
-                str(s).upper() for s in value if isinstance(s, (str, int))
+                _feed_symbol(str(s).upper(), report)
+                for s in value if isinstance(s, (str, int))
             )
             return
 

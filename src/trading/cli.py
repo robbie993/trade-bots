@@ -219,7 +219,13 @@ def cmd_run(args) -> int:  # pragma: no cover - long-running
     print(f"running every {interval}s — Ctrl-C to stop")
     while True:
         try:
-            print(eco.tick().summary(), flush=True)
+            # Read every pass, not at startup: the switch is flipped from a
+            # different process, and a pause you have to restart to apply is
+            # not a pause.
+            if eco.settings.get("paused"):
+                print("paused — nothing ticked", flush=True)
+            else:
+                print(eco.tick().summary(), flush=True)
         except KeyboardInterrupt:
             print("\nstopped")
             return 0
@@ -752,6 +758,83 @@ def cmd_council_case(args) -> int:
     return 0
 
 
+def cmd_signals(args) -> int:
+    """What the scanners published, and who is listening.
+
+    Answers the two questions that come up when a screener seems to do
+    nothing: did it publish, and is it publishing for *this* bar. A reading
+    from an older bar is shown but explicitly marked stale, because no firm
+    is hearing it.
+    """
+    eco = _ecosystem(args)
+    specs = eco.scanners.specs
+    if eco.scanners.error:
+        print(f"  {eco.scanners.error}")
+    if not specs:
+        print("no scanners configured. Add a `scanners:` block to the firm config —")
+        print("see bots/example_scanner.py.")
+    else:
+        print(_table([
+            {
+                "scanner": spec.name,
+                "file": str(spec.path),
+                "universe": ", ".join(spec.universe)[:34] or "(the whole village)",
+                "on": "yes" if spec.enabled else "no",
+            }
+            for spec in specs
+        ]))
+
+    listening = [
+        f.firm_key for f in eco.store.firms()
+        if "signals" in {
+            str(a).strip().lower() for a in (eco.specs().get(f.firm_key).analysts
+                                             if eco.specs().get(f.firm_key) else ())
+        }
+    ]
+    print(f"\nlistening ({len(listening)}): " + (", ".join(listening) or "nobody yet — "
+          "add `signals` to a firm's analysts"))
+
+    rows = eco.signals.recent(limit=args.limit, publisher=args.publisher or "")
+    if not rows:
+        print("\nnothing published yet.")
+        return 0
+
+    current = _signals_stamp(eco)
+    print("\npublished:")
+    print(_table([
+        {
+            "bar": str(row["as_of"])[:16],
+            "publisher": str(row["publisher"]),
+            "symbol": str(row["symbol"]),
+            "score": f'{_D(row["score"]):+.2f}',
+            "conf": f'{_D(row["confidence"]):.2f}',
+            "heard": "yes" if str(row["as_of"]) == current else "stale",
+            "note": str(row["note"] or "")[:40],
+        }
+        for row in rows
+    ]))
+    return 0
+
+
+def _D(value):
+    from ..money import D
+
+    try:
+        return D(value)
+    except Exception:  # noqa: BLE001 - a column that will not parse still prints
+        return D(0)
+
+
+def _signals_stamp(eco) -> str:
+    """The bar the village is standing on, as the board stores it."""
+    from .signals import stamp
+
+    try:
+        return stamp(eco.market().as_of())
+    except Exception:  # noqa: BLE001 - a feed that will not answer is not fatal here
+        return ""
+
+
 def cmd_recruit(args) -> int:
     """Drop a bot file in; the court rules, and a cleared file becomes a firm."""
     from ..money import D
@@ -942,6 +1025,11 @@ def add_trade_parser(subparsers) -> None:
     p = add("monitor", "status, repeatedly", cmd_monitor)
     p.add_argument("--watch", action="store_true")
     p.add_argument("--interval", type=int, default=60)
+
+    # -- scanners ----------------------------------------------------------
+    p = add("signals", "what the scanners published, and who hears it", cmd_signals)
+    p.add_argument("--publisher", help="only this scanner")
+    p.add_argument("--limit", type=int, default=25)
 
     # -- the strategy court ------------------------------------------------
     p = add("court-submit", "put a strategy file on trial", cmd_court_submit)

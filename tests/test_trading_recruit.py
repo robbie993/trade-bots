@@ -242,17 +242,62 @@ def test_the_shipped_example_bots_are_readable_and_safe():
     from src.trading.brain.evolver import BASE_GENOME
     from src.trading.court.evidence import gather
 
+    from src.trading import adapter
+
     files = [p for p in Path("bots").iterdir()
              if p.suffix.lower() in (".py", ".yaml", ".yml", ".json")]
     assert files, "bots/ should ship example strategies"
+
+    # Three kinds of example live here now, and they are judged differently. A
+    # genome file declares seven numbers and the court reads them without ever
+    # running the file. An adapter file declares a function the village calls
+    # for orders — see src/trading/adapter.py. A scanner file declares a
+    # function the village calls for scores — see src/trading/signals.py. All
+    # three must parse and reach outside nothing; only the first can be asked
+    # for a genome, because the other two put their logic in the function.
+    from src.trading import signals
+
+    genome_files, adapter_files, scanner_files = [], [], []
     for path in files:
         evidence = gather(path)
         assert evidence.syntax_error is None, path.name
         assert evidence.is_safe, (path.name, evidence.dangerous_imports)
         assert not evidence.out_of_range, (path.name, evidence.out_of_range)
         assert not evidence.unknown_genes, (path.name, evidence.unknown_genes)
+
+        if path.suffix.lower() == ".py" and _has_entry_point(path, adapter.ENTRY_POINTS):
+            adapter_files.append(path)
+            continue
+        if path.suffix.lower() == ".py" and _has_entry_point(path, signals.ENTRY_POINTS):
+            scanner_files.append(path)
+            continue
+        genome_files.append(path)
         assert set(BASE_GENOME) <= set(evidence.genome), path.name
         assert evidence.universe, path.name
+
+    assert genome_files, "at least one genome example"
+    assert adapter_files, "at least one adapter example"
+    assert scanner_files, "at least one scanner example"
+    for path in adapter_files:
+        assert callable(adapter.load(path)), path.name
+    for path in scanner_files:
+        assert callable(adapter.load(path, entry_points=signals.ENTRY_POINTS)), path.name
+
+
+def _has_entry_point(path, entry_points) -> bool:
+    """Does this file define a function the village would call?
+
+    Read with `ast` rather than imported: deciding *what kind* of file this is
+    must not require running it.
+    """
+    import ast
+
+    tree = ast.parse(path.read_text())
+    names = {
+        node.name for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    return bool(names & set(entry_points))
 
 
 # =========================================================================

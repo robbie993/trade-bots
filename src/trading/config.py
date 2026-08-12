@@ -21,11 +21,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from decimal import Decimal
 from pathlib import Path
 
 from ..config import REPO_ROOT, _env_bool, _env_decimal, _env_int
 from ..money import D
+
+
+if TYPE_CHECKING:  # the real import lives in living.py, which imports this module
+    from .living import LivingConfig
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,27 @@ class FirmDefaults:
         default_factory=lambda: _env_decimal("TRADE_MAX_POSITION_PCT", "0.25")
     )
     max_positions: int = field(default_factory=lambda: _env_int("TRADE_MAX_POSITIONS", 8))
+    # Short selling. Off by default, and that is not squeamishness: a long
+    # position's worst case is losing what you put in, and a short's worst case
+    # has no floor at all. A system whose whole claim is that it can be stopped
+    # should not open unbounded risk because nobody said otherwise.
+    allow_short: bool = field(
+        default_factory=lambda: os.environ.get("TRADE_ALLOW_SHORT", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    # Gross exposure — longs *plus* the absolute value of shorts — as a
+    # fraction of allocation. Net exposure is the wrong measure once shorts
+    # exist: a book that is long 100 and short 100 is flat on paper and can
+    # still lose on both legs at once.
+    max_gross_exposure: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_MAX_GROSS_EXPOSURE", "1.50")
+    )
+    # What it costs to borrow, per year, charged per tick on short notional.
+    # Shorting is not free, and a backtest that treats it as free is a
+    # backtest of a strategy nobody can run.
+    borrow_rate_annual: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_BORROW_RATE", "0.05")
+    )
     # Cash the firm may never dip below, as a fraction of its allocation.
     cash_floor_pct: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_CASH_FLOOR_PCT", "0.05")
@@ -293,10 +319,18 @@ class TradingConfig:
     kill: FirmKillConfig = field(default_factory=FirmKillConfig)
     brokerage: BrokerageConfig = field(default_factory=BrokerageConfig)
     autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
+    living: "LivingConfig" = field(default_factory=lambda: _living_config())
     brain: BrainConfig = field(default_factory=BrainConfig)
     heart: HeartConfig = field(default_factory=HeartConfig)
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     data: DataConfig = field(default_factory=DataConfig)
+
+
+def _living_config():
+    """Imported late: living.py reads TradingConfig, so this cannot be a cycle."""
+    from .living import LivingConfig
+
+    return LivingConfig()
 
 
 def load_trading_config() -> TradingConfig:

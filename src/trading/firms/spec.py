@@ -31,6 +31,19 @@ class FirmSpecError(ValueError):
     """The firm config could not be read, or is missing something required."""
 
 
+def _strategy(raw: dict) -> str:
+    """A firm's strategy label, or the bot it delegates to.
+
+    `bot: bots/mine.py` means the village runs that file instead of its own
+    analysts — see src/trading/adapter.py. It is stored in the same column as
+    the free-text label because it is the same thing: what this firm does.
+    """
+    bot = str(raw.get("bot") or "").strip()
+    if bot:
+        return f"bot:{bot}"
+    return str(raw.get("strategy") or "")
+
+
 @dataclass
 class FirmSpec:
     firm_key: str
@@ -78,7 +91,7 @@ class FirmSpec:
             firm_key=key,
             name=str(raw.get("name") or key),
             asset_class=str(raw.get("asset_class") or ""),
-            strategy=str(raw.get("strategy") or ""),
+            strategy=_strategy(raw),
             venue=str(raw.get("venue") or limits.venue),
             risk_limit=D(raw.get("risk_limit", limits.risk_limit)),
             allocation=D(raw.get("capital_allocation", raw.get("allocation", limits.allocation))),
@@ -100,6 +113,12 @@ def load_firm_specs(
         )
     raw = parse_config(target)
     firms = raw.get("firms", raw)
+    if firms is raw and isinstance(raw, dict):
+        # A file without a `firms:` header is treated as the mapping itself,
+        # which was fine until the file grew a second top-level block. A
+        # scanner is not a firm and must not be read as one — see
+        # src/trading/signals.py.
+        firms = {k: v for k, v in raw.items() if k not in ("scanners",)}
     if not isinstance(firms, dict) or not firms:
         raise FirmSpecError(f"{target} defines no firms")
     return [FirmSpec.from_mapping(key, value, cfg.firm) for key, value in firms.items()]

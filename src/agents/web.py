@@ -70,8 +70,14 @@ except Exception:  # pragma: no cover
 # still answers — with the traceback that explains it.
 _BOOT_ERROR = ""
 try:
+    from ..access import install as _install_access
     from ..deploy import install as _install_public
 
+    # Order matters only in that both must exist before a request arrives.
+    # /unlock is exempted inside the guard by path, not by middleware ordering,
+    # because relying on which wrapper runs first is how a security boundary
+    # ends up depending on an import order nobody documented.
+    _install_access(app)
     _install_public(app)
 except Exception:  # pragma: no cover - the point is to survive the unexpected
     import traceback
@@ -146,9 +152,30 @@ def page(title: str, body: str) -> HTMLResponse:
         f"{body}"
         f"<footer class=muted>MVV Phase 1 — Human Approval Gate &middot; "
         f"<a href='/village'>Mission Control</a>. "
-        f"This page has no authentication: anyone who can reach it can approve "
-        f"spending. Bind it to localhost or put it behind your own auth."
+        f"{_gate_warning()}"
         f"</footer></body></html>"
+    )
+
+
+def _gate_warning() -> str:
+    """What this page's protection actually is, on this deployment.
+
+    It said "this page has no authentication" unconditionally, which was true
+    of every deployment that existed when it was written and is now true of
+    only some of them. A safety notice that is sometimes wrong is one people
+    stop reading, so it asks.
+    """
+    from ..access import UNLOCK_PATH, configured
+
+    if configured():
+        return (
+            "Signed-in sessions may approve spending. "
+            f"<a href='{UNLOCK_PATH}'>Sign in</a> &middot; <a href='/lock'>sign out</a>."
+        )
+    return (
+        "This page has no authentication: anyone who can reach it can approve "
+        "spending. Bind it to localhost, set <code>MVV_GATE_TOKEN</code>, or put "
+        "it behind your own auth."
     )
 
 

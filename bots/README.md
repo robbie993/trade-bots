@@ -22,6 +22,198 @@ python -m src.main approve <id> --by you
 python -m src.main trade apply-approvals   # funds it and sets it trading
 ```
 
+## When your strategy is not seven numbers
+
+Everything above translates a bot *into* the village's seven genes, which works
+when your strategy really is seven numbers and fails quietly when it is not.
+Most real strategies are not: the logic lives in a function, and no amount of
+matching on module-level constants will find it.
+
+So there is a second way in. Declare a function, and the village runs it:
+
+```python
+def propose(context):
+    orders = []
+    for symbol in context.universe:
+        if context.quantity(symbol) == 0 and context.price(symbol):
+            orders.append({"symbol": symbol, "side": "buy", "notional": 5000,
+                           "rationale": "why I want this"})
+    return orders
+```
+
+Point a firm at the file in `config/firm_config.yaml`:
+
+```yaml
+firms:
+  my_desk:
+    name: "My Desk"
+    capital_allocation: 50000
+    universe: [SPY, QQQ]
+    bot: bots/my_bot.py
+```
+
+See `example_adapter.py` for a working one.
+
+**What you get.** One argument, holding what a strategy needs and nothing else:
+
+| | |
+|---|---|
+| `context.universe` | the symbols this firm may trade |
+| `context.cash` / `context.equity` | Decimals |
+| `context.price(symbol)` | the latest mark, or `None` |
+| `context.closes(symbol, n)` | the last n closes, oldest first |
+| `context.quantity(symbol)` | how much you hold — `0` if nothing |
+| `context.as_of` | the timestamp of the latest bar |
+
+Not the store, not the database, not the gate, not the other firms' books.
+
+**What you return.** A list of dicts with `symbol`, `side`, and either
+`quantity` or `notional`. `rationale` is optional and worth writing — it is
+what the audit trail shows when somebody asks why the firm bought that.
+
+**What the village still does.** Everything: your order meets the same risk
+manager, the same conscience, the same position sizing and the same audit row
+as anything the built-in analysts produce. You decide what you want. You do not
+decide what happens.
+
+**This runs your file**, which nothing else here does — the court and the
+importer parse with `ast` and never execute, because they read files you might
+have been handed. A bot runs only when a firm's config names it. Dropping a
+file in this folder never causes it to be executed.
+
+A bot that raises is reported and skipped. One that hangs is abandoned after
+ten seconds. One that returns nonsense has the nonsense dropped and the rest
+kept. In every case the firm has a quiet tick, the reason appears in the tick
+summary, and the village carries on.
+
+## When your bot spots things instead of trading them
+
+A lot of what people have written is not a strategy at all. It is a scanner, a
+screener, a whale watcher, a ranker: it reads the market and *names a symbol*
+without ever wanting to place an order. Wired up as a firm's `bot:` such a file
+looks broken — it returns no orders, so the firm proposes nothing.
+
+It has its own seat. A scanner publishes a **reading** — a symbol, a score from
+-100 to +100, a confidence from 0 to 100 — and any firm that lists the
+`signals` analyst hears it in its debate:
+
+```python
+def scan(context):
+    return {"AAPL": 80, "MSFT": -20}       # symbol -> score
+```
+
+Register it, and give at least one firm the seat:
+
+```yaml
+scanners:
+  whales:
+    bot: bots/whale_stack.py
+    # universe: [BTC-USD, ETH-USD]   # optional — defaults to the whole village
+
+firms:
+  my_desk:
+    universe: [SPY, QQQ]
+    analysts: [technical, macro, signals]
+```
+
+`trade signals` shows what was published and who is listening. See
+`example_scanner.py` for a working one.
+
+**A scanner cannot move money.** Its score joins one debate at one seat; the
+proposal that results still meets the risk manager, the conscience, the venue
+and the approval gate, none of which know a scanner exists. That is why running
+somebody else's screener is a smaller decision than running their strategy —
+and it is why the entry-point names are kept separate. A file defining
+`propose` is telling you it wants to trade, and gets wired up as a firm's bot
+instead.
+
+**A stale reading is silence.** Firms read only the readings stamped with the
+bar they are standing on, so a scanner that crashed, was deleted, or was never
+wired up correctly goes quiet on the next bar rather than voting from the
+grave. There is no grace period. A reading still shown on Mission Control but
+marked *stale* is one nobody is hearing.
+
+**Accepted shapes.** Whichever is most natural for what you already wrote:
+
+```python
+{"AAPL": 80, "MSFT": -20}                       # symbol -> score
+{"AAPL": {"score": 80, "confidence": 60}}       # symbol -> reading
+[{"symbol": "AAPL", "score": 80, "note": "…"}]  # a list of readings
+```
+
+Confidence 0 means silence, not neutrality — say 0 when you have nothing and
+the debate hears nothing. Leave it out and the strength of your own score is
+used. A bare list of tickers is refused: a name with no direction cannot vote,
+and the village will not invent a direction on your behalf.
+
+Entry points tried, in order: `scan`, `signals`, `rank`, `watch`, `publish`.
+
+## Real prices
+
+`TRADE_DATA_SOURCE` picks the feed. The default is a seeded synthetic one that
+prices everything instantly with no network — that is what the tests, the
+backtests and the evolution loop run on, and a replay that depends on an
+exchange being up is not a replay.
+
+| source | covers | needs |
+|---|---|---|
+| `synthetic` | everything, invented | nothing |
+| `alpaca` | **stocks and crypto** | free API keys |
+| `yahoo` | stocks, ETFs, indices | nothing |
+| `ccxt` | crypto, 100+ exchanges | `pip install ccxt` |
+| `csv` | whatever you put in `data/market/` | nothing |
+
+**Alpaca is the one to reach for** if your universe is mixed, because it is the
+only one here that covers both halves. Free keys from alpaca.markets, then:
+
+```bash
+export ALPACA_API_KEY_ID='...'
+export ALPACA_API_SECRET_KEY='...'
+TRADE_DATA_SOURCE=alpaca ./scripts/village.sh restart
+```
+
+Those are credentials — export them in your shell, do not put them in a file in
+this repository. They go in a header, never in a URL, and nothing logs them.
+
+Symbols route by the village's own spelling: `BTC-USD` has a quote currency and
+goes to the crypto endpoint, `SPY` is a bare ticker and goes to the stock one.
+The free stock tier is IEX rather than the full tape, which for daily bars is a
+rounding difference; `TRADE_ALPACA_FEED=sip` switches it if you pay for it.
+
+**Several sources chain**, tried per symbol: `ccxt,yahoo` asks the exchange
+first and falls back for what it has never heard of. A symbol nothing in the
+chain can price is reported and skipped — that one symbol stops, not the
+village. Mixing `synthetic` into a chain with real feeds warns, because a book
+priced half on real data and half on invented data is a book that lies.
+
+**A note on Binance**: it does not serve US addresses, and the failure looks
+like every pair being unavailable rather than anything mentioning geography.
+`TRADE_CCXT_EXCHANGE=coinbase` or `alpaca` if you are in the US.
+
+## Selling short
+
+Off by default. Turn it on with `TRADE_ALLOW_SHORT=1`, and then a bot may
+return `{"side": "sell"}` on a symbol it does not hold.
+
+That default is not squeamishness. A long position's worst case is losing what
+you put in; a short's has no floor, and a system whose whole claim is that it
+can be stopped should not open unbounded risk because nobody said otherwise.
+
+Three things come with it:
+
+| | |
+|---|---|
+| `TRADE_MAX_GROSS_EXPOSURE` | longs **plus** the absolute value of shorts, against allocation. Default 1.5x |
+| `TRADE_BORROW_RATE` | charged per tick on short notional. Default 5% a year |
+| the cash floor | applies to shorts too — that is the margin rule, at 100% |
+
+Gross rather than net, because long 100 and short 100 is flat on paper and can
+lose on both legs at once. Borrow, because a backtest that treats shorting as
+free is a backtest of a strategy nobody can run.
+
+**Closing is always allowed**, including when shorting is switched off — turning
+it off must never trap a firm in a position it already holds.
+
 ## Bringing in a bot written for something else
 
 If your file does not already have `GENOME` and `UNIVERSE`, adapt it first:
@@ -71,9 +263,16 @@ The verdict, juror by juror, is in `trade court-docket` and on the case page at
 
 ## A note on what a "bot" is here
 
-A firm in this village is a **genome** — the parameters the built-in analysts
-read — not arbitrary code. The court will not execute your file, so a bot with
-its own custom logic in Python functions cannot be run as-is; what carries over
-is the configuration. If you have bots with real logic you want to bring in,
-express the behaviour as a genome, or tell me what they do and the analyst
-roster can grow to cover it.
+There are now three ways a file can be one, and picking the wrong one is the
+usual reason something "does nothing":
+
+| your file | wire it up as | it returns |
+|---|---|---|
+| seven parameters and a universe | a genome (`trade recruit`) | nothing — the village reads it |
+| logic in a function that wants to trade | a firm's `bot:` | orders |
+| logic in a function that ranks or screens | a `scanners:` entry | scores |
+
+The court still refuses to execute anything, in all three cases. A file runs
+only because a firm names it as its bot or the `scanners:` block names it, both
+of which are things you typed. Dropping a file in this folder never causes it
+to be executed.

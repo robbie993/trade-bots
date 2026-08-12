@@ -1,20 +1,147 @@
 # Putting the village on the internet
 
-There are two copies of this system and they do different jobs.
+There are three ways to run this, and the difference between them is *what may
+change things*.
 
 | | where | what it does |
 |---|---|---|
 | **The console** | your own machine | everything: approve, tick, recruit, kill |
-| **The mirror** | a hosted URL | shows the village, changes nothing |
+| **The mirror** | a hosted URL, no token | shows the village, changes nothing |
+| **The hosted village** | a hosted URL, `MVV_GATE_TOKEN` set | ticks on its own; the console works once you sign in |
 
-The split is not a limitation of the host. The approval gate has no
-authentication — `POST /approvals/3/approve` with a form field of
-`approved_by=web` grants a capital allocation to whoever sent it — so it does
-not go on a public URL. The hosted copy refuses every write in middleware and
-strips the controls out of the HTML, because a button that returns 403 when
-clicked is worse than no button.
+The reason the mirror exists: the approval gate has no authentication of its
+own — `POST /approvals/3/approve` with a form field of `approved_by=web` grants
+a capital allocation to whoever sent it. On a public URL with nothing in front
+of it, that is the whole system's one boundary, open. So the default hosted
+deployment refuses every write in middleware and strips the controls out of the
+HTML, because a button that returns 403 when clicked is worse than no button.
 
-So: **host it to show people, run it locally to use it.**
+**`MVV_GATE_TOKEN` is what changes that**, and nothing else does. Set it and
+`/unlock` will trade the token for a signed, expiring, HttpOnly session cookie;
+writes work for that session and no other. Leave it unset and you have the
+mirror, exactly as before — there is no half-open state, because the code asks
+one question (`access.unlocked(request)`) and a deployment with no token
+configured can only ever answer no. See `src/access.py`.
+
+What signing in does *not* do is widen what the buttons may do. The council
+still may never decide live trading, the live venues still refuse to send an
+order until the venue itself is approved, and the risk manager, the conscience
+and the reconciliation are untouched. It restores the controls; it does not
+change the rules underneath them.
+
+---
+
+## Railway: the whole village, running without you
+
+Railway runs containers rather than functions, so unlike a serverless host it
+can run the part that actually matters — **the tick loop**. That is the
+difference between a hosted picture of a village and a hosted village.
+
+Two services from this one repository, sharing one database:
+
+| service | `MVV_ROLE` | what it is |
+|---|---|---|
+| **worker** | `worker` | migrates, creates the firms, then ticks forever. No HTTP surface at all |
+| **web** | `web` | serves Mission Control and the gate. Never migrates anything |
+
+The split is a safety boundary, not a deployment detail. The worker trades,
+scores, kills, holds the council and runs the living quarters — and none of it
+is reachable from the internet, because it does not listen on a port. The web
+service is the only thing exposed, and it is read-only until somebody signs in.
+
+### Setting it up, the short way
+
+```bash
+./scripts/railway_setup.sh --dry-run     # read what it will do
+./scripts/railway_setup.sh               # then do it
+```
+
+It creates both services, adds Postgres, wires the variables, generates a
+sign-in token and deploys — the same clicks below, in the right order. It runs
+on **your** machine because Railway's CLI authenticates as you, with an
+account-level credential that can change every project in the workspace; that
+belongs in your keychain via `railway login` and nowhere else.
+
+The token it generates goes to Railway through stdin rather than as a command
+argument — arguments are visible to every process via `ps` and land in your
+shell history — and is saved to `.env`, which is gitignored and written mode
+600. It is deliberately never printed. When you need it:
+
+```bash
+grep MVV_GATE_TOKEN .env
+```
+
+Nothing it does is destructive: creating a service that exists is skipped,
+setting a variable to what it already is changes nothing, and it deletes
+nothing. Run it twice and the second run is a no-op with a fresh deploy.
+
+### Setting it up, by hand
+
+1. **Add Postgres.** In your project: *New → Database → PostgreSQL*.
+
+2. **Create the worker service** from this repository. In its *Variables*:
+
+   ```
+   MVV_ROLE=worker
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   MVV_TICK_INTERVAL=300
+   ```
+
+   Railway's `${{Postgres.DATABASE_URL}}` is a reference — type it exactly like
+   that and it resolves to the real connection string without either of you
+   ever seeing it. It needs **no** public domain; it does not serve anything.
+
+3. **Create the web service** from the same repository. In its *Variables*:
+
+   ```
+   MVV_ROLE=web
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   MVV_GATE_TOKEN=<a long random string>
+   ```
+
+   Generate the token — do not invent one by hand:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+
+   Then *Settings → Networking → Generate Domain*.
+
+4. **Open `https://<your-domain>/village`.** It will show the village. Click
+   **Sign in**, paste the token, and the controls come back.
+
+That is it. The worker is already ticking, and it keeps ticking whether or not
+anybody is signed in or looking — that is the point of it being a separate
+service.
+
+### What you will see while it starts
+
+The web service usually boots before the worker has finished migrating, so the
+first page says **"The database is empty"** with the command to fix it. Ignore
+it and reload in a few seconds: the worker creates the tables, and the web
+service notices on its own. It re-checks every few seconds rather than
+remembering the answer, precisely so this resolves without a redeploy.
+
+### The token, honestly
+
+It is one shared secret, not user accounts, because there is one of you. It is
+signed with HMAC, expires (12 hours by default, `MVV_SESSION_HOURS`), is
+`HttpOnly` and `SameSite=Strict`, is marked `Secure` behind Railway's TLS
+proxy, and wrong guesses are rate-limited to 8 before a 15-minute lockout. A
+token under 16 characters is **refused as a configuration** — the deployment
+stays a mirror and says why, because a short password in front of an approval
+gate is worse than an honest mirror.
+
+Put it in Railway's variables and nowhere else. Not in the repository, not in a
+chat window, not in a file you commit. If it leaks, change the variable and
+redeploy — every existing session is signed with the old one and dies with it.
+
+### What is not persistent
+
+The audit vault writes Markdown to the container's disk, which Railway replaces
+on every deploy. The ledger, the fills, the approvals and the lessons are all
+in Postgres and survive; the vault is a rendering of them and does not. If you
+want it, run `trade audit --write` locally against the same database.
 
 ---
 
@@ -103,6 +230,106 @@ MVV_SEED_DAYS=45 ./scripts/local_console.sh
 
 ---
 
+## Leaving it running
+
+`local_console.sh` serves pages and nothing else. The autoplay button in
+Mission Control ticks the village from the browser, so closing the tab stops
+it — the only thing ticking was a page.
+
+To leave the village running on its own:
+
+```bash
+./scripts/village.sh start      # the tick loop and the console, in the background
+./scripts/village.sh status     # what is alive, when it last ticked, what waits on you
+./scripts/village.sh logs       # follow it
+./scripts/village.sh stop
+```
+
+That starts two processes. The village keeps ticking while you look at Mission
+Control, look at the solar view, look at nothing, or shut the laptop. Both
+write to the same SQLite file, which is why the connection now opens in WAL
+mode — the default journal makes a reader and a writer block each other and
+fail with "database is locked".
+
+It turns on two things, deliberately:
+
+| | |
+|---|---|
+| `TRADE_AUTONOMY=council` | the council rules on what the evidence settles and defers the rest to you. It has no panel for live trading, by construction |
+| `TRADE_LIVING=on` | the arena, bazaar and tavern run themselves |
+
+**Neither grants a dollar.** Capital still stops at the gate, which is what
+makes this safe to leave running — and why you will still come back to
+decisions waiting for you.
+
+### What the village does on its own
+
+With `TRADE_LIVING=on`, three quarters of the map that used to be scenery
+start doing things:
+
+| quarter | what happens | how often |
+|---|---|---|
+| **Arena** | a season of head-to-head bouts, and milestone awards | every 10 bars |
+| **Bazaar** | an idle firm lists the genome it is not using; someone with tokens to spare buys it | every 4 bars |
+| **Tavern** | firms with overlapping universes form an alliance; someone behind spies on someone ahead | every 3 bars |
+
+Two limits, both deliberate:
+
+- **The bazaar trades in tokens only.** Capital listings still exist and still
+  stop at the gate before a dollar moves — but the village will not file those
+  requests on its own, because a gate that fills up while you sleep becomes an
+  inbox to clear rather than a decision to make.
+- **The tavern cannot reach the money.** It is handed a read-only store and a
+  writer restricted to two tables, enforced in `sandbox/guard.py`. Espionage
+  copies a genome into a record; using it still means submitting it to the
+  strategy court like anything else.
+
+The clock is the market's bar date, not the wall clock, so replaying the same
+history produces the same village — the same alliance on the same day. Tune it
+with `TRADE_SEASON_EVERY`, `TRADE_BAZAAR_EVERY`, `TRADE_TAVERN_EVERY`, or turn
+the whole thing off by leaving `TRADE_LIVING` unset.
+
+### The switches, without a terminal
+
+Mission Control has a **Switches** panel. It can pause the whole village, and
+open or close each quarter, while everything is running:
+
+| switch | what it stops |
+|---|---|
+| **The village** | trading, scoring, the council — the loop keeps running and does nothing |
+| **Arena** | seasons and titles |
+| **Bazaar** | listings and sales |
+| **Tavern** | alliances and schemes |
+
+These are not environment variables. The process that ticks is not the process
+serving the page, so setting an environment variable in one would change
+nothing in the other. They are stored in `village_settings` and read on every
+pass, which means a switch you flip is already in effect — no restart, and no
+Terminal once the village is up.
+
+An unset switch defers to `TRADE_LIVING`, so the environment still decides the
+default and clearing an override hands the decision back to it. Every flip
+records who made it.
+
+Pausing stops the village trading. It does not close the gate, and nothing
+already approved is undone.
+
+### Bringing a firm back
+
+A paused firm now has a **Bring back** button next to it in Mission Control.
+That was the one decision you could not make from the page you were looking
+at — `trade resume` could do it, and so could the council, but Mission Control
+could only watch the firm sit there.
+
+**A killed firm does not come back**, and the button does not appear for one.
+A pause is the system saying "this tripped a limit, go and look"; a kill is the
+answer to having looked. Reversing that from a web button would make the kill
+switch a suggestion. The legitimate route is the one that any strategy takes:
+submit it to the court, and if it clears, it becomes a new firm — created
+paused and unfunded, with an approval waiting for you.
+
+---
+
 ## What the page is telling you
 
 The mirror always says which of these it is, so you never have to guess.
@@ -130,9 +357,15 @@ each one exists.
 | `POSTGRES_URL_NON_POOLING` | a managed add-on | preferred over the pooled URL |
 | `POSTGRES_URL` | a managed add-on | used if the non-pooling one is absent |
 | `MVV_PUBLIC` | you, rarely | forces read-only mode on or off |
+| `MVV_GATE_TOKEN` | you | the sign-in token. Unset means the mirror; 16+ characters means `/unlock` works |
+| `MVV_SESSION_HOURS` | you, rarely | how long a sign-in lasts. Default 12 |
+| `MVV_ROLE` | you | `web` (serve pages) or `worker` (tick the village). Container only |
+| `MVV_TICK_INTERVAL` | you | seconds between ticks in the worker. Default 300 |
+| `PORT` | the platform | what the web service listens on. Railway sets it |
 
-Read-only mode turns itself on when the host looks like a serverless platform.
+Read-only mode turns itself on when the host looks like a hosted platform.
 `MVV_PUBLIC=1` forces it on — useful for checking locally what a visitor will
-see. `MVV_PUBLIC=0` forces it off, which you should not do on a public URL: it
-puts the approval gate back on the internet with no authentication in front of
-it.
+see. `MVV_PUBLIC=0` forces it off, and you should not do that on a public URL:
+it puts the approval gate back on the internet with nothing in front of it.
+`MVV_GATE_TOKEN` is the supported way to get the controls back, and unlike
+`MVV_PUBLIC=0` it asks who you are first.

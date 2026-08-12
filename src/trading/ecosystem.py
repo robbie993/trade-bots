@@ -65,6 +65,9 @@ class TickReport:
     lessons: int = 0
     rulings: list = field(default_factory=list)
     carried_out: list = field(default_factory=list)
+    village: list = field(default_factory=list)
+    bot_notes: list = field(default_factory=list)
+    signals: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -84,6 +87,12 @@ class TickReport:
             lines.append(f"  COUNCIL: {ruling}")
         for done in self.carried_out:
             lines.append(f"  CARRIED OUT: {done}")
+        for happening in self.village:
+            lines.append(f"  VILLAGE: {happening}")
+        for note in self.bot_notes:
+            lines.append(f"  BOT: {note}")
+        for note in self.signals:
+            lines.append(f"  SCANNER: {note}")
         return "\n".join(lines)
 
 
@@ -118,8 +127,12 @@ class Ecosystem:
         self._court = None
         self._tokens = None
         self._arena = None
+        self._living = None
+        self._settings = None
         self._market = None
         self._sandbox = None
+        self._signals = None
+        self._scanners = None
 
     # =====================================================================
     # the layers above the ledger
@@ -153,6 +166,50 @@ class Ecosystem:
 
             self._tokens = TokenLedger(self.db)
         return self._tokens
+
+    @property
+    def settings(self):
+        if self._settings is None:
+            from .settings import Settings
+
+            self._settings = Settings(self.db)
+        return self._settings
+
+    @property
+    def signals(self):
+        """The published-signal board. Read by the firms, written by scanners."""
+        if self._signals is None:
+            from .signals import SignalBoard
+
+            self._signals = SignalBoard(self.db)
+        return self._signals
+
+    @property
+    def scanners(self):
+        """The configured scanners. A village with none is the normal case.
+
+        A malformed `scanners:` block is caught here rather than allowed out of
+        a tick: the tick reports it as a scanner note and keeps trading, which
+        is the correct blast radius for a screener that will not load.
+        """
+        if self._scanners is None:
+            from .signals import Scanners, ScannerError, load_scanner_specs
+
+            specs, error = [], ""
+            try:
+                specs = load_scanner_specs(config=self.config)
+            except ScannerError as exc:
+                error = f"scanner config unusable, no scanner is running: {exc}"
+            self._scanners = Scanners(self.signals, specs, error=error)
+        return self._scanners
+
+    @property
+    def living(self):
+        if self._living is None:
+            from .living import Living
+
+            self._living = Living(self)
+        return self._living
 
     @property
     def arena(self):
@@ -329,7 +386,7 @@ class Ecosystem:
     def build_firm(self, record: FirmRecord) -> Firm:
         spec = self.specs().get(record.firm_key)
         if spec is not None:
-            return Firm.from_spec(spec, record, self.config)
+            return Firm.from_spec(spec, record, self.config, board=self.signals)
         return Firm(record, limits=self.config.firm, kill_config=self.config.kill)
 
     # =====================================================================
@@ -347,10 +404,39 @@ class Ecosystem:
         flow.start_run()
         flow.emit("market", f"bars up to {market.as_of()}", detail=f"source: {self.feed.name}")
 
+        # A symbol the feed cannot price is now a symbol with no bars rather
+        # than an exception out of the whole tick — but it must not pass
+        # unmentioned, and for a firm that *holds* the thing it is not a
+        # detail: a position you cannot value is a book you cannot trust.
+        for symbol, why in sorted(getattr(market, "unpriceable", {}).items()):
+            report.bot_notes.append(f"no price for {symbol}: {why[:160]}")
+            flow.emit("market", f"no price for {symbol}", kind="blocked",
+                      detail=why[:300])
+
+        # The scanners run before any firm deliberates, because a reading
+        # published after the debate is a reading nobody heard. They publish a
+        # score and nothing else — there is no path from src/trading/signals.py
+        # to an order, so this is the one place in the tick where running a
+        # stranger's file cannot even be refused, only ignored.
+        report.signals = self.scanners.run(market)
+        for note in report.signals:
+            flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
+
         for record in self.store.firms():
             if record.is_killed and not self.store.positions(record.id):
                 continue  # dead and flat: nothing left to do
+            held_blind = [
+                p.symbol for p in self.store.positions(record.id)
+                if p.is_open and p.symbol in getattr(market, "unpriceable", {})
+            ]
+            if held_blind:
+                report.errors.append(
+                    f"{record.firm_key} holds {', '.join(held_blind)} and the feed "
+                    "cannot price it — this firm's equity is not trustworthy "
+                    "until that resolves"
+                )
             try:
+                self._charge_borrow(record, market, report)
                 self._run_firm(record, market, report)
             except TradingLedgerError as exc:
                 report.errors.append(f"{record.firm_key}: {exc}")
@@ -389,6 +475,10 @@ class Ecosystem:
             for done in report.carried_out:
                 flow.move("gate", "brokerage", str(done)[:110])
 
+        # The arena, the bazaar and the tavern. Off unless TRADE_LIVING is set,
+        # and incapable of moving cash when it is on — see src/trading/living.py.
+        self.living.run(market, report)
+
         drawn = self.learner.lessons(report.oversight.cards)
         fresh = self.learner.new_lessons(drawn)
         report.lessons = self.learner.record(fresh)
@@ -418,6 +508,54 @@ class Ecosystem:
             )
         return report
 
+    def _charge_borrow(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
+        """Charge one tick of borrow on whatever this firm is short.
+
+        Shorting is not free, and a backtest that treats it as free is a
+        backtest of a strategy nobody can run. The charge is a fill with no
+        quantity and a fee, which is not a trick: both reconciliation
+        identities are stated in terms of fills and fees, so a cost expressed
+        this way is already accounted for everywhere, and a cost expressed any
+        other way would break the books.
+        """
+        rate = D(self.config.firm.borrow_rate_annual)
+        if rate <= 0:
+            return
+        shorts = [p for p in self.store.positions(record.id) if p.quantity < 0]
+        if not shorts:
+            return
+
+        from .models import Fill, Side
+
+        for position in shorts:
+            try:
+                mark = D(market.mark(position.symbol))
+            except Exception:  # noqa: BLE001 - no mark, no charge this tick
+                continue
+            fee = money(abs(position.quantity) * mark * rate / D(365))
+            if fee <= 0:
+                continue
+            # A firm that cannot pay its borrow is in trouble, but overdrawing
+            # it is not how this system says so — the kill switch is.
+            if money(record.cash - fee) < 0:
+                report.errors.append(
+                    f"{record.firm_key}: cannot pay {fmt_money(fee)} borrow on "
+                    f"{position.symbol}"
+                )
+                continue
+            self.store.settle(record, Fill(
+                firm_id=record.id,
+                symbol=position.symbol,
+                side=Side.BUY.value,
+                quantity=ZERO,
+                price=ZERO,
+                fee=fee,
+                venue=record.venue,
+                as_of=market.as_of(),
+            ))
+            self.flow.emit("ledger", f"borrow on {position.symbol}", firm=record.firm_key,
+                           detail=f"{fmt_money(fee)} at {rate * 100}% a year")
+
     def _run_firm(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
         firm = self.build_firm(record)
         market.register(record.universe)
@@ -425,7 +563,17 @@ class Ecosystem:
         venue = build_venue(record.venue, self.config, self.gate)
 
         flow = self.flow
-        for proposal in firm.propose(market, positions):
+        raw = firm.propose(market, positions)
+
+        # A bot that returned nothing usable looks exactly like a quiet day.
+        # Say which it was, or the first thing you do when a firm stops trading
+        # is go looking in the wrong place.
+        for complaint in getattr(firm, "bot_complaints", []):
+            report.bot_notes.append(f"{record.firm_key}: {complaint}")
+            flow.emit("firms", f"{record.firm_key}'s bot: {complaint[:70]}",
+                      kind="blocked", firm=record.firm_key, detail=complaint)
+
+        for proposal in raw:
             report.proposals += 1
             what = f"{proposal.side} {proposal.symbol}"
             flow.move("market", "firms", what, firm=record.firm_key,

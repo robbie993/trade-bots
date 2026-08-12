@@ -110,6 +110,15 @@ class Database:
         conn = sqlite3.connect(target, isolation_level=None)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        if target != ":memory:":
+            # Two processes share this file the moment the village runs on its
+            # own: the tick loop writes while the web server reads and the gate
+            # writes approvals. SQLite's default journal makes those block each
+            # other and fail with "database is locked"; WAL lets readers run
+            # during a write, and the timeout covers the writer-vs-writer case
+            # instead of giving up instantly.
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 10000")
         return conn
 
     def close(self) -> None:

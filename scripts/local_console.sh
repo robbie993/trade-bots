@@ -22,12 +22,22 @@ unset POSTGRES_URL POSTGRES_URL_NON_POOLING POSTGRES_PRISMA_URL DATABASE_URL_UNP
 unset VERCEL VERCEL_URL VERCEL_ENV VERCEL_REGION
 export MVV_PUBLIC=0
 
-export DATABASE_URL="${MVV_LOCAL_DB:-sqlite:///./data/village.db}"
+# Deliberately NOT setting DATABASE_URL to some private path. The CLI has its
+# own default (data/mvv.db), and a script that invents a different one gives you
+# two databases: the village runs on one, and every command you type by hand
+# talks to the other. That failure is silent and reads as "no such table".
+#
+# So: clear anything pointing at a hosted database, and let the same default
+# everything else in this repository uses apply. MVV_LOCAL_DB still overrides it
+# when you want a separate book on purpose.
+if [ -n "${MVV_LOCAL_DB:-}" ]; then
+  export DATABASE_URL="$MVV_LOCAL_DB"
+fi
 
 HOST="${MVV_GATE_HOST:-127.0.0.1}"
 PORT="${MVV_GATE_PORT:-8000}"
 
-echo "==> local database: $DATABASE_URL"
+echo "==> local database: ${DATABASE_URL:-the default (data/mvv.db)}"
 
 echo "==> schema"
 python -m src.main init-db >/dev/null

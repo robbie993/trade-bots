@@ -12,7 +12,14 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from .dotenv import load as _load_dotenv
 from .money import D
+
+# Before anything reads os.environ. A `.env` in the repository root is how a
+# laptop keeps its settings between terminal windows and across the two
+# processes the village runs as; the real environment still wins over it.
+# See src/dotenv.py.
+_DOTENV_LOADED = _load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SQLITE_PATH = REPO_ROOT / "data" / "mvv.db"

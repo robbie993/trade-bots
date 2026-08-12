@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from typing import Optional
 
 # Set by the platform, not by us. Any of these means "you are not on a laptop".
@@ -139,7 +140,17 @@ def storage_is_durable() -> bool:
 
 # "ok" | "unreachable" | "empty". Cached: a serverless invocation is short,
 # and probing per request costs more than it tells you.
+#
+# Only "ok" is cached forever. The other two are *transient conditions with a
+# fix*, and caching them permanently broke the normal startup order on a
+# container host: the web service boots first, finds a Postgres nobody has
+# migrated yet, answers "the database is empty" — correctly — and then goes on
+# answering it after the worker has created every table, until somebody thinks
+# to redeploy. A page that is wrong until restarted is worse than one that
+# costs a query.
 _STATE: Optional[str] = None
+_PROBED_AT: float = 0.0
+RETRY_SECONDS = 5.0
 
 # Enough of the schema to know `init-db` has been run. Not the full list —
 # this is a liveness check, not a migration checker.
@@ -155,9 +166,12 @@ def database_state(force: bool = False) -> str:
     `no such table: firms`. A freshly attached Postgres is empty by
     definition, so that was the state every new deployment would land in.
     """
-    global _STATE
-    if _STATE is not None and not force:
+    global _STATE, _PROBED_AT
+    if _STATE == "ok" and not force:
         return _STATE
+    if _STATE is not None and not force and (time.monotonic() - _PROBED_AT) < RETRY_SECONDS:
+        return _STATE
+    _PROBED_AT = time.monotonic()
     try:
         from .config import Config
         from .db.connection import Database
@@ -196,7 +210,7 @@ def strip_controls(html: str) -> str:
     return html
 
 
-def announce(html: str) -> str:
+def announce(html: str, extra: str = "") -> str:
     """Put the notice at the top of the page, wherever the page starts.
 
     This runs only after ``database_ok()`` has passed — an unusable database
@@ -210,6 +224,7 @@ def announce(html: str) -> str:
     frozen, because nothing can write to it here.
     """
     notice = BANNER if storage_is_durable() else FROZEN_DATA + BANNER
+    notice += extra
     if "<body>" in html:
         return html.replace("<body>", "<body>" + notice, 1)
     return notice + html
@@ -257,9 +272,21 @@ def install(app) -> None:
     from fastapi import Request
     from fastapi.responses import PlainTextResponse
 
+    from . import access
+
     @app.middleware("http")
     async def guard(request: Request, call_next):
-        public = is_public()
+        # Signing in is the one write that has to work while read-only, and it
+        # has to work before the database does — a token check needs no tables,
+        # and being unable to sign in because the schema is missing is how you
+        # end up with no way to look at why the schema is missing.
+        if request.url.path in (access.UNLOCK_PATH, "/lock"):
+            return await call_next(request)
+
+        # Hosted *and* not signed in. With no token configured `unlocked` is
+        # always False, so a deployment that has not opted into a password
+        # behaves exactly as it did before this existed: a mirror.
+        public = is_public() and not access.unlocked(request)
 
         if public and request.method not in ("GET", "HEAD", "OPTIONS"):
             return PlainTextResponse(
@@ -267,7 +294,12 @@ def install(app) -> None:
                 "It can show the village and change nothing. The approval gate "
                 "is the boundary in front of every dollar in this system, and "
                 "it is not exposed on a public URL.\n\n"
-                "Run `python -m src.main serve` on your own machine to use it.\n",
+                + (
+                    f"Sign in at {access.UNLOCK_PATH} to use the controls.\n"
+                    if access.configured() else
+                    "Set MVV_GATE_TOKEN on this deployment to be able to sign "
+                    "in, or run `python -m src.main serve` on your own machine.\n"
+                ),
                 status_code=403,
             )
 
@@ -282,7 +314,12 @@ def install(app) -> None:
         try:
             response = await call_next(request)
         except Exception as exc:  # noqa: BLE001
-            if not public:
+            # `is_public()`, not `public`: whether a traceback is useful to
+            # whoever is looking depends on *where* this runs, not on whether
+            # they signed in. Signing in on Railway does not put a terminal in
+            # front of them, so they get the explained page too — the raw
+            # traceback is in the platform's logs either way.
+            if not is_public():
                 raise
             return _explain(
                 request,
@@ -301,7 +338,7 @@ def install(app) -> None:
 
         body = b"".join([chunk async for chunk in response.body_iterator])
         return HTMLResponse(
-            announce(strip_controls(body.decode())),
+            announce(strip_controls(body.decode()), access.banner(request)),
             status_code=response.status_code,
         )
 
