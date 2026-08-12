@@ -25,6 +25,12 @@ from ..config import FirmKillConfig
 
 INSUFFICIENT_DATA = "Insufficient data"
 
+# Distinct from INSUFFICIENT_DATA on purpose: one means "not enough trades yet
+# to judge this strategy", the other means "the numbers in front of me are not
+# real". They are both refusals to kill, and confusing them in a log would hide
+# an outage behind a firm that merely looks new.
+CANNOT_VALUE = "Cannot value this book"
+
 
 @dataclass(frozen=True)
 class FirmMetrics:
@@ -40,10 +46,19 @@ class FirmMetrics:
     sharpe: Optional[Decimal] = None
     worst_trade_pct: Decimal = ZERO
     consecutive_losses: int = 0
+    # Open positions the feed could not price when these numbers were taken.
+    # Not a detail: every figure above is computed from marks, so a non-empty
+    # tuple here means the rest of this object is fiction. See `should_kill_firm`.
+    unpriceable: tuple = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "drawdown_pct", D(self.drawdown_pct))
         object.__setattr__(self, "worst_trade_pct", D(self.worst_trade_pct))
+        object.__setattr__(self, "unpriceable", tuple(self.unpriceable or ()))
+
+    @property
+    def can_be_valued(self) -> bool:
+        return not self.unpriceable
 
 
 def meets_sample_gate(metrics: FirmMetrics, config: Optional[FirmKillConfig] = None) -> bool:
@@ -60,8 +75,32 @@ def should_kill_firm(
     two are not statistical judgements about a strategy's edge — they are the
     account being emptied — and waiting for twenty trades to notice a 40%
     drawdown would be the system failing to stop the bleeding.
+
+    **Before any of that: can this book be priced at all?** Every number below
+    is computed from marks, and ``MarketData.mark`` returns zero for a symbol
+    with no bars. So a feed that goes dark does not report an error here — it
+    reports that every position is worth nothing, which is indistinguishable
+    from the account being emptied and is checked first, precisely because
+    emptying the account is the thing we never wait to act on.
+
+    That is not theoretical. A live village on an Alpaca feed that stopped
+    returning bars marked every position to zero, showed every firm a total
+    drawdown, and killed all eleven of them in one pass — a whole village
+    destroyed by a data outage, with `killed` being terminal by design.
+
+    "The system may always stop the bleeding" is not a licence to amputate on
+    a broken thermometer. A kill decided on numbers the system knows are
+    missing is not stopping bleeding; it is inventing it. So an unpriceable
+    book returns the same answer the sample gate returns — *insufficient
+    data*, never *kill* — and the tick reports the blindness loudly instead.
     """
     cfg = config or FirmKillConfig()
+
+    if not metrics.can_be_valued:
+        return False, (
+            f"{CANNOT_VALUE}: {', '.join(metrics.unpriceable[:4])}"
+            + (" and others" if len(metrics.unpriceable) > 4 else "")
+        )
 
     if metrics.drawdown_pct > cfg.max_drawdown_pct:
         return True, f"Drawdown {metrics.drawdown_pct}% exceeds {cfg.max_drawdown_pct}%"
@@ -186,6 +225,7 @@ class KillSwitch:
 
 
 __all__ = [
+    "CANNOT_VALUE",
     "INSUFFICIENT_DATA",
     "FirmMetrics",
     "KillSwitch",
