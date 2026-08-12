@@ -436,12 +436,24 @@ class AlpacaFeed:
     CRYPTO = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
 
     def __init__(self, days: int = 180, timeout_s: int = 20,
-                 timeframe: str = "1Day", stock_feed: str = ""):
+                 timeframe: str = "1Day", stock_feed: str = "",
+                 min_interval_s: float = 0.35):
         self.days = int(days)
         self.timeout_s = timeout_s
         self.timeframe = timeframe
         self.stock_feed = stock_feed or os.environ.get("TRADE_ALPACA_FEED", "iex")
+        self.min_interval_s = float(min_interval_s)   # ~170 requests a minute
         self._cache: dict[str, list[Bar]] = {}
+        self._last_call = 0.0
+
+    def _be_polite(self) -> None:
+        """Space the requests out. See the note in `series`."""
+        import time
+
+        wait = self.min_interval_s - (time.monotonic() - self._last_call)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_call = time.monotonic()
 
     # -- credentials ------------------------------------------------------
     @staticmethod
@@ -478,6 +490,23 @@ class AlpacaFeed:
         return str(symbol).upper().replace("-", "/")
 
     # -- fetching ---------------------------------------------------------
+    def _start(self) -> str:
+        """The first date to ask for. Not optional, whatever the docs imply.
+
+        Without `start`, Alpaca's bars endpoint answers from the beginning of
+        the *current day* — one bar. `limit` caps how many come back and does
+        nothing to widen the window, so asking for 180 with no start returns
+        one, the truncated-history guard refuses it, and every symbol in the
+        village reports itself unpriceable while the API is working perfectly.
+
+        Calendar days, not bars: 180 trading days is about 260 days of
+        calendar, and the buffer covers weekends, holidays and the odd
+        half-session. Over-asking is free — `limit` and the slice below cut it
+        back — and under-asking silently shortens every indicator.
+        """
+        span = int(self.days * 1.7) + 10
+        return (datetime.now(timezone.utc) - timedelta(days=span)).date().isoformat()
+
     def series(self, symbol: str) -> list[Bar]:
         if symbol in self._cache:
             return self._cache[symbol]
@@ -486,11 +515,17 @@ class AlpacaFeed:
         if crypto:
             url = self.CRYPTO
             params = {"symbols": self.pair(upper), "timeframe": self.timeframe,
-                      "limit": self.days}
+                      "start": self._start(), "limit": 10000}
         else:
             url = self.STOCKS.format(symbol=upper)
-            params = {"timeframe": self.timeframe, "limit": self.days,
-                      "feed": self.stock_feed}
+            params = {"timeframe": self.timeframe, "start": self._start(),
+                      "limit": 10000, "feed": self.stock_feed}
+
+        # A village of forty symbols asks forty times in a burst, and the free
+        # tier allows two hundred a minute. Spacing the calls costs a few
+        # seconds once — the bars are cached after that — and is the difference
+        # between a village that starts and one that rate-limits itself blind.
+        self._be_polite()
 
         try:
             payload = _get_json(url, params, self._headers(), self.timeout_s) or {}
@@ -503,14 +538,30 @@ class AlpacaFeed:
                        "subscription" if not crypto else "")
                 ) from exc
             if exc.status == 429:
+                # Wait out the window and ask once more. A rate limit is the
+                # one refusal that is *known* to be temporary, and treating it
+                # as "this symbol has no price" is how a whole village goes
+                # blind over a burst it caused itself.
+                import time
+
+                time.sleep(2.0)
+                try:
+                    payload = _get_json(
+                        url, params, self._headers(), self.timeout_s
+                    ) or {}
+                except FeedHTTPError as retry_exc:
+                    raise FeedNotConfigured(
+                        f"alpaca rate-limited {symbol} twice ({retry_exc.status}). The "
+                        "free tier allows 200 requests a minute; a large universe on a "
+                        "short tick interval will hit it. Raise MVV_TICK_INTERVAL, or "
+                        "trim the universes in config/firm_config.yaml."
+                    ) from retry_exc
+                # The retry worked. Falling through to the raise below would
+                # have thrown away the bars it just fetched.
+            else:
                 raise FeedNotConfigured(
-                    f"alpaca rate-limited the request for {symbol}. The free tier "
-                    "allows 200 requests a minute; a village with a large universe "
-                    "on a short tick interval will hit it."
+                    f"alpaca returned {exc.status} for {symbol}: {exc.body}"
                 ) from exc
-            raise FeedNotConfigured(
-                f"alpaca returned {exc.status} for {symbol}: {exc.body}"
-            ) from exc
 
         rows = payload.get("bars")
         if isinstance(rows, dict):          # the crypto endpoint keys by pair
