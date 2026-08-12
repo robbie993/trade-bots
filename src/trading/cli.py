@@ -397,6 +397,11 @@ def cmd_status(args) -> int:
     eco = _ecosystem(args)
     status = eco.status()
     print(f"as of        : {status['as_of']}  (data: {status['data_source']})")
+    if status["as_of"] is None:
+        # `as of: None` was the whole of what this said when an entire village
+        # went blind, which is a symptom with no cause attached. The feed knows
+        # exactly why it could not price each symbol; it just was not asked.
+        print(_feed_trouble(eco))
     print(f"firms        : {status['firms']} "
           f"(active {status['active']}, paused {status['paused']}, killed {status['killed']})")
     print(f"capital      : {fmt_money(status['capital'])} deployed")
@@ -408,6 +413,40 @@ def cmd_status(args) -> int:
           + ("disabled (deterministic narration)" if not gateway["enabled"]
              else ("reachable" if gateway["reachable"] else f"UNREACHABLE — {gateway.get('detail')}")))
     return 0
+
+
+def _feed_trouble(eco) -> str:
+    """Ask the feed for one symbol and report what it actually says.
+
+    Called only when there are no bars at all. One symbol is enough: if the
+    credentials are wrong or the client is missing, every symbol fails the same
+    way, and hammering a rate-limited API to say so twenty times would be its
+    own kind of rude.
+    """
+    universe = eco.universe()
+    if not universe:
+        return "               no firms, so nothing to price. Run `trade init`."
+
+    symbol = universe[0]
+    try:
+        bars = eco.feed.series(symbol)
+    except Exception as exc:  # noqa: BLE001 - every feed has its own errors
+        return (
+            f"               NO PRICES. Asking for {symbol} gave:\n"
+            f"                 {type(exc).__name__}: {str(exc)[:300]}\n"
+            "               Every firm is blind until this resolves. Nothing will\n"
+            "               be killed for it — see `trade revive` if something\n"
+            "               already was."
+        )
+    if not bars:
+        return (
+            f"               NO PRICES. The feed answered for {symbol} but "
+            "returned no bars."
+        )
+    return (
+        f"               The feed can price {symbol} ({len(bars)} bars), so this is\n"
+        "               a stale cursor rather than an outage. Try `trade tick`."
+    )
 
 
 def cmd_monitor(args) -> int:  # pragma: no cover - long-running

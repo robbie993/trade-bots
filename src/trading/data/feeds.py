@@ -8,7 +8,7 @@ Three of them, in order of how much they can fail:
                and because a backtest you cannot reproduce is an anecdote.
 ``csv``        files under ``data/market/<SYMBOL>.csv``. What you use once
                you have real history and still want determinism.
-``yahoo``      live daily bars. Needs ``requests`` and a working network;
+``yahoo``      live daily bars. Needs a working network and nothing else;
                fails loudly rather than silently returning a short series,
                because a truncated history quietly changes every indicator.
 
@@ -31,6 +31,59 @@ from typing import Optional, Protocol, Sequence
 from ...money import D
 from ..config import DataConfig
 from ..models import Bar, price
+
+
+def _get_json(url: str, params: dict, headers: Optional[dict] = None, timeout: int = 20):
+    """One HTTP GET returning parsed JSON, on the standard library alone.
+
+    This used to be `requests`, imported inside each feed, raising a tidy
+    "pip install requests" when it was missing. Tidy and wrong: `requests` is
+    in requirements.txt but **not** in pyproject's dependencies, so anybody who
+    installed with `pip install -e .` — which is what the setup instructions
+    say — got a village whose every real feed refused on import.
+
+    The symptom was not an error anybody could act on. Each refusal was caught
+    per symbol, every symbol became unpriceable, `as_of()` went None, and the
+    console said `as of: None (data: alpaca)` with eleven dead firms under it.
+    A missing HTTP client presented as a market that had ceased to exist.
+
+    A price feed is core, and the core of this repository runs on the standard
+    library by design. `urllib` does exactly this much. Now there is nothing to
+    install and nothing to forget.
+
+    Raises FeedNotConfigured with the status and body on anything but a 200,
+    because "alpaca returned 403: forbidden" is a sentence you can act on.
+    """
+    import json
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
+
+    query = urlencode({k: v for k, v in (params or {}).items() if v is not None})
+    request = Request(f"{url}?{query}" if query else url, headers=headers or {})
+    try:
+        with urlopen(request, timeout=timeout) as response:   # noqa: S310 - fixed hosts
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", "replace")[:200]
+        except Exception:  # noqa: BLE001 - the status is the useful part
+            pass
+        raise FeedHTTPError(exc.code, body) from exc
+    except URLError as exc:
+        raise FeedNotConfigured(f"could not reach {url}: {exc.reason}") from exc
+    except ValueError as exc:                 # not JSON
+        raise FeedNotConfigured(f"{url} did not return JSON: {exc}") from exc
+
+
+class FeedHTTPError(Exception):
+    """A non-200 from a feed, carrying the status so callers can explain it."""
+
+    def __init__(self, status: int, body: str = ""):
+        self.status = status
+        self.body = body
+        super().__init__(f"HTTP {status}: {body[:120]}")
 
 
 class FeedNotConfigured(RuntimeError):
@@ -195,23 +248,20 @@ class YahooFeed:
     def series(self, symbol: str) -> list[Bar]:
         if symbol in self._cache:
             return self._cache[symbol]
-        try:
-            import requests  # type: ignore
-        except ImportError as exc:  # pragma: no cover - env dependent
-            raise FeedNotConfigured(
-                "TRADE_DATA_SOURCE=yahoo needs `pip install requests`"
-            ) from exc
 
         span = "1y" if self.days <= 365 else "5y"
-        response = requests.get(
-            self.ENDPOINT.format(symbol=symbol),
-            params={"range": span, "interval": "1d"},
-            timeout=self.timeout_s,
-            headers={"User-Agent": "ai-village-trading/1.0"},
-        )
-        if response.status_code != 200:
-            raise FeedNotConfigured(f"yahoo returned {response.status_code} for {symbol}")
-        payload = response.json()
+        try:
+            payload = _get_json(
+                self.ENDPOINT.format(symbol=symbol),
+                {"range": span, "interval": "1d"},
+                {"User-Agent": "ai-village-trading/1.0"},
+                self.timeout_s,
+            )
+        except FeedHTTPError as exc:
+            raise FeedNotConfigured(
+                f"yahoo returned {exc.status} for {symbol}"
+                + (" — it does not know that ticker" if exc.status == 404 else "")
+            ) from exc
         try:
             result = payload["chart"]["result"][0]
             stamps = result["timestamp"]
@@ -431,13 +481,6 @@ class AlpacaFeed:
     def series(self, symbol: str) -> list[Bar]:
         if symbol in self._cache:
             return self._cache[symbol]
-        try:
-            import requests  # type: ignore
-        except ImportError as exc:  # pragma: no cover - env dependent
-            raise FeedNotConfigured(
-                "TRADE_DATA_SOURCE=alpaca needs `pip install requests`"
-            ) from exc
-
         upper = symbol.upper()
         crypto = self.is_crypto(upper)
         if crypto:
@@ -449,23 +492,26 @@ class AlpacaFeed:
             params = {"timeframe": self.timeframe, "limit": self.days,
                       "feed": self.stock_feed}
 
-        response = requests.get(url, params=params, headers=self._headers(),
-                                timeout=self.timeout_s)
-        if response.status_code in (401, 403):
+        try:
+            payload = _get_json(url, params, self._headers(), self.timeout_s) or {}
+        except FeedHTTPError as exc:
+            if exc.status in (401, 403):
+                raise FeedNotConfigured(
+                    f"alpaca refused the credentials for {symbol} ({exc.status}). "
+                    "Check ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY"
+                    + ("; the free stock tier is 'iex', and 'sip' needs a "
+                       "subscription" if not crypto else "")
+                ) from exc
+            if exc.status == 429:
+                raise FeedNotConfigured(
+                    f"alpaca rate-limited the request for {symbol}. The free tier "
+                    "allows 200 requests a minute; a village with a large universe "
+                    "on a short tick interval will hit it."
+                ) from exc
             raise FeedNotConfigured(
-                f"alpaca refused the credentials for {symbol} "
-                f"({response.status_code}). Check ALPACA_API_KEY_ID and "
-                "ALPACA_API_SECRET_KEY"
-                + ("; the free stock tier is 'iex', and 'sip' needs a "
-                   "subscription" if not crypto else "")
-            )
-        if response.status_code != 200:
-            raise FeedNotConfigured(
-                f"alpaca returned {response.status_code} for {symbol}: "
-                f"{response.text[:200]}"
-            )
+                f"alpaca returned {exc.status} for {symbol}: {exc.body}"
+            ) from exc
 
-        payload = response.json() or {}
         rows = payload.get("bars")
         if isinstance(rows, dict):          # the crypto endpoint keys by pair
             rows = rows.get(self.pair(upper)) or []

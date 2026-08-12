@@ -273,3 +273,51 @@ def test_the_revive_command_can_sweep_a_whole_village(ecosystem, capsys, monkeyp
     assert cmd_revive(Args()) == 0
     assert f"{dead} revived" in capsys.readouterr().out
     assert sum(1 for f in ecosystem.store.firms() if f.is_killed) == 0
+
+
+# =========================================================================
+# why the feed went blind in the first place
+# =========================================================================
+def test_no_feed_needs_a_third_party_http_client():
+    """The original cause, guarded against directly.
+
+    Both real feeds did `import requests` and raised a tidy "pip install
+    requests" when it was missing. `requests` is in requirements.txt and *not*
+    in pyproject's dependencies, and the setup instructions say
+    `pip install -e .` — so the documented install produced a village whose
+    every real feed refused, per symbol, silently, presenting as a market that
+    had ceased to exist.
+
+    A price feed is core, and the core of this repository runs on the standard
+    library. Adding `requests` to pyproject would have fixed this install and
+    left the trap for the next one.
+    """
+    from pathlib import Path
+
+    source = Path("src/trading/data/feeds.py").read_text()
+    offenders = [
+        line.strip() for line in source.splitlines()
+        if "import requests" in line and not line.strip().startswith(("#", "*"))
+    ]
+    assert offenders == [], offenders
+
+
+def test_a_feed_that_cannot_be_reached_says_so_in_status(ecosystem, capsys, monkeypatch):
+    """`as of: None` on its own is a symptom with no cause attached."""
+    from src.trading.cli import _feed_trouble
+    from src.trading.data.feeds import FeedNotConfigured
+
+    def refuse(symbol):
+        raise FeedNotConfigured("alpaca refused the credentials for SPY (403)")
+
+    monkeypatch.setattr(ecosystem.feed, "series", refuse)
+    report = _feed_trouble(ecosystem)
+    assert "NO PRICES" in report
+    assert "refused the credentials" in report
+    assert "revive" in report
+
+
+def test_a_working_feed_says_the_problem_is_elsewhere(ecosystem):
+    from src.trading.cli import _feed_trouble
+
+    assert "can price" in _feed_trouble(ecosystem)
