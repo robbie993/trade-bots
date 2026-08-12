@@ -419,19 +419,16 @@ def alpaca_keys(monkeypatch):
 
 @pytest.fixture
 def fake_http(monkeypatch):
-    """Stand in for requests.get and record what was asked for."""
-    import types
+    """Stand in for the one HTTP call the feeds make, recording what was asked.
 
+    Patched at `_get_json` rather than at `requests`, which is what this
+    originally faked. `requests` was never a declared dependency — it is in
+    requirements.txt and not in pyproject — so `pip install -e .` produced a
+    village whose every real feed refused on import, presenting as a market
+    that had ceased to exist. The feeds run on urllib now, and this fixture
+    fakes the seam that actually exists.
+    """
     state = {"calls": [], "status": 200, "bars": 200, "payload": None}
-
-    class Response:
-        def __init__(self, status, payload, text=""):
-            self.status_code = status
-            self._payload = payload
-            self.text = text
-
-        def json(self):
-            return self._payload
 
     def rows(n):
         base = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -441,21 +438,21 @@ def fake_http(monkeypatch):
             for i in range(n)
         ]
 
-    def get(url, params=None, headers=None, timeout=None):
+    def get_json(url, params=None, headers=None, timeout=None):
+        from src.trading.data.feeds import FeedHTTPError
+
         state["calls"].append({"url": url, "params": params or {},
                                "headers": headers or {}})
         if state["status"] != 200:
-            return Response(state["status"], {}, text="nope")
+            raise FeedHTTPError(state["status"], "nope")
         if state["payload"] is not None:
-            return Response(200, state["payload"])
+            return state["payload"]
         if "crypto" in url:
             pair = (params or {}).get("symbols")
-            return Response(200, {"bars": {pair: rows(state["bars"])}})
-        return Response(200, {"bars": rows(state["bars"])})
+            return {"bars": {pair: rows(state["bars"])}}
+        return {"bars": rows(state["bars"])}
 
-    module = types.ModuleType("requests")
-    module.get = get
-    monkeypatch.setitem(sys.modules, "requests", module)
+    monkeypatch.setattr("src.trading.data.feeds._get_json", get_json)
     return state
 
 

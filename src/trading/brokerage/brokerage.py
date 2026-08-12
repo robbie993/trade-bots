@@ -24,7 +24,7 @@ from typing import Optional, Sequence
 from ...money import fmt_money
 from ..config import TradingConfig
 from ..data.market_data import MarketData
-from ..firms.kill_switch import INSUFFICIENT_DATA
+from ..firms.kill_switch import INSUFFICIENT_DATA, should_kill_firm
 from ..models import FirmRecord, FirmStatus
 from ..store import TradingStore
 from .allocator import Allocator
@@ -131,8 +131,6 @@ class Brokerage:
             card = by_id.get(firm.id)
             if card is None:
                 continue
-            from ..firms.kill_switch import should_kill_firm
-
             should, reason = should_kill_firm(card.to_metrics(), self.config.kill)
             if not should or reason == INSUFFICIENT_DATA:
                 continue
@@ -203,13 +201,78 @@ class Brokerage:
         )
         return {"firm": firm_key, "reason": reason, "returned": str(abs(released.delta))}
 
+    def revive_firm(self, firm_key: str, by: str, market: MarketData) -> dict:
+        """Reverse a kill that was decided on numbers that were not real.
+
+        Killed is terminal, and stays terminal. This is not an appeal against a
+        verdict — it is the narrow case where the *evidence* was fiction: a feed
+        that went dark marks every position to zero, which reads as a total
+        drawdown, and the kill switch acts on that before the sample gate
+        because emptying the account is the one thing it must never wait on.
+        An Alpaca outage killed a village of eleven that way.
+
+        So the test is not "did a human ask nicely". It is **would this firm be
+        killed today, by the same rules, against a feed that can price its
+        book?** If yes, the kill stands and this refuses. If the feed still
+        cannot price it, this refuses too — reviving into blindness would just
+        re-run the same accident. Only a firm the rules now clear comes back.
+
+        **It restores status and nothing else.** The allocator released this
+        firm's capital when it died, and giving it back is an increase in risk,
+        which needs a human at the gate exactly as it always did. A revived
+        firm is an active firm with whatever mandate it has left.
+        """
+        firm = self.store.get_firm(firm_key)
+        if firm is None:
+            raise ValueError(f"unknown firm {firm_key}")
+        if not firm.is_killed:
+            raise ValueError(f"{firm_key} is not killed; use resume to un-pause it")
+
+        card = self.evaluator.evaluate(firm, market)
+        if not card.can_be_valued:
+            raise ValueError(
+                f"{firm_key} still holds {', '.join(card.unpriceable)}, which the feed "
+                "cannot price. Fix the feed first — reviving now would re-run the "
+                "same accident on the next tick."
+            )
+        would_die, why = should_kill_firm(card.to_metrics(), self.config.kill)
+        if would_die:
+            raise ValueError(
+                f"{firm_key} would be killed again on today's numbers ({why}). "
+                "The kill stands."
+            )
+
+        self.store.set_firm_status(firm.id, FirmStatus.ACTIVE.value)
+        self.store.record_event(
+            "revive",
+            f"{firm_key} revived by {by}: {firm.kill_reason or 'no reason recorded'} "
+            f"could not be reproduced against a working feed",
+            firm_id=firm.id,
+            payload={
+                "by": by,
+                "original_reason": firm.kill_reason or "",
+                "equity_now": str(card.equity),
+                "drawdown_now": str(card.drawdown_pct),
+            },
+        )
+        return {
+            "firm": firm_key,
+            "status": FirmStatus.ACTIVE.value,
+            "by": by,
+            "was": firm.kill_reason or "",
+            "allocation": str(firm.allocation),
+        }
+
     def resume_firm(self, firm_key: str, by: str) -> dict:
         """Un-pause a firm. Only ever called from an explicit human command."""
         firm = self.store.get_firm(firm_key)
         if firm is None:
             raise ValueError(f"unknown firm {firm_key}")
         if firm.is_killed:
-            raise ValueError(f"{firm_key} is killed; killed firms do not resume")
+            raise ValueError(
+                f"{firm_key} is killed; killed firms do not resume. "
+                "If it was killed on a feed outage, see `trade revive`."
+            )
         self.store.set_firm_status(firm.id, FirmStatus.ACTIVE.value)
         self.store.record_event(
             "resume", f"{firm_key} resumed by {by}", firm_id=firm.id, payload={"by": by}

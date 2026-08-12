@@ -286,6 +286,27 @@ risk limit, the position cap, the position count and the cash floor.
 
 ## Kill switches
 
+**A book that cannot be priced is never killed.** `MarketData.mark()` answers
+zero for a symbol with no bars — a fine answer to "what is this worth" and a
+catastrophic one to "has this firm lost everything". A feed outage therefore
+marks every position to zero, which reads as a total drawdown, which is checked
+*before* the sample gate precisely because emptying the account is the one thing
+the switch must never wait on. That combination once killed a live village of
+eleven firms in a single pass, none of which had lost money.
+
+So the first question asked of any firm is whether its holdings can be priced at
+all. If not, the answer is the same one the sample gate gives — *insufficient
+data*, never *kill* — and the tick reports the blindness instead. Stopping the
+bleeding is always allowed; inventing the bleeding is not.
+
+`trade revive` reverses a kill that was decided that way, and only that way: it
+re-scores the firm against a feed that can price its book and refuses unless the
+rules now clear it. A firm that really blew up is killed again on today's numbers
+and stays dead. Reviving restores status and nothing else — the allocator
+released that capital, and giving it back is an increase in risk, which still
+needs a human at the gate.
+
+
 Per firm (`src/trading/firms/kill_switch.py`), evaluated in a fixed order so
 the reason attached to a kill is reproducible from the stored metrics:
 
@@ -1157,6 +1178,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade live-request --venue V` | ask to trade live; sends no order |
 | `trade apply-approvals` | carry out what a human approved |
 | `trade resume <firm> --by you` | un-pause a firm |
+| `trade revive --all --by you` | undo kills decided on a feed that had no prices |
 
 ---
 

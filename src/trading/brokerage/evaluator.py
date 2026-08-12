@@ -58,6 +58,14 @@ class Scorecard:
     sufficient_data: bool = False
     components: dict = field(default_factory=dict)
     as_of: Optional[datetime] = None
+    # Open positions the feed could not price. Everything above is computed
+    # from marks, so this being non-empty means the rest of this card is not
+    # a measurement of anything.
+    unpriceable: tuple = ()
+
+    @property
+    def can_be_valued(self) -> bool:
+        return not self.unpriceable
 
     def to_metrics(self) -> FirmMetrics:
         return FirmMetrics(
@@ -67,6 +75,7 @@ class Scorecard:
             sharpe=self.sharpe,
             worst_trade_pct=self.worst_trade_pct,
             consecutive_losses=self.consecutive_losses,
+            unpriceable=self.unpriceable,
         )
 
     def to_row(self) -> dict:
@@ -103,6 +112,20 @@ class Evaluator:
     def evaluate(self, firm: FirmRecord, market: MarketData) -> Scorecard:
         positions = self.store.positions(firm.id, open_only=False)
         open_positions = [p for p in positions if p.is_open]
+
+        # Which of this firm's holdings the feed cannot price right now.
+        # `mark()` answers zero for a symbol with no bars, which is a perfectly
+        # good answer to "what is it worth" and a catastrophic one to "has this
+        # firm lost everything" — so the question is asked separately, and the
+        # answer travels with the scorecard all the way to the kill switch.
+        blind = tuple(
+            sorted({
+                p.symbol for p in open_positions
+                if market.bar(p.symbol) is None
+                or p.symbol in getattr(market, "unpriceable", {})
+            })
+        )
+
         market_value = sum(
             (p.market_value(market.mark(p.symbol)) for p in open_positions), ZERO
         )
@@ -190,6 +213,7 @@ class Evaluator:
             consecutive_losses=firm.consecutive_losses,
             worst_trade_pct=worst_pct,
             as_of=market.as_of(),
+            unpriceable=blind,
         )
         card.sufficient_data = card.closed_trades >= self.config.kill.minimum_trades
         card.score, card.components = self.score(card)
