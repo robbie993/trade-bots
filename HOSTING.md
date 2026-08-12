@@ -49,7 +49,33 @@ scores, kills, holds the council and runs the living quarters — and none of it
 is reachable from the internet, because it does not listen on a port. The web
 service is the only thing exposed, and it is read-only until somebody signs in.
 
-### Setting it up
+### Setting it up, the short way
+
+```bash
+./scripts/railway_setup.sh --dry-run     # read what it will do
+./scripts/railway_setup.sh               # then do it
+```
+
+It creates both services, adds Postgres, wires the variables, generates a
+sign-in token and deploys — the same clicks below, in the right order. It runs
+on **your** machine because Railway's CLI authenticates as you, with an
+account-level credential that can change every project in the workspace; that
+belongs in your keychain via `railway login` and nowhere else.
+
+The token it generates goes to Railway through stdin rather than as a command
+argument — arguments are visible to every process via `ps` and land in your
+shell history — and is saved to `.env`, which is gitignored and written mode
+600. It is deliberately never printed. When you need it:
+
+```bash
+grep MVV_GATE_TOKEN .env
+```
+
+Nothing it does is destructive: creating a service that exists is skipped,
+setting a variable to what it already is changes nothing, and it deletes
+nothing. Run it twice and the second run is a no-op with a fresh deploy.
+
+### Setting it up, by hand
 
 1. **Add Postgres.** In your project: *New → Database → PostgreSQL*.
 
