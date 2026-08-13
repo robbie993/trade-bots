@@ -122,6 +122,39 @@ it and reload in a few seconds: the worker creates the tables, and the web
 service notices on its own. It re-checks every few seconds rather than
 remembering the answer, precisely so this resolves without a redeploy.
 
+### TradingView alerts
+
+An alert can post straight into the village's signal board:
+
+```
+POST https://<your-domain>/api/signals/tradingview
+```
+
+Set `MVV_WEBHOOK_TOKEN` on the web service (16+ characters, and **not** the
+same string as `MVV_GATE_TOKEN`), then put a JSON template in TradingView's
+alert message box:
+
+```json
+{"secret": "<your webhook token>", "symbol": "{{ticker}}", "action": "buy",
+ "strategy": "RSI Cross", "note": "{{strategy.order.comment}}"}
+```
+
+`action` accepts buy/long/bull/up, sell/short/bear/down, and close/exit/flat.
+Anything else is refused rather than guessed at — guessing the direction of a
+trade signal is worse than ignoring it. Optional `score` (-100..100) and
+`confidence` (0..100) override the defaults.
+
+**An alert becomes a reading, not a strategy and not an order.** It joins one
+debate at one seat of any firm listing the `signals` analyst; the proposal that
+results still meets the trader, the risk manager, the conscience, the venue and
+the approval gate. Somebody who guesses your URL *and* your token can add a
+voice to an argument — they cannot spend anything. It obeys the same staleness
+rule as every other signal: heard on the bar it arrived for, silent after.
+
+The two tokens are deliberately separate. TradingView stores that alert body in
+plaintext in its own UI, and a secret living in somebody else's web form must
+not be the one that unlocks your approval gate.
+
 ### The token, honestly
 
 It is one shared secret, not user accounts, because there is one of you. It is

@@ -62,6 +62,17 @@ try:
 except Exception:  # pragma: no cover
     _api_router = None
 
+# The one authenticated write surface that is not the approval gate. It carries
+# its own token and publishes a *signal*, so the worst a stranger with the URL
+# can do is add one voice to one debate — see src/trading/webhooks.py.
+try:
+    from ..trading.webhooks import install as _install_webhooks
+
+    _install_webhooks(app)
+except Exception:  # pragma: no cover - the gate must serve with or without it
+    pass
+
+
 # A hosted deployment runs read-only, and a broken one says why: see
 # src/deploy.py. Installed last so the middleware wraps every router above it.
 #
@@ -386,6 +397,17 @@ def reject(approval_id: int, approved_by: str = Form("web"), notes: str = Form("
     finally:
         db.close()
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/health")
+def health_alias() -> dict:
+    """The path every platform health-checks by default.
+
+    Railway, Fly and friends probe `/health`; this app has always served
+    `/api/health`. Two names for one answer is better than a deployment marked
+    unhealthy because the checker asked politely at the wrong door.
+    """
+    return api_health()
 
 
 @app.get("/api/health")
