@@ -223,3 +223,241 @@ def test_the_source_module_never_writes_to_firms():
     for forbidden in ("set_firm_status", "update_firm_fields", "upsert_firm",
                       "gate.request", "settle("):
         assert forbidden not in source, forbidden
+
+
+# =========================================================================
+# the flow: asking, carrying out, and coming back
+# =========================================================================
+def _make_ready(store, firm, feed="alpaca"):
+    from src.trading.brokerage.evaluator import Scorecard
+
+    _fills(store, firm, [Decimal("40"), Decimal("30"), Decimal("50"),
+                         Decimal("-10")] * 20)
+    for _ in range(60):
+        promotion.record_bar(store, firm.id, feed)
+    return Scorecard(firm_key=firm.firm_key, firm_id=firm.id,
+                     drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"))
+
+
+def _buy(store, firm, symbol="SPY", quantity="10", price="100"):
+    """Open a position the way the village opens one — through the ledger.
+
+    Inserting a row into `positions` directly conjures stock out of nothing
+    and the reconciler is right to refuse the tick that follows, so every
+    test that needs a live firm holding something buys it properly.
+    """
+    from src.trading.models import Fill, Side
+
+    return store.settle(store.get_firm(firm.firm_key), Fill(
+        firm_id=firm.id, symbol=symbol, side=Side.BUY.value,
+        quantity=quantity, price=price, fee="0",
+    ))
+
+
+def test_an_unready_firm_cannot_even_be_requested(ecosystem):
+    """An approval put in front of somebody is an implicit claim that the
+    evidence supports it. Filing nine unsupported ones is how a human is
+    misled by their own system."""
+    import pytest as _pytest
+
+    firm = ecosystem.store.firms()[0]
+    verdict = assess(ecosystem.store, firm, None, "alpaca")
+    with _pytest.raises(ValueError, match="does not meet the criteria"):
+        ecosystem.brokerage.request_promotion(firm.firm_key, verdict, "alpaca", "robbie")
+    assert ecosystem.gate.pending() == []
+
+
+def test_a_ready_firm_files_a_request_and_nothing_more(ecosystem):
+    firm = ecosystem.store.firms()[0]
+    card = _make_ready(ecosystem.store, firm)
+    verdict = assess(ecosystem.store, firm, card, "alpaca")
+
+    approval = ecosystem.brokerage.request_promotion(
+        firm.firm_key, verdict, "alpaca", "robbie")
+    assert approval is not None
+    # Requested, not granted.
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+
+
+def test_the_mandate_is_capped_not_transferred(ecosystem):
+    """A firm running $50,000 on paper does not get $50,000 of real money
+    because it did well at pretend."""
+    firm = ecosystem.store.firms()[0]
+    assert Decimal(firm.allocation) > LiveReadiness().max_start_capital
+
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca",
+                                     LiveReadiness().max_start_capital, "robbie")
+    after = ecosystem.store.get_firm(firm.firm_key)
+    assert after.venue == "alpaca"
+    assert Decimal(after.allocation) == LiveReadiness().max_start_capital
+
+
+def test_the_cap_takes_the_buying_power_with_it(ecosystem, market):
+    """Capping the allocation and leaving $50,000 of cash in the account
+    would be a cap in the ledger and no cap at all in the market."""
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+
+    after = ecosystem.store.get_firm(firm.firm_key)
+    assert Decimal(after.cash) == Decimal("500.00")
+    # And the books still balance afterwards, which is the whole reason the
+    # money is moved rather than the number edited.
+    assert ecosystem.brokerage.reconciler.check([after], market).ok
+
+
+def test_a_firm_goes_live_flat_or_not_at_all(ecosystem):
+    """Its paper positions were bought with money that does not exist, and
+    the live venue has never heard of them."""
+    import pytest as _pytest
+
+    firm = ecosystem.store.firms()[0]
+    _buy(ecosystem.store, firm)
+    with _pytest.raises(ValueError, match="goes live flat"):
+        ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+
+
+def test_coming_back_needs_nobody(ecosystem):
+    """The other half of the asymmetry, and the reason the first half is
+    acceptable."""
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    result = ecosystem.brokerage.demote_firm(firm.firm_key, "because I said so")
+    assert result["changed"] is True
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+    assert ecosystem.gate.pending() == []
+
+
+def test_one_button_pulls_everything_back(ecosystem):
+    for firm in ecosystem.store.firms():
+        ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    assert len(ecosystem.brokerage.live_firms()) == len(ecosystem.store.firms())
+
+    ecosystem.brokerage.all_to_paper("three in the morning")
+    assert ecosystem.brokerage.live_firms() == []
+
+
+def test_a_tick_pulls_a_live_firm_off_real_money_when_it_cannot_be_valued(ecosystem):
+    """No approval, no delay, no asking. The tick notices and acts."""
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    _buy(ecosystem.store, firm, quantity="1", price="100")
+    real = ecosystem.feed
+
+    class RefusesSPY:
+        name = "picky"
+
+        def series(self, symbol):
+            if symbol == "SPY":
+                raise RuntimeError("no bars")
+            return real.series(symbol)
+
+    ecosystem._feed = RefusesSPY()
+    report = ecosystem.tick()
+
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+    assert any("PULLED OFF REAL MONEY" in e for e in report.errors)
+
+
+def test_a_healthy_live_firm_is_left_alone(ecosystem):
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    ecosystem.tick()
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "alpaca"
+
+
+def test_demotion_reports_real_stock_and_sells_none_of_it(ecosystem):
+    """Selling automatically is how a data outage becomes a realised loss —
+    which is the exact accident this whole area of the code exists because of.
+    Coming off the venue is instant; closing the book is a person's job."""
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    _buy(ecosystem.store, firm, quantity="1", price="100")
+
+    result = ecosystem.brokerage.demote_firm(firm.firm_key, "the feed went dark")
+    assert result["still_open"] == ["SPY"]
+    assert result["was_venue"] == "alpaca"
+    held = ecosystem.store.positions(firm.id)
+    assert [p.symbol for p in held if p.is_open] == ["SPY"], "nothing was sold"
+
+
+def test_a_tick_says_out_loud_what_is_still_held(ecosystem):
+    firm = ecosystem.store.firms()[0]
+    ecosystem.brokerage.promote_firm(firm.firm_key, "alpaca", Decimal("500"), "robbie")
+    _buy(ecosystem.store, firm, quantity="1", price="100")
+    real = ecosystem.feed
+
+    class RefusesSPY:
+        name = "picky"
+
+        def series(self, symbol):
+            if symbol == "SPY":
+                raise RuntimeError("no bars")
+            return real.series(symbol)
+
+    ecosystem._feed = RefusesSPY()
+    report = ecosystem.tick()
+    assert any("STILL HOLDS SPY" in e for e in report.errors)
+
+
+# =========================================================================
+# the gate is the only door
+# =========================================================================
+def test_an_approved_request_is_what_moves_a_firm_onto_real_money(ecosystem):
+    firm = ecosystem.store.firms()[0]
+    card = _make_ready(ecosystem.store, firm)
+    verdict = assess(ecosystem.store, firm, card, "alpaca")
+    approval = ecosystem.brokerage.request_promotion(
+        firm.firm_key, verdict, "alpaca", "robbie")
+
+    # Pending: still paper. The request alone is not permission.
+    assert ecosystem.apply_approvals() == []
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+
+    ecosystem.gate.approve(approval.id, approved_by="robbie")
+    done = ecosystem.apply_approvals()
+    assert any("is LIVE on alpaca" in line for line in done)
+    after = ecosystem.store.get_firm(firm.firm_key)
+    assert after.venue == "alpaca"
+    assert Decimal(after.cash) == LiveReadiness().max_start_capital
+
+    # And it cannot be carried out twice.
+    assert ecosystem.apply_approvals() == []
+
+
+def test_an_approval_that_no_longer_fits_the_firm_is_refused_not_forced(ecosystem):
+    """The human approved a firm as it stood when the request was filed. If it
+    has opened a position since, the answer is no — never 'go live anyway'."""
+    firm = ecosystem.store.firms()[0]
+    card = _make_ready(ecosystem.store, firm)
+    verdict = assess(ecosystem.store, firm, card, "alpaca")
+    approval = ecosystem.brokerage.request_promotion(
+        firm.firm_key, verdict, "alpaca", "robbie")
+    ecosystem.gate.approve(approval.id, approved_by="robbie")
+
+    _buy(ecosystem.store, firm)
+    done = ecosystem.apply_approvals()
+    assert any("REFUSED going live" in line for line in done)
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+
+
+def test_the_council_never_rules_on_real_money(ecosystem):
+    """It has no panel for it, by construction, and this must stay true even
+    with every autonomy switch on."""
+    import dataclasses
+
+    from src.trading.config import AutonomyConfig
+
+    ecosystem.config = dataclasses.replace(
+        ecosystem.config, autonomy=AutonomyConfig(mode="council"))
+    assert ecosystem.config.autonomy.council_decides is True
+
+    firm = ecosystem.store.firms()[0]
+    card = _make_ready(ecosystem.store, firm)
+    verdict = assess(ecosystem.store, firm, card, "alpaca")
+    approval = ecosystem.brokerage.request_promotion(
+        firm.firm_key, verdict, "alpaca", "robbie")
+
+    ecosystem.hold_council()
+    assert ecosystem.gate.get(approval.id).status == "pending"
+    assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"

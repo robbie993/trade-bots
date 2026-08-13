@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from ...money import fmt_money
+from ...money import D, fmt_money, money
 from ..config import TradingConfig
 from ..data.market_data import MarketData
 from ..firms.kill_switch import INSUFFICIENT_DATA, should_kill_firm
@@ -201,6 +201,137 @@ class Brokerage:
             payload={"reason": reason, "returned": str(abs(released.delta))},
         )
         return {"firm": firm_key, "reason": reason, "returned": str(abs(released.delta))}
+
+    # -- real money --------------------------------------------------------
+    def request_promotion(self, firm_key: str, readiness, venue: str, by: str):
+        """Ask a human to put one firm on a live venue. Grants nothing.
+
+        Refuses to even *file* the request unless every criterion is met. That
+        is deliberate and it is the same reasoning as not filing a kill request
+        on a blind book: an approval put in front of somebody is an implicit
+        claim that the evidence supports it, and a human who approves nine
+        unsupported requests has been misled by their own system.
+        """
+        if not readiness.ready:
+            raise ValueError(
+                f"{firm_key} does not meet the criteria for live trading "
+                f"({len(readiness.failures)} unmet: "
+                f"{', '.join(c.name for c in readiness.failures[:3])}). "
+                "Nothing has been requested. See `trade live-status`."
+            )
+        if self.gate is None:
+            raise ValueError("live promotion needs a human gate; none was configured")
+        from ...agents.human_gate import ApprovalAction
+
+        return self.gate.request(
+            ApprovalAction.LIVE_TRADING.value,
+            f"Put {firm_key} on {venue} with REAL MONEY, capped at "
+            f"{fmt_money(readiness.start_capital)}",
+            details={
+                "firm": firm_key,
+                "venue": venue,
+                "capital": str(readiness.start_capital),
+                "requested_by": by,
+                "evidence": {c.name: str(c.value) for c in readiness.checks},
+            },
+            dedupe_key=f"golive:{firm_key}",
+        )
+
+    def promote_firm(self, firm_key: str, venue: str, capital, by: str = "human") -> dict:
+        """Carry out an approved promotion. Only ever called from the gate.
+
+        **A firm goes live flat.** Its paper positions were bought with money
+        that does not exist, and the live venue has never heard of them: the
+        first order against one would either be rejected or — far worse — go
+        short with real stock. So an open book refuses the promotion rather
+        than carrying fiction across the boundary. Flatten it, then go.
+
+        **The mandate is capped, not transferred.** A firm running $100,000 on
+        paper does not get $100,000 of real money because it did well at
+        pretend. The cap is applied to *cash*, because cash is what the firm
+        can actually spend — capping the allocation alone would leave the
+        number small and the buying power untouched. The difference is handed
+        back to the brokerage exactly the way a dead firm's stake is, so the
+        reconciler's identity (cash = allocation + Σ cash_delta) still holds
+        afterwards. Raising it later is another trip through the gate, like
+        every other increase in risk.
+        """
+        firm = self.store.get_firm(firm_key)
+        if firm is None:
+            raise ValueError(f"unknown firm {firm_key}")
+        open_positions = [p for p in self.store.positions(firm.id) if p.is_open]
+        if open_positions:
+            raise ValueError(
+                f"{firm_key} holds {len(open_positions)} open position(s) "
+                f"({', '.join(p.symbol for p in open_positions[:4])}) bought with "
+                "paper money. A firm goes live flat — close the book first."
+            )
+
+        cash = money(firm.cash)
+        capped = money(min(D(capital), cash))
+        withdrawn = money(cash - capped)
+        if withdrawn > 0:
+            # Same movement as releasing a dead firm's stake: allocation and
+            # cash step together, so nothing downstream has to be told.
+            self.store.set_allocation(
+                firm.id, money(D(firm.allocation) - withdrawn), -withdrawn
+            )
+        self.store.update_firm_fields(firm.id, venue=venue)
+        self.store.record_event(
+            "promoted_live",
+            f"{firm_key} moved to {venue} with real money, capped at {fmt_money(capped)}, "
+            f"approved by {by}",
+            firm_id=firm.id,
+            payload={"venue": venue, "capital": str(capped), "by": by,
+                     "was_venue": firm.venue, "was_allocation": str(firm.allocation),
+                     "returned": str(withdrawn)},
+        )
+        return {"firm": firm_key, "venue": venue, "capital": str(capped), "by": by,
+                "returned": str(withdrawn)}
+
+    def demote_firm(self, firm_key: str, reason: str) -> dict:
+        """Put a firm back on paper. Needs nobody's permission, ever.
+
+        This is the other half of the asymmetry and the reason the first half
+        is acceptable. Going live takes evidence and a human; coming back takes
+        a reason and happens immediately. Anything that can notice trouble may
+        call it — the tick, the reconciler, an operator, a button.
+
+        Nothing can block it, including an open book. It stops the firm from
+        sending anything further to the live venue, which is the part that has
+        to be instant; it does **not** liquidate. Selling a real position
+        automatically is how a data outage turns into a realised loss — that is
+        precisely the accident that killed a village of eleven — so any real
+        stock still held is reported, loudly, in `still_open`, for a person to
+        close deliberately.
+        """
+        firm = self.store.get_firm(firm_key)
+        if firm is None:
+            raise ValueError(f"unknown firm {firm_key}")
+        if firm.venue == "paper":
+            return {"firm": firm_key, "venue": "paper", "changed": False,
+                    "still_open": []}
+        still_open = [p.symbol for p in self.store.positions(firm.id) if p.is_open]
+        self.store.update_firm_fields(firm.id, venue="paper")
+        self.store.record_event(
+            "demoted_to_paper",
+            f"{firm_key} returned to paper: {reason}"
+            + (f" — {len(still_open)} position(s) still open at {firm.venue}: "
+               f"{', '.join(still_open)}" if still_open else ""),
+            firm_id=firm.id,
+            payload={"reason": reason, "was_venue": firm.venue,
+                     "still_open": still_open},
+        )
+        return {"firm": firm_key, "venue": "paper", "changed": True,
+                "reason": reason, "was_venue": firm.venue,
+                "still_open": still_open}
+
+    def live_firms(self) -> list:
+        return [f for f in self.store.firms() if f.venue != "paper"]
+
+    def all_to_paper(self, reason: str = "operator pulled everything back") -> list:
+        """The one button you want at three in the morning."""
+        return [self.demote_firm(f.firm_key, reason) for f in self.live_firms()]
 
     def revive_firm(self, firm_key: str, by: str, market: MarketData) -> dict:
         """Reverse a kill that was decided on numbers that were not real.

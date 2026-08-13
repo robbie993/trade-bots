@@ -475,6 +475,45 @@ class Ecosystem:
             for done in report.carried_out:
                 flow.move("gate", "brokerage", str(done)[:110])
 
+        # Real money comes off the table the moment anything is wrong, and
+        # needs nobody's permission to do so. This is the other half of the
+        # asymmetry that makes the first half acceptable: going live takes
+        # evidence and a human; coming back takes a reason and one tick.
+        for firm in self.brokerage.live_firms():
+            card = next((c for c in report.oversight.cards if c.firm_id == firm.id), None)
+            trouble = ""
+            if card is not None and not card.can_be_valued:
+                trouble = "its book cannot be valued"
+            elif not firm.is_active:
+                trouble = f"it is {firm.status}"
+            elif card is not None and D(card.drawdown_pct) > self.config.kill.max_drawdown_pct:
+                trouble = f"drawdown {card.drawdown_pct}%"
+            if trouble:
+                done = self.brokerage.demote_firm(firm.firm_key, trouble)
+                report.errors.append(
+                    f"{firm.firm_key} PULLED OFF REAL MONEY: {trouble}"
+                )
+                flow.emit("brokerage", f"{firm.firm_key} back to paper: {trouble}"[:110],
+                          kind="alarm", firm=firm.firm_key, detail=trouble)
+                left = done.get("still_open") or []
+                if left:
+                    # Not liquidated on purpose — see demote_firm. This is the
+                    # one thing here a person has to do by hand.
+                    report.errors.append(
+                        f"{firm.firm_key} STILL HOLDS {', '.join(left)} at "
+                        f"{done.get('was_venue')} — nothing was sold; close it yourself"
+                    )
+                self.notifier.send(
+                    f"🛑 {firm.firm_key} back to paper",
+                    f"{firm.firm_key} was trading live and has been returned to "
+                    f"paper because {trouble}. No approval was needed and none "
+                    "was asked for."
+                    + (f"\n\nIt still holds {', '.join(left)} at "
+                       f"{done.get('was_venue')}. Nothing was sold automatically — "
+                       "that is what turns an outage into a realised loss. Close "
+                       "those by hand." if left else ""),
+                )
+
         # The arena, the bazaar and the tavern. Off unless TRADE_LIVING is set,
         # and incapable of moving cash when it is on — see src/trading/living.py.
         self.living.run(market, report)
@@ -812,6 +851,35 @@ class Ecosystem:
                     details["firm"], details.get("reason", "approved by human")
                 )
                 applied.append(f"killed {result['firm']} (returned {result['returned']})")
+            elif (approval.action == ApprovalAction.LIVE_TRADING.value
+                    and details.get("firm")):
+                # A per-firm promotion to real money, distinguished from the
+                # venue-level request by carrying a firm in its details. The
+                # council cannot reach this: it has no panel for LIVE_TRADING,
+                # so the only way a row gets here is a human at the gate.
+                try:
+                    done = self.brokerage.promote_firm(
+                        details["firm"], details.get("venue", "alpaca"),
+                        details.get("capital", "0"), approval.approved_by or "human",
+                    )
+                except (ValueError, TradingLedgerError) as exc:
+                    # The approval was for a firm as it stood when the request
+                    # was filed. If it has moved since, the answer is to refuse
+                    # and leave the row unapplied — never to go live anyway.
+                    applied.append(f"REFUSED going live for {details['firm']}: {exc}")
+                    self.flow.emit("gate", f"live promotion refused: {exc}"[:110],
+                                   kind="blocked", firm=details["firm"], detail=str(exc))
+                    continue
+                applied.append(
+                    f"{done['firm']} is LIVE on {done['venue']} with "
+                    f"{fmt_money(done['capital'])}"
+                )
+                self.notifier.send(
+                    f"🟢 {done['firm']} is trading REAL MONEY",
+                    f"{done['firm']} was approved for {done['venue']} with "
+                    f"{fmt_money(done['capital'])}. It comes back to paper "
+                    "automatically the moment anything is wrong with it.",
+                )
             elif approval.action == ApprovalAction.RESUME_FIRM.value and details.get("firm"):
                 result = self.brokerage.resume_firm(
                     details["firm"], approval.approved_by or "the council"

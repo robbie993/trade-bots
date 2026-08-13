@@ -1073,6 +1073,58 @@ def cmd_live_status(args) -> int:
     return 0
 
 
+def cmd_go_live(args) -> int:
+    """Ask a human to put ONE firm on real money. Grants nothing itself."""
+    from . import promotion
+
+    eco = _ecosystem(args)
+    firm = eco.store.get_firm(args.firm)
+    if firm is None:
+        print(f"unknown firm {args.firm}")
+        return 1
+    market = eco.market()
+    card = eco.brokerage.evaluator.evaluate(firm, market)
+    verdict = promotion.assess(
+        eco.store, firm, card, getattr(eco.feed, "name", ""),
+        promotion.LiveReadiness(), eco.brokerage.reconcile(market).ok,
+    )
+    print(_table(promotion.table(verdict)))
+
+    try:
+        approval = eco.brokerage.request_promotion(
+            args.firm, verdict, args.venue, args.by
+        )
+    except ValueError as exc:
+        print(f"\nREFUSED: {exc}")
+        return 1
+
+    print(
+        f"\nRequested. Nothing is live yet — approval #{approval.id} is waiting "
+        f"for you:\n"
+        f"  python -m src.main approve {approval.id} --by {args.by}\n"
+        f"  python -m src.main trade apply-approvals\n\n"
+        f"It would start at {fmt_money(verdict.start_capital)} on {args.venue}. "
+        "Any guard tripping\nputs it straight back on paper without asking."
+    )
+    return 0
+
+
+def cmd_all_to_paper(args) -> int:
+    """Everything off real money, now. Needs nobody's permission."""
+    eco = _ecosystem(args)
+    done = eco.brokerage.all_to_paper(args.reason or "operator pulled everything back")
+    changed = [d for d in done if d.get("changed")]
+    if not changed:
+        print("nothing was on real money.")
+        return 0
+    for entry in changed:
+        print(f"  {entry['firm']} -> paper")
+    print(f"\n{len(changed)} firm(s) back on paper. Open positions are not "
+          "liquidated —\nselling is the firm's job and goes through the venue "
+          "like any other trade.")
+    return 0
+
+
 def cmd_revive(args) -> int:
     """Reverse kills that were decided on a feed that could not price the book.
 
@@ -1292,6 +1344,14 @@ def add_trade_parser(subparsers) -> None:
     p = add("resume", "un-pause a firm (human decision)", cmd_resume)
     p.add_argument("firm")
     p.add_argument("--by", required=True)
+
+    p = add("go-live", "ask to put ONE firm on real money", cmd_go_live)
+    p.add_argument("firm")
+    p.add_argument("--venue", default="alpaca")
+    p.add_argument("--by", required=True)
+
+    p = add("all-to-paper", "pull every firm off real money, now", cmd_all_to_paper)
+    p.add_argument("--reason")
 
     p = add("live-status", "how close each firm is to real money (grants nothing)",
             cmd_live_status)
