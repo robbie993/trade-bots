@@ -315,6 +315,44 @@ Every threshold is env-overridable (`TRADE_LIVE_MIN_TRADES`,
 `TRADE_LIVE_START_CAPITAL`). They are judgement calls, printed next to the
 value so they can be argued with.
 
+### The flow, and the asymmetry it is built on
+
+> Going live takes evidence and a human. Coming back takes a reason and one
+> tick, and nobody's permission.
+
+That asymmetry is the reason the first half is acceptable, and it is visible in
+the controls: on Mission Control's **Real money** panel, "Ask to go live" is an
+ordinary button that files an approval and stops, and "Back to paper" is a red
+one that acts immediately.
+
+```
+trade live-status                      # every criterion, every firm. Grants nothing.
+trade go-live <firm> --by you          # files an approval. Refuses unless ready.
+mvv approve <id> --by you              # the gate. The only place it is granted.
+trade apply-approvals                  # carries it out
+trade all-to-paper                     # everything off real money, now
+```
+
+**A firm goes live flat.** Its paper positions were bought with money that does
+not exist and the live venue has never heard of them, so an open book refuses
+the promotion rather than carrying fiction across the boundary.
+
+**The cap moves the money, not the number.** A firm running $50,000 on paper
+starts live with a few hundred dollars of *cash* — the difference is handed
+back to the brokerage the same way a dead firm's stake is, so the reconciler's
+identity still holds. Capping the allocation and leaving the cash alone would
+be a cap in the ledger and no cap at all in the market.
+
+**The tick pulls a firm back on its own** — no approval, no delay — the moment
+its book cannot be valued, it stops being active, or it draws past the kill
+limit. **It sells nothing.** Automatically liquidating a real position on a feed
+that just went dark is precisely the accident that killed a village of eleven,
+so whatever is still held is reported, loudly, for a person to close on purpose.
+
+**The council may never rule on this.** It has no panel for `LIVE_TRADING`, by
+construction, and there is a test that holds a full council session with a live
+request pending and asserts it is still pending afterwards.
+
 ---
 
 ## Kill switches
@@ -1223,6 +1261,8 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade resume <firm> --by you` | un-pause a firm |
 | `trade revive --all --by you` | undo kills decided on a feed that had no prices |
 | `trade live-status` | how close each firm is to real money (grants nothing) |
+| `trade go-live <firm> --by you` | ask for ONE firm to trade real money |
+| `trade all-to-paper` | pull every firm off real money, now |
 
 ---
 

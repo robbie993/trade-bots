@@ -36,10 +36,16 @@ from ..config import Config
 from ..db.connection import Database
 from ..money import D, ZERO, fmt_money, fmt_pct, money
 from ..notifications import build_notifier
+from . import promotion
 from .config import TradingConfig
 from .ecosystem import Ecosystem
 
 router = APIRouter()
+
+# Which broker a promotion names. The same default the CLI's `--venue` carries;
+# there is one live venue wired up, and a page is the wrong place to be asked
+# to choose between brokers.
+LIVE_VENUE = "alpaca"
 
 
 def ecosystem() -> Ecosystem:
@@ -155,6 +161,7 @@ def _render(eco: Ecosystem, said: str) -> str:
     return "".join([
         header,
         _firms_panel(eco, firms, by_id),
+        _real_money_panel(eco, firms, by_id, reconciliation.ok),
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
         _signals_panel(eco, market),
@@ -213,6 +220,88 @@ def _firms_panel(eco, firms, by_id) -> str:
             "cash": fmt_money(purse.withdrawable),
         })
     return _panel("Firms", _table(rows))
+
+
+def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
+    """The one panel where a mistake costs money rather than opportunity.
+
+    It is a *ledger* of who is on real money and a *request* form for who wants
+    to be — not a switch. The asymmetry the whole feature is built on shows up
+    here as two different-looking controls: going live is a grey button that
+    files an approval and stops, coming back is a red one that acts
+    immediately. A page that made those look alike would be lying about what
+    they do.
+
+    Every firm is listed with its first unmet criterion, because the useful
+    question is not "which of these can go live" (usually none) but "what does
+    this one still have to show me".
+    """
+    feed_name = getattr(eco.feed, "name", "")
+    live = [f for f in firms if f.venue != "paper"]
+
+    rows = []
+    for firm in firms:
+        verdict = promotion.assess(
+            eco.store, firm, by_id.get(firm.id), feed_name,
+            promotion.LiveReadiness(), reconciled,
+        )
+        on_live = firm.venue != "paper"
+        if on_live:
+            where = f"<span class=bad>{e(firm.venue)} — REAL MONEY</span>"
+            button = (
+                f"<form method=post action='/village/actions/to-paper'>"
+                f"<input type=hidden name=firm value='{e(firm.firm_key)}'>"
+                f"<button class=kill>Back to paper</button></form>"
+            )
+            standing = f"running {fmt_money(firm.cash)}"
+        else:
+            where = "<span class=muted>paper</span>"
+            if verdict.ready:
+                button = (
+                    f"<form method=post action='/village/actions/go-live'>"
+                    f"<input type=hidden name=firm value='{e(firm.firm_key)}'>"
+                    f"<button>Ask to go live</button></form>"
+                )
+                standing = (f"<span class=good>every criterion met</span> — would "
+                            f"start at {fmt_money(verdict.start_capital)}")
+            else:
+                button = "<span class=muted>—</span>"
+                first = verdict.failures[0]
+                standing = (f"{len(verdict.failures)} of {len(verdict.checks)} unmet · "
+                            f"next: {e(first.name)} is {e(first.value)}, "
+                            f"needs {e(first.needs)}")
+        rows.append({
+            "firm": f"<a href='/village/firms/{e(firm.firm_key)}'>{e(firm.firm_key)}</a>",
+            "trading": where,
+            "standing": standing,
+            "": button,
+        })
+
+    panic = ""
+    if live:
+        panic = (
+            "<form method=post action='/village/actions/all-to-paper'>"
+            "<button class=kill>Pull EVERYTHING back to paper</button></form>"
+        )
+
+    note = (
+        "<p class=muted>Going live takes evidence and a human: the button files "
+        "an approval and grants nothing, and somebody then has to open the gate "
+        f"at <a href='/'>/</a> and say yes. Coming back takes neither — the tick "
+        "returns a firm to paper on its own the moment its book cannot be valued, "
+        "it stops being active, or it draws down past the kill limit. Nothing "
+        "here ever sells a real position; that is what turns an outage into a "
+        "realised loss.</p>"
+        f"<p class=muted>Evidence is being gathered against <strong>{e(feed_name)}</strong>. "
+        + ("A record on invented data is not evidence about the world, so nothing "
+           "can qualify while this reads <em>synthetic</em>."
+           if any(bad in feed_name.lower() for bad in promotion.INVENTED_FEEDS)
+           else "A record gathered on one feed does not qualify a firm on another.")
+        + "</p>"
+    )
+    title = (f"Real money — {len(live)} firm(s) LIVE" if live
+             else "Real money — nothing is live")
+    return _panel(title, _table(rows) + note, panic)
 
 
 def _brokerage_panel(eco, firms) -> str:
@@ -763,6 +852,90 @@ def action_apply_approvals() -> RedirectResponse:
     try:
         applied = eco.apply_approvals()
         said = "; ".join(applied) if applied else "nothing approved is waiting"
+    except Exception as exc:  # noqa: BLE001
+        said = f"refused: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said)
+
+
+@router.post("/village/actions/go-live")
+def action_go_live(firm: str = Form(...)) -> RedirectResponse:
+    """Ask for one firm to be put on real money. Grants nothing.
+
+    This is the button the whole promotion module exists to make safe, and it
+    is deliberately not a switch: it files an approval and stops. Somebody then
+    has to open the gate and say yes, which is a second act, in a second place,
+    after reading the evidence. A control that both asks and answers is one
+    click away from being an accident.
+
+    The readiness check is re-run *here* rather than trusted from the page that
+    drew the button, because the page was rendered at some point in the past and
+    the firm has been trading since.
+    """
+    eco = ecosystem()
+    try:
+        record = eco.store.get_firm(firm)
+        if record is None:
+            raise ValueError(f"unknown firm {firm}")
+        market = eco.market()
+        card = eco.brokerage.evaluator.evaluate(record, market)
+        verdict = promotion.assess(
+            eco.store, record, card, getattr(eco.feed, "name", ""),
+            promotion.LiveReadiness(), eco.brokerage.reconcile(market).ok,
+        )
+        approval = eco.brokerage.request_promotion(firm, verdict, LIVE_VENUE, "web")
+        said = (f"asked for {firm} to go live with "
+                f"{fmt_money(verdict.start_capital)} — approval #{approval.id} "
+                "is waiting at the gate. Nothing has been granted.")
+        eco.flow.move("brokerage", "gate", f"{firm} asks for real money",
+                      kind="blocked", firm=firm, detail=verdict.summary())
+    except Exception as exc:  # noqa: BLE001 - the refusal is the message
+        said = f"refused: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said)
+
+
+@router.post("/village/actions/to-paper")
+def action_to_paper(firm: str = Form(...)) -> RedirectResponse:
+    """Take one firm off real money. Needs nobody, refuses nothing."""
+    eco = ecosystem()
+    try:
+        result = eco.brokerage.demote_firm(firm, "pulled back from Mission Control")
+        if not result["changed"]:
+            said = f"{firm} was already on paper"
+        else:
+            said = f"{firm} is back on paper"
+            if result["still_open"]:
+                said += (f" — it STILL HOLDS {', '.join(result['still_open'])} at "
+                         f"{result['was_venue']}; nothing was sold, close it yourself")
+            eco.flow.emit("brokerage", f"{firm} back to paper", kind="alarm",
+                          firm=firm, detail="pulled back from Mission Control")
+    except Exception as exc:  # noqa: BLE001
+        said = f"refused: {exc}"
+    finally:
+        eco.db.close()
+    return _back(said)
+
+
+@router.post("/village/actions/all-to-paper")
+def action_all_to_paper() -> RedirectResponse:
+    """The one button you want at three in the morning."""
+    eco = ecosystem()
+    try:
+        results = eco.brokerage.all_to_paper("panic switch, from Mission Control")
+        if not results:
+            said = "nothing was on real money"
+        else:
+            said = f"pulled {len(results)} firm(s) off real money"
+            held = [f"{r['firm']}: {', '.join(r['still_open'])}"
+                    for r in results if r["still_open"]]
+            if held:
+                said += (" — nothing was sold, and these are STILL HELD at the "
+                         f"venue: {'; '.join(held)}")
+            eco.flow.emit("brokerage", "everything back to paper", kind="alarm",
+                          detail="panic switch, from Mission Control")
     except Exception as exc:  # noqa: BLE001
         said = f"refused: {exc}"
     finally:

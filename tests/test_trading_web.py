@@ -54,8 +54,8 @@ def db_for(client) -> Database:
 # =========================================================================
 def test_mission_control_renders_every_panel(client):
     body = client.get("/village").text
-    for panel in ("Ecosystem", "Firms", "Brokerage", "The council", "Strategy court",
-                  "Competition", "Black market", "Sandbox"):
+    for panel in ("Ecosystem", "Firms", "Real money", "Brokerage", "The council",
+                  "Strategy court", "Competition", "Black market", "Sandbox"):
         assert panel in body
 
 
@@ -374,3 +374,94 @@ def test_the_feed_only_returns_what_is_new(client):
 
 def test_mission_control_links_to_the_flow(client):
     assert "/village/flow" in client.get("/village").text
+
+
+# =========================================================================
+# real money
+# =========================================================================
+def test_the_real_money_panel_says_nothing_is_live(client):
+    body = client.get("/village").text
+    assert "Real money — nothing is live" in body
+    # And it says why nobody qualifies, rather than just showing empty buttons.
+    assert "not evidence about the world" in body
+
+
+def test_a_firm_that_is_not_ready_gets_no_button_and_a_reason(client):
+    body = client.get("/village").text
+    assert "unmet · next:" in body
+    assert "/village/actions/go-live" not in body
+
+
+def test_asking_to_go_live_refuses_a_firm_with_no_evidence(client):
+    """The button is re-checked here rather than trusted from the page that
+    drew it, because the page was rendered in the past."""
+    response = client.post("/village/actions/go-live", data={"firm": "alpha"},
+                           follow_redirects=False)
+    assert "refused" in said(response)
+    assert "does not meet the criteria" in said(response)
+
+    db = db_for(client)
+    assert db.query_one("SELECT COUNT(*) AS n FROM human_approvals")["n"] == 0
+    assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
+        == "paper"
+    db.close()
+
+
+def test_asking_to_go_live_files_a_request_and_grants_nothing(client, monkeypatch):
+    """The whole point of the button: it asks, and stops."""
+    from src.trading import promotion
+
+    monkeypatch.setattr(
+        promotion, "assess",
+        lambda *a, **k: promotion.Readiness(
+            firm_key="alpha",
+            checks=[promotion.Check("Everything", "yes", "yes", True)],
+            start_capital=promotion.D("500"),
+        ),
+    )
+    response = client.post("/village/actions/go-live", data={"firm": "alpha"},
+                           follow_redirects=False)
+    assert "approval #" in said(response)
+    assert "Nothing has been granted" in said(response)
+
+    db = db_for(client)
+    row = db.query_one("SELECT action, status FROM human_approvals")
+    assert row["action"] == ApprovalAction.LIVE_TRADING.value
+    assert row["status"] == ApprovalStatus.PENDING.value
+    assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
+        == "paper"
+    db.close()
+
+
+def test_the_panic_button_needs_no_approval_at_all(client):
+    db = db_for(client)
+    db.execute("UPDATE firms SET venue = 'alpaca'")
+    db.close()
+
+    body = client.get("/village").text
+    assert "REAL MONEY" in body
+    assert "Pull EVERYTHING back to paper" in body
+
+    response = client.post("/village/actions/all-to-paper", follow_redirects=False)
+    assert "pulled 2 firm(s) off real money" in said(response)
+
+    db = db_for(client)
+    assert [r["venue"] for r in db.query("SELECT venue FROM firms")] == ["paper", "paper"]
+    # Coming back is the half that asks nobody: no approval was written.
+    assert db.query_one("SELECT COUNT(*) AS n FROM human_approvals")["n"] == 0
+    db.close()
+
+
+def test_one_firm_can_be_pulled_back_on_its_own(client):
+    db = db_for(client)
+    db.execute("UPDATE firms SET venue = 'alpaca' WHERE firm_key = 'alpha'")
+    db.close()
+
+    response = client.post("/village/actions/to-paper", data={"firm": "alpha"},
+                           follow_redirects=False)
+    assert "alpha is back on paper" in said(response)
+
+    db = db_for(client)
+    assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
+        == "paper"
+    db.close()
