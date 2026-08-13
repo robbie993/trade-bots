@@ -654,3 +654,67 @@ def test_requests_are_spaced_out(alpaca_keys, fake_http, monkeypatch):
     feed.series("SPY")
     feed.series("QQQ")
     assert any(s > 0 for s in slept), "forty symbols in a burst will rate-limit"
+
+
+# =========================================================================
+# trusting a certificate, which is not the same as skipping one
+# =========================================================================
+def test_the_ssl_context_verifies(monkeypatch):
+    """The one-line "fix" for a certificate error is to stop checking them,
+    which would make every price this village reads spoofable by anyone on the
+    network path. It must never be that."""
+    import ssl
+
+    from src.trading.data import feeds
+
+    monkeypatch.setattr(feeds, "_SSL_CONTEXT", None)
+    context = feeds._ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+
+
+def test_certifi_is_preferred_when_it_is_installed(monkeypatch):
+    """Python from python.org does not use the macOS keychain, so the system
+    store is empty until somebody runs Install Certificates.command. certifi
+    is what `requests` used, and why this never broke before the feeds moved
+    to the standard library."""
+    import ssl
+
+    from src.trading.data import feeds
+
+    used = {}
+    real = ssl.create_default_context
+
+    def spy(*args, **kwargs):
+        used.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(feeds, "_SSL_CONTEXT", None)
+    monkeypatch.setattr(ssl, "create_default_context", spy)
+    feeds._ssl_context()
+    try:
+        import certifi  # noqa: F401
+    except ImportError:
+        assert "cafile" not in used          # system store, correct on Linux
+    else:
+        assert used.get("cafile"), "certifi is installed and should be used"
+
+
+def test_a_certificate_failure_says_how_to_fix_the_machine(monkeypatch):
+    """`could not reach ...: CERTIFICATE_VERIFY_FAILED` reads as a network
+    problem or a broken feed. It is neither, and the remedy is one command."""
+    from urllib.error import URLError
+
+    from src.trading.data import feeds
+
+    def refuse(*args, **kwargs):
+        raise URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    with pytest.raises(feeds.FeedNotConfigured) as caught:
+        feeds._get_json("https://example.test/bars", {})
+
+    message = str(caught.value)
+    assert "Install Certificates.command" in message
+    assert "certifi" in message
+    assert "Do not disable certificate verification" in message

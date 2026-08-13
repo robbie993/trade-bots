@@ -33,6 +33,65 @@ from ..config import DataConfig
 from ..models import Bar, price
 
 
+_SSL_CONTEXT = None
+
+
+def _ssl_context():
+    """A TLS context that can actually verify a certificate on a fresh Mac.
+
+    Python installed from python.org does not use the macOS keychain. It ships
+    a `Install Certificates.command` that nobody runs, and until they do,
+    `urllib` cannot verify anything:
+
+        [SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate
+
+    `requests` never hit this because it bundles `certifi` and ignores the
+    system store entirely — which is why moving these feeds off `requests` and
+    onto the standard library fixed one silent failure and introduced another.
+    A village that could not price a symbol because of a missing HTTP client
+    became a village that could not price a symbol because of a missing root
+    certificate, and reported both the same way: no bars.
+
+    So: use `certifi` when it is installed — it usually is, as a dependency of
+    something — and fall back to the system trust store when it is not. The
+    fallback is the correct behaviour on Linux and in containers, where the
+    system store is populated and certifi often is not.
+
+    **Verification is never disabled.** There is a one-line "fix" for this
+    error that turns off certificate checking, and it would silently make every
+    price in this system spoofable by anyone on the network path. A village
+    that refuses to trade because it cannot verify a certificate is behaving
+    correctly. The remedy is to install the certificates, and the error below
+    says how.
+    """
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is not None:
+        return _SSL_CONTEXT
+
+    import ssl
+
+    try:
+        import certifi  # type: ignore
+
+        _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 - no certifi, or an unreadable bundle
+        _SSL_CONTEXT = ssl.create_default_context()
+    return _SSL_CONTEXT
+
+
+CERTIFICATE_HELP = (
+    "This is the machine's certificate store, not the feed. Python from "
+    "python.org does not use the macOS keychain and ships its root "
+    "certificates unlinked. Fix it once, for every Python program on the "
+    "machine:\n"
+    '    open "/Applications/Python 3.14/Install Certificates.command"\n'
+    "Or, inside this virtualenv:\n"
+    "    pip install --upgrade certifi\n"
+    "Do not disable certificate verification to get past this — it would make "
+    "every price this village reads spoofable."
+)
+
+
 def _get_json(url: str, params: dict, headers: Optional[dict] = None, timeout: int = 20):
     """One HTTP GET returning parsed JSON, on the standard library alone.
 
@@ -62,7 +121,8 @@ def _get_json(url: str, params: dict, headers: Optional[dict] = None, timeout: i
     query = urlencode({k: v for k, v in (params or {}).items() if v is not None})
     request = Request(f"{url}?{query}" if query else url, headers=headers or {})
     try:
-        with urlopen(request, timeout=timeout) as response:   # noqa: S310 - fixed hosts
+        with urlopen(request, timeout=timeout,        # noqa: S310 - fixed hosts
+                     context=_ssl_context()) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         body = ""
@@ -72,6 +132,10 @@ def _get_json(url: str, params: dict, headers: Optional[dict] = None, timeout: i
             pass
         raise FeedHTTPError(exc.code, body) from exc
     except URLError as exc:
+        if "CERTIFICATE_VERIFY_FAILED" in str(exc.reason):
+            raise FeedNotConfigured(
+                f"could not verify the TLS certificate for {url}.\n\n{CERTIFICATE_HELP}"
+            ) from exc
         raise FeedNotConfigured(f"could not reach {url}: {exc.reason}") from exc
     except ValueError as exc:                 # not JSON
         raise FeedNotConfigured(f"{url} did not return JSON: {exc}") from exc
