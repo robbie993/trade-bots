@@ -406,6 +406,19 @@ def cmd_status(args) -> int:
           f"(active {status['active']}, paused {status['paused']}, killed {status['killed']})")
     print(f"capital      : {fmt_money(status['capital'])} deployed")
     print(f"equity       : {fmt_money(status['equity'])}")
+    # An unpriceable holding contributes zero to equity, which reads as "worth
+    # nothing" for a long and as free money for a short — the sale proceeds sit
+    # in cash with no offsetting liability. Either way the total is not a
+    # measurement, and a headline that does not say so is the same mistake as
+    # killing a firm on it.
+    blind = status.get("unmeasured") or []
+    if blind:
+        print(
+            f"               NOT A MEASUREMENT — {len(blind)} firm(s) hold positions\n"
+            f"               priced on nothing or on another feed: {', '.join(blind[:6])}\n"
+            "               The total above counts them at zero. Re-run once the\n"
+            "               feed has warmed up, or see `trade firms` per firm."
+        )
     print(f"reconciled   : {'yes' if status['reconciled'] else 'NO — ' + status['reconciliation']}")
     print(f"approvals    : {status['pending_approvals']} pending")
     gateway = status["gateway"]
