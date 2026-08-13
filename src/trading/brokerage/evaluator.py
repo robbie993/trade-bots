@@ -62,10 +62,13 @@ class Scorecard:
     # from marks, so this being non-empty means the rest of this card is not
     # a measurement of anything.
     unpriceable: tuple = ()
+    # Open positions built on a different feed than the one marking them.
+    # Arithmetically fine, economically meaningless — see migration 019.
+    mispriced: tuple = ()
 
     @property
     def can_be_valued(self) -> bool:
-        return not self.unpriceable
+        return not self.unpriceable and not self.mispriced
 
     def to_metrics(self) -> FirmMetrics:
         return FirmMetrics(
@@ -76,6 +79,7 @@ class Scorecard:
             worst_trade_pct=self.worst_trade_pct,
             consecutive_losses=self.consecutive_losses,
             unpriceable=self.unpriceable,
+            mispriced=self.mispriced,
         )
 
     def to_row(self) -> dict:
@@ -123,6 +127,20 @@ class Evaluator:
                 p.symbol for p in open_positions
                 if market.bar(p.symbol) is None
                 or p.symbol in getattr(market, "unpriceable", {})
+            })
+        )
+
+        # Was this book built on the feed we are marking it with? A position
+        # bought at synthetic prices and valued at real ones produces arithmetic
+        # that is correct and meaningless — see migration 019. Unknown
+        # provenance (opened before this was recorded) is left alone: unknown is
+        # not a mismatch, and treating it as one would freeze every old book.
+        feed_now = str(getattr(getattr(market, "feed", None), "name", "") or "")
+        built_with = self.store.provenance(firm.id) if firm.id else {}
+        mismatched = tuple(
+            sorted({
+                p.symbol for p in open_positions
+                if built_with.get(p.symbol) and built_with[p.symbol] != feed_now
             })
         )
 
@@ -214,6 +232,7 @@ class Evaluator:
             worst_trade_pct=worst_pct,
             as_of=market.as_of(),
             unpriceable=blind,
+            mispriced=mismatched,
         )
         card.sufficient_data = card.closed_trades >= self.config.kill.minimum_trades
         card.score, card.components = self.score(card)

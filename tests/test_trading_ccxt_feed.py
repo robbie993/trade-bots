@@ -562,3 +562,159 @@ def test_one_source_covers_a_mixed_universe(alpaca_keys, fake_http):
     assert feed.series("SPY")
     assert feed.series("BTC-USD")
     assert feed.series("AAPL")
+
+
+# =========================================================================
+# the window, which is not optional
+# =========================================================================
+def test_a_start_date_is_always_sent(alpaca_keys, fake_http):
+    """Without `start`, Alpaca answers from the beginning of the current day —
+    one bar. `limit` caps how many come back and does nothing to widen the
+    window, so a village asking for 180 days got one bar per symbol, refused
+    every one as a truncated history, and reported itself blind while the API
+    was working perfectly."""
+    from src.trading.data.feeds import AlpacaFeed
+
+    AlpacaFeed(days=60, min_interval_s=0).series("SPY")
+    params = fake_http["calls"][0]["params"]
+    assert "start" in params, "no start date: Alpaca will return a single bar"
+    assert params["start"] < datetime.now(timezone.utc).date().isoformat()
+
+
+def test_the_window_is_calendar_days_not_trading_days(alpaca_keys, fake_http):
+    """180 trading days is about 260 days of calendar. Asking for 180 calendar
+    days silently shortens every indicator by a fifth."""
+    from datetime import date
+
+    from src.trading.data.feeds import AlpacaFeed
+
+    AlpacaFeed(days=180, min_interval_s=0).series("SPY")
+    start = date.fromisoformat(fake_http["calls"][0]["params"]["start"])
+    assert (date.today() - start).days > 250
+
+
+def test_crypto_asks_for_a_window_too(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    AlpacaFeed(days=60, min_interval_s=0).series("BTC-USD")
+    assert "start" in fake_http["calls"][0]["params"]
+
+
+def test_a_rate_limit_is_retried_before_being_believed(alpaca_keys, fake_http,
+                                                       monkeypatch):
+    """A 429 is the one refusal that is *known* to be temporary. Treating it as
+    "this symbol has no price" is how a village goes blind over a burst it
+    caused itself."""
+    from src.trading.data.feeds import AlpacaFeed
+
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    calls = {"n": 0}
+    real = fake_http
+
+    def flaky(url, params=None, headers=None, timeout=None):
+        from src.trading.data.feeds import FeedHTTPError
+
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FeedHTTPError(429, '{"message": "too many requests."}')
+        real["calls"].append({"url": url, "params": params or {}, "headers": headers or {}})
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        return {"bars": [
+            {"t": base.replace(day=1 + (i % 27)).isoformat().replace("+00:00", "Z"),
+             "o": 100, "h": 101, "l": 99, "c": 100.5, "v": 10}
+            for i in range(120)
+        ]}
+
+    monkeypatch.setattr("src.trading.data.feeds._get_json", flaky)
+    bars = AlpacaFeed(days=60, min_interval_s=0).series("SPY")
+    assert len(bars) == 60
+    assert calls["n"] == 2, "the 429 should have been retried once"
+
+
+def test_a_second_rate_limit_says_what_to_change(alpaca_keys, monkeypatch):
+    from src.trading.data.feeds import AlpacaFeed, FeedHTTPError, FeedNotConfigured
+
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    def always_limited(url, params=None, headers=None, timeout=None):
+        raise FeedHTTPError(429, "too many requests")
+
+    monkeypatch.setattr("src.trading.data.feeds._get_json", always_limited)
+    with pytest.raises(FeedNotConfigured, match="MVV_TICK_INTERVAL"):
+        AlpacaFeed(days=60, min_interval_s=0).series("SPY")
+
+
+def test_requests_are_spaced_out(alpaca_keys, fake_http, monkeypatch):
+    slept = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+
+    from src.trading.data.feeds import AlpacaFeed
+
+    feed = AlpacaFeed(days=60, min_interval_s=0.35)
+    feed.series("SPY")
+    feed.series("QQQ")
+    assert any(s > 0 for s in slept), "forty symbols in a burst will rate-limit"
+
+
+# =========================================================================
+# trusting a certificate, which is not the same as skipping one
+# =========================================================================
+def test_the_ssl_context_verifies(monkeypatch):
+    """The one-line "fix" for a certificate error is to stop checking them,
+    which would make every price this village reads spoofable by anyone on the
+    network path. It must never be that."""
+    import ssl
+
+    from src.trading.data import feeds
+
+    monkeypatch.setattr(feeds, "_SSL_CONTEXT", None)
+    context = feeds._ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+
+
+def test_certifi_is_preferred_when_it_is_installed(monkeypatch):
+    """Python from python.org does not use the macOS keychain, so the system
+    store is empty until somebody runs Install Certificates.command. certifi
+    is what `requests` used, and why this never broke before the feeds moved
+    to the standard library."""
+    import ssl
+
+    from src.trading.data import feeds
+
+    used = {}
+    real = ssl.create_default_context
+
+    def spy(*args, **kwargs):
+        used.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(feeds, "_SSL_CONTEXT", None)
+    monkeypatch.setattr(ssl, "create_default_context", spy)
+    feeds._ssl_context()
+    try:
+        import certifi  # noqa: F401
+    except ImportError:
+        assert "cafile" not in used          # system store, correct on Linux
+    else:
+        assert used.get("cafile"), "certifi is installed and should be used"
+
+
+def test_a_certificate_failure_says_how_to_fix_the_machine(monkeypatch):
+    """`could not reach ...: CERTIFICATE_VERIFY_FAILED` reads as a network
+    problem or a broken feed. It is neither, and the remedy is one command."""
+    from urllib.error import URLError
+
+    from src.trading.data import feeds
+
+    def refuse(*args, **kwargs):
+        raise URLError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    with pytest.raises(feeds.FeedNotConfigured) as caught:
+        feeds._get_json("https://example.test/bars", {})
+
+    message = str(caught.value)
+    assert "Install Certificates.command" in message
+    assert "certifi" in message
+    assert "Do not disable certificate verification" in message

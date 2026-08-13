@@ -239,6 +239,10 @@ class Fill:
     proposal_id: Optional[int] = None
     as_of: Optional[datetime] = None
     id: Optional[int] = None
+    # The feed whose prices this fill was struck at. Carried in memory and
+    # stored in `position_provenance` rather than on the fills row, so that
+    # `to_row()` still matches the table. See migration 019.
+    priced_by: str = ""
 
     def __post_init__(self) -> None:
         self.quantity = qty(self.quantity)

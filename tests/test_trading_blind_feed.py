@@ -321,3 +321,120 @@ def test_a_working_feed_says_the_problem_is_elsewhere(ecosystem):
     from src.trading.cli import _feed_trouble
 
     assert "can price" in _feed_trouble(ecosystem)
+
+
+# =========================================================================
+# a book built on one feed and valued with another
+# =========================================================================
+class NamedFeed:
+    """A feed with a name and prices, for testing provenance."""
+
+    def __init__(self, name, price):
+        self.name = name
+        self._price = price
+
+    def series(self, symbol):
+        from datetime import datetime, timezone
+
+        from src.trading.models import Bar
+
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        return [
+            Bar(symbol=symbol, as_of=base.replace(day=1 + (i % 27)),
+                open=Decimal(self._price), high=Decimal(self._price),
+                low=Decimal(self._price), close=Decimal(self._price),
+                volume=Decimal(1000))
+            for i in range(120)
+        ]
+
+
+def test_a_position_remembers_which_feed_built_it(store, firm_record):
+    from src.trading.models import Fill, Side
+
+    fill = Fill(firm_id=firm_record.id, symbol="BTC-USD", side=Side.BUY.value,
+                quantity=Decimal("100"), price=Decimal("100"))
+    fill.priced_by = "synthetic"
+    store.settle(firm_record, fill)
+    assert store.provenance(firm_record.id) == {"BTC-USD": "synthetic"}
+
+
+def test_closing_a_position_forgets_it(store, firm_record):
+    from src.trading.models import Fill, Side
+
+    for side, price in ((Side.BUY.value, "100"), (Side.SELL.value, "110")):
+        fill = Fill(firm_id=firm_record.id, symbol="BTC-USD", side=side,
+                    quantity=Decimal("10"), price=Decimal(price))
+        fill.priced_by = "synthetic"
+        store.settle(firm_record, fill)
+    assert store.provenance(firm_record.id) == {}
+
+
+def test_the_twenty_million_dollar_village(store, firm_record):
+    """The exact situation, reproduced.
+
+    A firm spends $10,000 on BTC-USD at a synthetic price of $100 a unit, so it
+    holds 100 units. Point the village at Alpaca, where BTC is $100,000, and it
+    "owns" ten million dollars. Every identity holds. `reconcile` says yes. The
+    console reported $20,396,997 of equity against $289,152 ever deployed.
+    """
+    from src.trading.brokerage.evaluator import Evaluator
+    from src.trading.config import TradingConfig
+    from src.trading.data.market_data import MarketData
+    from src.trading.models import Fill, Side
+
+    bought = Fill(firm_id=firm_record.id, symbol="BTC-USD", side=Side.BUY.value,
+                  quantity=Decimal("100"), price=Decimal("100"))
+    bought.priced_by = "synthetic"
+    store.settle(firm_record, bought)
+
+    real = MarketData(NamedFeed("alpaca", "100000"), ["BTC-USD"])
+    card = Evaluator(store, TradingConfig()).evaluate(
+        store.require_firm_by_id(firm_record.id), real
+    )
+
+    # The arithmetic is right and the number is fiction.
+    assert card.equity > Decimal("10000000")
+    # And the system now says so rather than scoring it.
+    assert card.mispriced == ("BTC-USD",)
+    assert card.can_be_valued is False
+
+
+def test_nothing_irreversible_is_decided_on_a_mispriced_book():
+    from src.trading.firms.kill_switch import MIXED_PRICES
+
+    should, why = should_kill_firm(
+        FirmMetrics(trades=50, drawdown_pct=Decimal("99"), mispriced=("BTC-USD",))
+    )
+    assert should is False
+    assert MIXED_PRICES in why
+    assert "BTC-USD" in why
+
+
+def test_the_same_feed_is_not_a_mismatch(store, firm_record):
+    from src.trading.brokerage.evaluator import Evaluator
+    from src.trading.config import TradingConfig
+    from src.trading.data.market_data import MarketData
+    from src.trading.models import Fill, Side
+
+    fill = Fill(firm_id=firm_record.id, symbol="BTC-USD", side=Side.BUY.value,
+                quantity=Decimal("10"), price=Decimal("100"))
+    fill.priced_by = "alpaca"
+    store.settle(firm_record, fill)
+
+    card = Evaluator(store, TradingConfig()).evaluate(
+        store.require_firm_by_id(firm_record.id),
+        MarketData(NamedFeed("alpaca", "120"), ["BTC-USD"]),
+    )
+    assert card.mispriced == ()
+    assert card.can_be_valued is True
+
+
+def test_a_position_with_no_record_is_unknown_not_mismatched(store, firm_record, market_data):
+    """Every book that existed before this was recorded has no provenance.
+    Treating unknown as a mismatch would freeze all of them at once."""
+    from src.trading.brokerage.evaluator import Evaluator
+    from src.trading.config import TradingConfig
+
+    _hold(store, firm_record, "SPY")            # inserted directly, no fill
+    card = Evaluator(store, TradingConfig()).evaluate(firm_record, market_data)
+    assert card.mispriced == ()

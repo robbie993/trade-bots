@@ -299,6 +299,16 @@ all. If not, the answer is the same one the sample gate gives — *insufficient
 data*, never *kill* — and the tick reports the blindness instead. Stopping the
 bleeding is always allowed; inventing the bleeding is not.
 
+**A book is never valued with a feed it was not built on.** A village that ran
+on `synthetic`, bought positions at invented prices and was then pointed at
+Alpaca reported $20,396,997 of equity against $289,152 ever deployed — a firm
+that spent $10,000 on BTC at a synthetic $100 a unit holds a hundred units, and
+real prices make that ten million. Every identity held and `reconcile` said
+yes, because the arithmetic was right and only the meaning was gone. That is
+worse than a dark feed, which at least announces itself. Each position now
+records the feed that built it (migration 019), and a mismatch is the same
+refusal: no score anybody acts on, no kill.
+
 `trade revive` reverses a kill that was decided that way, and only that way: it
 re-scores the firm against a feed that can price its book and refuses unless the
 rules now clear it. A firm that really blew up is killed again on today's numbers
