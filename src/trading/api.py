@@ -31,6 +31,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from ..money import D, ZERO, money
+from . import planets
 from .web import ecosystem
 
 router = APIRouter()
@@ -117,6 +118,13 @@ def status() -> JSONResponse:
             "council_sitting": eco.config.autonomy.council_decides,
             # Kept for dashboards that probe a health endpoint before drawing.
             "ok": reconciliation.ok,
+            # The village as planets, for `solar-system-agents` and anything
+            # else that draws one. It polls exactly this endpoint, so a cloned
+            # dashboard shows real firms instead of its twelve invented ones.
+            # See src/trading/planets.py. Cards are passed through rather than
+            # re-evaluated: this is the only place that has already paid for
+            # them.
+            "agents": planets.agents(eco, market, cards),
         }
     finally:
         eco.db.close()
