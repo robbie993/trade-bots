@@ -284,6 +284,39 @@ risk limit, the position cap, the position count and the cash floor.
 
 ---
 
+## Going live
+
+The one decision in this system that points the other way. Everywhere else the
+hard question is when to *stop*; promotion asks when to **start**, and the rule
+still holds — the system may never start it, so nothing is automatic.
+
+`trade live-status` reports every criterion with its actual value and its
+threshold, for every firm. It grants nothing, changes nothing, and has no path
+to a venue, an allocation or the gate. There is a test that reads the module's
+own source to keep it that way.
+
+| criterion | why |
+|---|---|
+| Status active, book measurable, books reconcile | every figure below is computed from the numbers, so these gate what the rest of them *mean* |
+| Feed is real | a strategy measured against a seeded random walk has demonstrated that it can trade a seeded random walk |
+| Bars on that feed | migration 020 counts scorecards per feed, so "measured on alpaca" is read rather than assumed |
+| Closed trades ≥ 50 | twenty settles "is this obviously broken"; it does not settle "is this edge real" |
+| Expectancy t ≥ 2.0 | not *did it make money* — is the mean trade distinguishable from zero |
+| Drawdown ≤ 10% | deliberately tighter than the kill limit: the level at which you shut a firm down is not the level at which you hand it money |
+
+Promotion is **per firm**, never a global switch: the village's whole job is
+measuring firms separately, and sending them live as a block discards the
+measurement. The first mandate is capped at a few hundred dollars, because the
+first live run is for finding what paper cannot show you — real slippage,
+partial fills, rejects, halts — and those are cheaper to find small.
+
+Every threshold is env-overridable (`TRADE_LIVE_MIN_TRADES`,
+`TRADE_LIVE_MIN_BARS`, `TRADE_LIVE_MIN_T`, `TRADE_LIVE_MAX_DRAWDOWN_PCT`,
+`TRADE_LIVE_START_CAPITAL`). They are judgement calls, printed next to the
+value so they can be argued with.
+
+---
+
 ## Kill switches
 
 **A book that cannot be priced is never killed.** `MarketData.mark()` answers
@@ -1189,6 +1222,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade apply-approvals` | carry out what a human approved |
 | `trade resume <firm> --by you` | un-pause a firm |
 | `trade revive --all --by you` | undo kills decided on a feed that had no prices |
+| `trade live-status` | how close each firm is to real money (grants nothing) |
 
 ---
 

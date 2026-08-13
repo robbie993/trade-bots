@@ -1021,6 +1021,58 @@ def cmd_resume(args) -> int:
     return 0
 
 
+def cmd_live_status(args) -> int:
+    """How close each firm is to being allowed near real money.
+
+    Grants nothing and changes nothing. It is a report, and the point of it is
+    to be watched over weeks — every criterion, its actual value, and the
+    threshold, so a firm can be seen getting closer and an unmet criterion can
+    be argued with.
+    """
+    from . import promotion
+
+    eco = _ecosystem(args)
+    market = eco.market()
+    feed_name = getattr(eco.feed, "name", "")
+    firms = eco.store.firms()
+    cards = {c.firm_id: c for c in eco.brokerage.evaluator.evaluate_all(firms, market)}
+    reconciled = eco.brokerage.reconcile(market).ok
+    cfg = promotion.LiveReadiness()
+
+    if args.firm:
+        firms = [f for f in firms if f.firm_key == args.firm]
+        if not firms:
+            print(f"unknown firm {args.firm}")
+            return 1
+
+    ready_now = []
+    for firm in firms:
+        verdict = promotion.assess(
+            eco.store, firm, cards.get(firm.id), feed_name, cfg, reconciled
+        )
+        if verdict.ready:
+            ready_now.append(verdict)
+        if args.firm or not args.summary:
+            print(f"\n{firm.firm_key} — {verdict.summary()}")
+            print(_table(promotion.table(verdict)))
+
+    print(f"\n{len(ready_now)} of {len(firms)} firm(s) meet every criterion.")
+    if ready_now:
+        print(
+            "Nothing has been granted. Promotion is per firm, needs your\n"
+            "approval, and starts at "
+            f"{fmt_money(cfg.max_start_capital)} — the first live run is for\n"
+            "finding what paper cannot show you, not for profit."
+        )
+    else:
+        print(
+            "Which is the expected answer for a young village. The criteria are\n"
+            "env-overridable (TRADE_LIVE_MIN_TRADES, TRADE_LIVE_MIN_BARS,\n"
+            "TRADE_LIVE_MIN_T, ...) and are meant to be argued with, not obeyed."
+        )
+    return 0
+
+
 def cmd_revive(args) -> int:
     """Reverse kills that were decided on a feed that could not price the book.
 
@@ -1240,6 +1292,11 @@ def add_trade_parser(subparsers) -> None:
     p = add("resume", "un-pause a firm (human decision)", cmd_resume)
     p.add_argument("firm")
     p.add_argument("--by", required=True)
+
+    p = add("live-status", "how close each firm is to real money (grants nothing)",
+            cmd_live_status)
+    p.add_argument("firm", nargs="?")
+    p.add_argument("--summary", action="store_true", help="just the count")
 
     p = add("revive", "undo a kill decided on a feed that had no prices", cmd_revive)
     p.add_argument("firm", nargs="?")

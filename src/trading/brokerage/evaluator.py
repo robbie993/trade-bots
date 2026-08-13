@@ -260,9 +260,18 @@ class Evaluator:
     def evaluate_all(self, firms, market: MarketData) -> list[Scorecard]:
         return [self.evaluate(firm, market) for firm in firms]
 
-    def persist(self, card: Scorecard) -> int:
-        """Write the scorecard and move the firm's high-water mark up."""
+    def persist(self, card: Scorecard, feed_name: str = "") -> int:
+        """Write the scorecard and move the firm's high-water mark up.
+
+        `feed_name` is counted against the firm's history so that "measured on
+        alpaca" is later a fact rather than an assumption — see migration 020
+        and src/trading/promotion.py. Promotion to live money turns on it.
+        """
         row_id = self.store.record_performance(card.firm_id, card.to_row())
+        if feed_name:
+            from ..promotion import record_bar
+
+            record_bar(self.store, card.firm_id, feed_name)
         firm = self.store.require_firm_by_id(card.firm_id)
         if card.equity > D(firm.high_water_mark):
             self.store.update_firm_fields(card.firm_id, high_water_mark=money(card.equity))
