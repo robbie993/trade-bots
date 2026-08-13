@@ -304,6 +304,16 @@ own source to keep it that way.
 | Expectancy t ≥ 2.0 | not *did it make money* — is the mean trade distinguishable from zero |
 | Drawdown ≤ 10% | deliberately tighter than the kill limit: the level at which you shut a firm down is not the level at which you hand it money |
 
+**Why open profit does not count.** A village can be well up and have nothing
+to show here, and that is not the gate being pedantic. Unrealised gain is a
+*mark* — what the feed says the position would fetch — and it reverses. The
+failure this specifically guards against is the strategy that looks brilliant
+while it holds and gives it all back on the way out: entries that ride a rising
+tape are easy, and every firm here has been buying into one. The exit is the
+half that decides whether the profit was real, and until a position closes the
+exit has not been tested even once. `expectancy_t` has nothing to compute on
+until then, which is the same statement in arithmetic.
+
 Promotion is **per firm**, never a global switch: the village's whole job is
 measuring firms separately, and sending them live as a block discards the
 measurement. The first mandate is capped at a few hundred dollars, because the
@@ -321,9 +331,25 @@ value so they can be argued with.
 > tick, and nobody's permission.
 
 That asymmetry is the reason the first half is acceptable, and it is visible in
-the controls: on Mission Control's **Real money** panel, "Ask to go live" is an
-ordinary button that files an approval and stops, and "Back to paper" is a red
-one that acts immediately.
+the controls. On Mission Control's **Real money** panel:
+
+* **Go live** opens a confirmation page with the full criteria table on it and
+  one button underneath. A firm that has not earned it has no button at all.
+* **Back to paper** is one red press, immediately, no confirmation.
+
+The switch is the only control in the web tier that *decides* rather than
+requests, and the reason it is allowed to is worth stating: the gate exists to
+stop the **system** spending money on its own, not to stop the account's owner
+spending their own. When the same person clicks "ask" and then clicks "approve"
+thirty seconds later, the second click is navigation, not consent. What
+actually protects this decision is the evidence gate, the cap, the flat-book
+rule and the automatic demotion — none of which a page removes. And the
+confirmation screen shows the criteria *at the moment of the decision*, which
+the approval gate never did. The approval row is still written, and still
+approved by name.
+
+From a terminal it is still two steps, because a terminal has no screen to put
+the evidence on:
 
 ```
 trade live-status                      # every criterion, every firm. Grants nothing.

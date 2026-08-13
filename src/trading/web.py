@@ -16,8 +16,14 @@ bleeding.
 a season, trying a strategy file, listing and buying with tokens — all
 autonomous already. Anything that moves capital writes an approval request and
 stops, exactly as it does from a terminal: this page has no privileged path
-into the ledger, and the two places a decision is granted are still the gate
-at ``/`` and ``mvv approve``.
+into the ledger, and a decision is granted at the gate at ``/`` or by
+``mvv approve``.
+
+The single exception is putting one firm on real money, which is decided on
+its own confirmation page with every criterion on screen — see
+``go_live_confirm``, which explains why that one is allowed to decide. It still
+writes an approval row, and it still cannot promote a firm that has not earned
+it. Coming *back* off real money was never an approval and still is not.
 
 There is no authentication. Bind it to localhost.
 """
@@ -46,6 +52,12 @@ router = APIRouter()
 # there is one live venue wired up, and a page is the wrong place to be asked
 # to choose between brokers.
 LIVE_VENUE = "alpaca"
+
+# Who the audit trail names when the switch on Mission Control is used. Not
+# "web": an approval row for real money should say what kind of act produced
+# it, and "somebody pressed the switch, with the criteria table in front of
+# them" is a different act from "somebody ran `mvv approve 12`".
+DECIDED_BY = "the switch on Mission Control"
 
 
 def ecosystem() -> Ecosystem:
@@ -179,7 +191,10 @@ def _render(eco: Ecosystem, said: str) -> str:
 # server behind it, a link back to the approval gate goes nowhere.
 MISSION_FOOTER = (
     "<p><a href='/'>&larr; approval gate</a> · "
-    "<span class=muted>nothing on this page grants an approval</span></p>"
+    "<span class=muted>nothing on this page grants an approval, except putting "
+    "one firm on real money — which is a decision about your own account, made "
+    "with the evidence on screen, and is recorded as an approval either way"
+    "</span></p>"
 )
 
 
@@ -257,11 +272,10 @@ def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
         else:
             where = "<span class=muted>paper</span>"
             if verdict.ready:
-                button = (
-                    f"<form method=post action='/village/actions/go-live'>"
-                    f"<input type=hidden name=firm value='{e(firm.firm_key)}'>"
-                    f"<button>Ask to go live</button></form>"
-                )
+                # A link, not a form: the press that matters is on the next
+                # page, under the evidence. This one only opens it.
+                button = (f"<a href='/village/live/{e(firm.firm_key)}'>"
+                          f"<button class=go>Go live</button></a>")
                 standing = (f"<span class=good>every criterion met</span> — would "
                             f"start at {fmt_money(verdict.start_capital)}")
             else:
@@ -285,12 +299,13 @@ def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
         )
 
     note = (
-        "<p class=muted>Going live takes evidence and a human: the button files "
-        "an approval and grants nothing, and somebody then has to open the gate "
-        f"at <a href='/'>/</a> and say yes. Coming back takes neither — the tick "
-        "returns a firm to paper on its own the moment its book cannot be valued, "
-        "it stops being active, or it draws down past the kill limit. Nothing "
-        "here ever sells a real position; that is what turns an outage into a "
+        "<p class=muted>Going live takes evidence and a human. <em>Go live</em> "
+        "opens the criteria table with one button under it — a firm that has not "
+        "earned it has no button at all, here or anywhere. Coming back takes "
+        "neither: press <em>Back to paper</em> and it is done, and the tick "
+        "returns a firm on its own the moment its book cannot be valued, it "
+        "stops being active, or it draws down past the kill limit. Nothing here "
+        "ever sells a real position; that is what turns an outage into a "
         "realised loss.</p>"
         f"<p class=muted>Evidence is being gathered against <strong>{e(feed_name)}</strong>. "
         + ("A record on invented data is not evidence about the world, so nothing "
@@ -859,37 +874,134 @@ def action_apply_approvals() -> RedirectResponse:
     return _back(said)
 
 
+def _readiness(eco, firm_key: str):
+    """The firm, its scorecard and its verdict, as of right now.
+
+    Always recomputed at the moment it is needed and never carried over from
+    the page that drew a button, because that page was rendered at some point
+    in the past and the firm has been trading since.
+    """
+    record = eco.store.get_firm(firm_key)
+    if record is None:
+        raise ValueError(f"unknown firm {firm_key}")
+    market = eco.market()
+    card = eco.brokerage.evaluator.evaluate(record, market)
+    verdict = promotion.assess(
+        eco.store, record, card, getattr(eco.feed, "name", ""),
+        promotion.LiveReadiness(), eco.brokerage.reconcile(market).ok,
+    )
+    return record, verdict
+
+
+@router.get("/village/live/{firm_key}", response_class=HTMLResponse)
+def go_live_confirm(firm_key: str) -> HTMLResponse:
+    """The evidence, and one button under it.
+
+    This page is the reason the switch can be a switch. The gate at ``/`` shows
+    a one-line request and a yes; it does not show *why*, and approving a
+    promotion there means deciding about real money while looking at a
+    sentence. Here the full criteria table is on screen at the moment of the
+    decision — which is a stricter thing than the two-step it replaces, not a
+    looser one.
+
+    So it is a confirmation, not a warning. It states plainly what will happen,
+    how much, and what will take it back off, and then it asks once.
+    """
+    from ..agents.web import page
+
+    eco = ecosystem()
+    try:
+        try:
+            record, verdict = _readiness(eco, firm_key)
+        except ValueError as exc:
+            return page("Going live", f"<div class='card alarm'>{e(exc)}</div>"
+                                      "<p><a href='/village'>&larr; Mission Control</a></p>")
+
+        rows = [{"criterion": e(r["criterion"]), "value": e(r["value"]),
+                 "needs": e(r["needs"]),
+                 "met": ("<span class=good>yes</span>" if r["met"] == "yes"
+                         else "<span class=bad>NO</span>")}
+                for r in promotion.table(verdict)]
+
+        if not verdict.ready:
+            body = (
+                f"<h1>{e(firm_key)} cannot go live</h1>"
+                f"<div class='card alarm'><strong>{len(verdict.failures)} of "
+                f"{len(verdict.checks)} criteria are unmet.</strong> Nothing has "
+                "been requested and nothing can be.</div>"
+                + _panel("The evidence", _table(rows))
+                + "<p><a href='/village'>&larr; Mission Control</a></p>"
+            )
+            return page("Going live", body)
+
+        body = (
+            f"<h1>Put {e(firm_key)} on real money?</h1>"
+            + _panel("The evidence", _table(rows))
+            + "<div class=card><h2>What happens when you press it</h2><ul>"
+            f"<li>{e(firm_key)} starts trading <strong>"
+            f"{fmt_money(verdict.start_capital)}</strong> of real money at "
+            f"{e(LIVE_VENUE)}. That is the whole mandate — the rest of its "
+            "paper capital is handed back to the brokerage, so the cap is on "
+            "the buying power and not only on the number.</li>"
+            f"<li>Its book has to be flat first. It is: a firm carries no "
+            "pretend positions across.</li>"
+            "<li>The village <strong>puts it back on paper by itself</strong>, "
+            "with no approval and no delay, the moment its book cannot be "
+            "valued, it stops being active, or it draws past the kill limit.</li>"
+            "<li>You can take it back at any time from Mission Control. That "
+            "half needs nobody.</li>"
+            "<li>Nothing will ever be sold automatically. If a guard trips "
+            "while it holds real stock, you are told what it holds and you "
+            "close it deliberately.</li>"
+            "</ul>"
+            "<form method=post action='/village/actions/go-live'>"
+            f"<input type=hidden name=firm value='{e(firm_key)}'>"
+            f"<button class=kill>Yes — put {e(firm_key)} on real money with "
+            f"{fmt_money(verdict.start_capital)}</button></form>"
+            "<form method=get action='/village'><button>No, go back</button></form>"
+            "</div>"
+        )
+        return page(f"{firm_key} — going live", body)
+    finally:
+        eco.db.close()
+
+
 @router.post("/village/actions/go-live")
 def action_go_live(firm: str = Form(...)) -> RedirectResponse:
-    """Ask for one firm to be put on real money. Grants nothing.
+    """Put one firm on real money, in one press, from the confirmation page.
 
-    This is the button the whole promotion module exists to make safe, and it
-    is deliberately not a switch: it files an approval and stops. Somebody then
-    has to open the gate and say yes, which is a second act, in a second place,
-    after reading the evidence. A control that both asks and answers is one
-    click away from being an accident.
+    **This is the one control in the web tier that decides rather than asks**,
+    and it is worth being explicit about why it is allowed to be, because
+    everything else here files a request and stops.
 
-    The readiness check is re-run *here* rather than trusted from the page that
-    drew the button, because the page was rendered at some point in the past and
-    the firm has been trading since.
+    The gate exists to stop *the system* spending money on its own. It was
+    never there to stop the person who owns the account from spending their
+    own — and when the same human clicks "ask" and then clicks "approve" thirty
+    seconds later, the second click is not consent, it is navigation. What
+    actually protects this decision is the evidence gate (a firm that has not
+    earned it cannot be requested at all, from here or anywhere), the cap, the
+    flat-book rule, and a village that hands the money back by itself. None of
+    that is weakened by removing a page.
+
+    What is *not* skipped is the record. The approval row is still written and
+    still approved by name, so the audit trail reads exactly as it would have,
+    and `apply_approvals` still carries it out — the same code path the CLI and
+    the gate use, including its refusal if the firm has moved since.
     """
     eco = ecosystem()
     try:
-        record = eco.store.get_firm(firm)
-        if record is None:
-            raise ValueError(f"unknown firm {firm}")
-        market = eco.market()
-        card = eco.brokerage.evaluator.evaluate(record, market)
-        verdict = promotion.assess(
-            eco.store, record, card, getattr(eco.feed, "name", ""),
-            promotion.LiveReadiness(), eco.brokerage.reconcile(market).ok,
+        record, verdict = _readiness(eco, firm)
+        approval = eco.brokerage.request_promotion(
+            record.firm_key, verdict, LIVE_VENUE, DECIDED_BY)
+        eco.gate.approve(approval.id, approved_by=DECIDED_BY,
+                         notes="one press, with the criteria table on screen")
+        applied = eco.apply_approvals()
+        said = "; ".join(applied) if applied else (
+            f"approval #{approval.id} was written but not carried out — "
+            "check the gate"
         )
-        approval = eco.brokerage.request_promotion(firm, verdict, LIVE_VENUE, "web")
-        said = (f"asked for {firm} to go live with "
-                f"{fmt_money(verdict.start_capital)} — approval #{approval.id} "
-                "is waiting at the gate. Nothing has been granted.")
-        eco.flow.move("brokerage", "gate", f"{firm} asks for real money",
-                      kind="blocked", firm=firm, detail=verdict.summary())
+        eco.flow.move("gate", "brokerage", f"{firm} put on real money",
+                      kind="alarm", firm=firm, detail=verdict.summary())
     except Exception as exc:  # noqa: BLE001 - the refusal is the message
         said = f"refused: {exc}"
     finally:

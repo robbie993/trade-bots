@@ -8,6 +8,7 @@ capital writes an approval request and stops.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -407,27 +408,87 @@ def test_asking_to_go_live_refuses_a_firm_with_no_evidence(client):
     db.close()
 
 
-def test_asking_to_go_live_files_a_request_and_grants_nothing(client, monkeypatch):
-    """The whole point of the button: it asks, and stops."""
+def _ready(monkeypatch, firm_key="alpha"):
+    """Make one firm pass every criterion, without inventing a year of history."""
     from src.trading import promotion
 
     monkeypatch.setattr(
         promotion, "assess",
         lambda *a, **k: promotion.Readiness(
-            firm_key="alpha",
+            firm_key=firm_key,
             checks=[promotion.Check("Everything", "yes", "yes", True)],
             start_capital=promotion.D("500"),
         ),
     )
+
+
+def test_the_confirmation_page_refuses_a_firm_that_has_not_earned_it(client):
+    body = client.get("/village/live/alpha").text
+    assert "cannot go live" in body
+    assert "criteria are unmet" in body
+    # No button to press, and the evidence is on screen anyway.
+    assert "/village/actions/go-live" not in body
+    assert "Closed trades" in body
+
+
+def test_the_confirmation_page_shows_the_evidence_and_one_button(client, monkeypatch):
+    """The reason one press is allowed to be enough: the criteria are on screen
+    at the moment of the decision, which the approval gate never showed."""
+    _ready(monkeypatch)
+    body = client.get("/village/live/alpha").text
+    assert "Put alpha on real money?" in body
+    assert "The evidence" in body
+    assert "$500.00" in body
+    assert "puts it back on paper by itself" in body
+    assert body.count("/village/actions/go-live") == 1
+
+
+def test_the_switch_puts_a_firm_live_in_one_press(client, monkeypatch):
+    _ready(monkeypatch)
     response = client.post("/village/actions/go-live", data={"firm": "alpha"},
                            follow_redirects=False)
-    assert "approval #" in said(response)
-    assert "Nothing has been granted" in said(response)
+    assert "is LIVE on alpaca" in said(response)
 
     db = db_for(client)
-    row = db.query_one("SELECT action, status FROM human_approvals")
+    firm = db.query_one("SELECT venue, cash FROM firms WHERE firm_key = 'alpha'")
+    assert firm["venue"] == "alpaca"
+    # The cap moved the money, not just the number.
+    assert Decimal(str(firm["cash"])) == Decimal("500")
+
+    # And the record reads as an approval, because it is one.
+    row = db.query_one("SELECT action, status, approved_by FROM human_approvals")
     assert row["action"] == ApprovalAction.LIVE_TRADING.value
-    assert row["status"] == ApprovalStatus.PENDING.value
+    assert row["status"] == ApprovalStatus.APPROVED.value
+    assert "Mission Control" in row["approved_by"]
+    db.close()
+
+
+def test_the_switch_cannot_promote_a_firm_that_has_not_earned_it(client):
+    """The evidence gate is what protects this decision, not the number of
+    pages between the click and the ledger. Posting straight at the action —
+    past the confirmation page entirely — still refuses."""
+    response = client.post("/village/actions/go-live", data={"firm": "alpha"},
+                           follow_redirects=False)
+    assert "refused" in said(response)
+    assert "does not meet the criteria" in said(response)
+
+    db = db_for(client)
+    assert db.query_one("SELECT COUNT(*) AS n FROM human_approvals")["n"] == 0
+    assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
+        == "paper"
+    db.close()
+
+
+def test_going_live_and_coming_back_is_a_round_trip(client, monkeypatch):
+    """What the switch is for: on, then off, with nothing left behind."""
+    _ready(monkeypatch)
+    client.post("/village/actions/go-live", data={"firm": "alpha"},
+                follow_redirects=False)
+    response = client.post("/village/actions/to-paper", data={"firm": "alpha"},
+                           follow_redirects=False)
+    assert "alpha is back on paper" in said(response)
+
+    db = db_for(client)
     assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
         == "paper"
     db.close()
