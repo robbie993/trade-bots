@@ -402,3 +402,55 @@ see. `MVV_PUBLIC=0` forces it off, and you should not do that on a public URL:
 it puts the approval gate back on the internet with nothing in front of it.
 `MVV_GATE_TOKEN` is the supported way to get the controls back, and unlike
 `MVV_PUBLIC=0` it asks who you are first.
+
+---
+
+## Watching it: the solar system dashboard
+
+[`solar-system-agents`](https://github.com/Audazia/solar-system-agents) draws
+agents as planets orbiting a sun. It ships with twelve invented agents; point
+it at a village and it draws yours.
+
+```bash
+git clone https://github.com/Audazia/solar-system-agents.git
+cd solar-system-agents
+```
+
+Edit `config.js`:
+
+```javascript
+gateway: {
+  url: 'http://127.0.0.1:8000',      // or your Railway domain
+  healthEndpoint: '/health',
+  statusEndpoint: '/api/status',
+  token: null,
+  refreshInterval: 15000,
+}
+```
+
+Then `open mission-control.html`. Both endpoints already exist and
+`/api/status` carries an `agents` array in exactly the schema its `config.js`
+declares — see `src/trading/planets.py`.
+
+The numbers are readable rather than decorative:
+
+| | |
+|---|---|
+| size | allocation — a bigger desk is a bigger planet |
+| orbit | rank by score — better firms sit closer in |
+| speed | trades — an idle firm visibly stops moving |
+| colour | active / paused / killed / **cannot be valued** |
+
+So "that one has stopped and gone grey" means something specific.
+
+**On a hosted village**, `/api/status` is a GET on the read-only JSON router,
+so the dashboard works against the mirror without signing in — it reads and
+cannot write. If you would rather it were not public at all, do not generate a
+domain for the web service and run the dashboard against your laptop.
+
+## Watching it: the agent graph
+
+`npx lattice-agents .` parses `AGENT_MAP.md` at the repository root, which
+describes every agent, what it may decide alone, and what it must hand to a
+human. Note it serves on port 3000, which collides with Perplexica's default —
+run one at a time or move one of them.
