@@ -228,6 +228,7 @@ class TradingStore:
         with self.db.transaction():
             self._save_position(position)
             fill.id = self.db.insert("fills", fill.to_row())
+            self._record_provenance(firm.id, position, getattr(fill, "priced_by", ""))
             if fill.proposal_id:
                 self.db.update(
                     "trade_proposals", fill.proposal_id, {"status": ProposalStatus.FILLED.value}
@@ -244,6 +245,55 @@ class TradingStore:
         firm.cash = new_cash
         firm.consecutive_losses = consecutive
         return fill
+
+    # -- which feed built this book ----------------------------------------
+    def _record_provenance(self, firm_id: int, position, priced_by: str) -> None:
+        """Remember the feed a position was built with. See migration 019.
+
+        Written inside `settle`'s transaction, so a position and the record of
+        what priced it can never disagree. A position closed to flat forgets —
+        the next one is a fresh book and inherits nothing.
+        """
+        if not priced_by:
+            return
+        try:
+            if not position.is_open:
+                self.db.execute(
+                    "DELETE FROM position_provenance WHERE firm_id = ? AND symbol = ?",
+                    (firm_id, position.symbol),
+                )
+                return
+            existing = self.db.query_one(
+                "SELECT priced_by FROM position_provenance WHERE firm_id = ? AND symbol = ?",
+                (firm_id, position.symbol),
+            )
+            if existing is None:
+                self.db.insert(
+                    "position_provenance",
+                    {"firm_id": firm_id, "symbol": position.symbol, "priced_by": priced_by},
+                )
+            elif str(existing["priced_by"]) != priced_by:
+                # Adding to a position under a different feed than it was opened
+                # with. The record names the feed it was *built* on, which is the
+                # one whose prices the quantities reflect.
+                self.db.execute(
+                    "UPDATE position_provenance SET priced_by = ? "
+                    "WHERE firm_id = ? AND symbol = ?",
+                    (f"{existing['priced_by']}+{priced_by}", firm_id, position.symbol),
+                )
+        except Exception:  # noqa: BLE001 - an un-migrated database still trades
+            pass
+
+    def provenance(self, firm_id: int) -> dict:
+        """symbol -> the feed that built that position."""
+        try:
+            rows = self.db.query(
+                "SELECT symbol, priced_by FROM position_provenance WHERE firm_id = ?",
+                (firm_id,),
+            ) or []
+        except Exception:  # noqa: BLE001
+            return {}
+        return {str(r["symbol"]): str(r["priced_by"]) for r in rows}
 
     def fills(self, firm_id: Optional[int] = None, limit: Optional[int] = None) -> list[Fill]:
         sql = "SELECT * FROM fills"

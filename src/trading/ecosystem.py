@@ -612,6 +612,10 @@ class Ecosystem:
                           kind="refused", firm=record.firm_key, detail=str(exc))
                 continue
 
+            # Stamp the feed before settling: `store.settle` records which
+            # feed built the position, and it is the only place with both the
+            # fill and the transaction open.
+            fill.priced_by = getattr(self.feed, "name", "") or ""
             try:
                 fill = self.store.settle(record, fill)
             except TradingLedgerError as exc:

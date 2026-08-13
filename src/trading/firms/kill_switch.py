@@ -31,6 +31,12 @@ INSUFFICIENT_DATA = "Insufficient data"
 # an outage behind a firm that merely looks new.
 CANNOT_VALUE = "Cannot value this book"
 
+# A third kind of "no verdict", and the quietest. The prices are there and the
+# arithmetic is right; the positions were simply bought in a different price
+# universe than the one valuing them. A firm that spent $10,000 on BTC at a
+# synthetic $100 a unit "owns" ten million once real prices arrive.
+MIXED_PRICES = "Priced on a feed this book was not built on"
+
 
 @dataclass(frozen=True)
 class FirmMetrics:
@@ -50,15 +56,19 @@ class FirmMetrics:
     # Not a detail: every figure above is computed from marks, so a non-empty
     # tuple here means the rest of this object is fiction. See `should_kill_firm`.
     unpriceable: tuple = ()
+    # Positions built on one feed and valued with another. Not missing data —
+    # *wrong* data, which is harder to notice and just as fatal to act on.
+    mispriced: tuple = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "drawdown_pct", D(self.drawdown_pct))
         object.__setattr__(self, "worst_trade_pct", D(self.worst_trade_pct))
         object.__setattr__(self, "unpriceable", tuple(self.unpriceable or ()))
+        object.__setattr__(self, "mispriced", tuple(self.mispriced or ()))
 
     @property
     def can_be_valued(self) -> bool:
-        return not self.unpriceable
+        return not self.unpriceable and not self.mispriced
 
 
 def meets_sample_gate(metrics: FirmMetrics, config: Optional[FirmKillConfig] = None) -> bool:
@@ -97,9 +107,11 @@ def should_kill_firm(
     cfg = config or FirmKillConfig()
 
     if not metrics.can_be_valued:
+        blind = metrics.unpriceable or metrics.mispriced
+        why = (CANNOT_VALUE if metrics.unpriceable else MIXED_PRICES)
         return False, (
-            f"{CANNOT_VALUE}: {', '.join(metrics.unpriceable[:4])}"
-            + (" and others" if len(metrics.unpriceable) > 4 else "")
+            f"{why}: {', '.join(blind[:4])}"
+            + (" and others" if len(blind) > 4 else "")
         )
 
     if metrics.drawdown_pct > cfg.max_drawdown_pct:
@@ -226,6 +238,7 @@ class KillSwitch:
 
 __all__ = [
     "CANNOT_VALUE",
+    "MIXED_PRICES",
     "INSUFFICIENT_DATA",
     "FirmMetrics",
     "KillSwitch",
