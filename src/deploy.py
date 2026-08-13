@@ -283,6 +283,15 @@ def install(app) -> None:
         if request.url.path in (access.UNLOCK_PATH, "/lock"):
             return await call_next(request)
 
+        # The webhook is a POST that must work on a read-only deployment,
+        # because a read-only deployment is exactly where TradingView will be
+        # pointed. It is exempt from the blanket refusal and *not* exempt from
+        # authentication: it checks its own token, which is a different secret
+        # from the console's, and publishes a signal rather than touching the
+        # ledger. See src/trading/webhooks.py.
+        if request.url.path == "/api/signals/tradingview":
+            return await call_next(request)
+
         # Hosted *and* not signed in. With no token configured `unlocked` is
         # always False, so a deployment that has not opted into a password
         # behaves exactly as it did before this existed: a mirror.

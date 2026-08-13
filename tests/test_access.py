@@ -274,10 +274,34 @@ def test_every_write_route_is_refused_when_not_signed_in(hosted):
     paths = write_routes(web.app)
     assert len(paths) > 10, paths                  # it found the village actions
     for path in paths:
-        if path == access.UNLOCK_PATH:
-            continue                               # the door itself
+        if path in SELF_AUTHENTICATING:
+            continue
         url = path.replace("{approval_id}", "1")
         assert client.post(url, follow_redirects=False).status_code == 403, path
+
+
+# Write routes that are exempt from the blanket refusal *because they check a
+# credential themselves*. Every entry here is a promise, tested below: the
+# route must refuse an unauthenticated caller on its own.
+#
+#   /unlock   trades the console token for a session — the door itself
+#   /lock     ends one, which needs no credential to be safe
+#   the webhook  carries its own token and publishes a signal, never an order
+SELF_AUTHENTICATING = {
+    access.UNLOCK_PATH,
+    "/lock",
+    "/api/signals/tradingview",
+}
+
+
+def test_every_exempt_route_refuses_on_its_own(hosted):
+    """An exemption from the middleware is only acceptable if the route does
+    the checking instead. This is the test that stops "exempt" drifting into
+    "open" the next time somebody adds one."""
+    client = hosted()
+    assert client.post(access.UNLOCK_PATH, data={access.FIELD: "wrong-but-long"}).status_code == 401
+    assert client.post("/api/signals/tradingview",
+                       json={"symbol": "SPY", "action": "buy"}).status_code in (401, 503)
 
 
 def test_the_only_unauthenticated_write_is_the_door(hosted):
