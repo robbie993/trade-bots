@@ -942,6 +942,11 @@ class Ecosystem:
             "killed": sum(1 for f in firms if f.is_killed),
             "equity": money(sum((D(c.equity) for c in cards), ZERO)),
             "capital": money(sum((D(f.allocation) for f in firms), ZERO)),
+            # Firms whose equity is arithmetic rather than measurement. The
+            # total above still includes them, because leaving them out would
+            # be a different lie — but a caller that prints the total without
+            # printing this is presenting fiction as a number.
+            "unmeasured": [c.firm_key for c in cards if not c.can_be_valued],
             "reconciled": reconciliation.ok,
             "reconciliation": reconciliation.summary(),
             "pending_approvals": len(self.gate.pending()),

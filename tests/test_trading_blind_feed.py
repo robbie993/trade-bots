@@ -438,3 +438,37 @@ def test_a_position_with_no_record_is_unknown_not_mismatched(store, firm_record,
     _hold(store, firm_record, "SPY")            # inserted directly, no fill
     card = Evaluator(store, TradingConfig()).evaluate(firm_record, market_data)
     assert card.mispriced == ()
+
+
+def test_the_headline_total_says_when_it_is_not_a_measurement(ecosystem):
+    """A firm holding something the feed cannot price contributes zero to the
+    total — which reads as "worth nothing" for a long and as free money for a
+    short, since the sale proceeds sit in cash with no offsetting liability.
+
+    The live village printed $655,806 of equity against $630,000 of capital for
+    exactly that reason, seconds after startup with a cold cache. The per-firm
+    table, run once the feed had warmed up, summed to $629,912 — eighty-eight
+    dollars *below* capital, which is the slippage. The trading was right and
+    the headline was fiction."""
+    firm = ecosystem.store.firms()[0]
+    _hold(ecosystem.store, firm, "SPY", quantity="-100", price="50")
+
+    # The synthetic feed prices any symbol you ask it for — it is a seeded hash
+    # walk — so being blind has to be arranged rather than assumed.
+    real = ecosystem.feed
+
+    class RefusesSPY:
+        name = "picky"
+
+        def series(self, symbol):
+            if symbol == "SPY":
+                raise RuntimeError("no bars for SPY")
+            return real.series(symbol)
+
+    ecosystem._feed = RefusesSPY()
+    status = ecosystem.status()
+    assert firm.firm_key in status["unmeasured"]
+
+
+def test_a_fully_priceable_village_reports_no_caveat(ecosystem):
+    assert ecosystem.status()["unmeasured"] == []
