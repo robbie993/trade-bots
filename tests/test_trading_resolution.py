@@ -235,3 +235,83 @@ def test_resolution_is_the_only_place_that_knows_the_number(monkeypatch):
             if "252" in line and not line.strip().startswith("#"):
                 offenders.append(f"{path.name}:{n}")
     assert offenders == [], offenders
+
+
+# =========================================================================
+# switching resolution mid-flight
+# =========================================================================
+def test_a_change_of_bar_size_does_not_splice_two_series_together():
+    """The bug that arrives through the door marked "upgrade".
+
+    Switch a running village from daily to hourly and its history holds daily
+    steps followed by hourly ones. Differenced together and annualised at the
+    hourly rate, the daily steps are ~6.5x too wide, which inflates the
+    deviation and drags the ratio down. Only the most recent unbroken run is
+    used.
+    """
+    from datetime import timedelta
+
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    hourly = parse("1h")
+    start = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    daily_era = [(start + timedelta(days=i), Decimal(i)) for i in range(10)]
+    switch = daily_era[-1][0] + timedelta(days=1)
+    hourly_era = [(switch + timedelta(hours=i), Decimal(100 + i)) for i in range(10)]
+
+    kept = _one_unbroken_run(daily_era + hourly_era, hourly)
+    assert kept == hourly_era, "the daily era should have been cut off"
+
+
+def test_a_feed_outage_does_not_become_one_enormous_bar():
+    """A week of silence differenced as a single step is a week of movement
+    wearing one bar's clothing."""
+    from datetime import timedelta
+
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    start = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    before = [(start + timedelta(days=i), Decimal(i)) for i in range(5)]
+    after = [(start + timedelta(days=30 + i), Decimal(50 + i)) for i in range(5)]
+
+    assert _one_unbroken_run(before + after, DAILY) == after
+
+
+def test_a_weekend_is_not_a_gap():
+    """Friday to Monday is three calendar days and one trading step. Cutting
+    the series there would leave a daily village with nothing to measure."""
+    from datetime import timedelta
+
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    friday = datetime(2026, 8, 7, tzinfo=timezone.utc)
+    week = [
+        (friday - timedelta(days=1), Decimal(1)),
+        (friday, Decimal(2)),
+        (friday + timedelta(days=3), Decimal(3)),      # Monday
+        (friday + timedelta(days=4), Decimal(4)),
+    ]
+    assert _one_unbroken_run(week, DAILY) == week
+
+
+def test_a_series_too_short_to_have_a_gap_survives_intact():
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    assert _one_unbroken_run([], DAILY) == []
+    one = [(datetime(2026, 8, 3, tzinfo=timezone.utc), Decimal(1))]
+    assert _one_unbroken_run(one, DAILY) == one
+
+
+def test_an_unreadable_timestamp_ends_the_run_rather_than_being_guessed_at():
+    from datetime import timedelta
+
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    start = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    rows = [
+        (start, Decimal(1)),
+        (None, Decimal(2)),
+        (start + timedelta(days=1), Decimal(3)),
+        (start + timedelta(days=2), Decimal(4)),
+    ]
+    assert _one_unbroken_run(rows, DAILY) == rows[2:]

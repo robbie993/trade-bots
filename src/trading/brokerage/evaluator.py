@@ -30,6 +30,7 @@ from ...money import D, ZERO, money, percent
 from ..config import TradingConfig
 from ..data.market_data import MarketData
 from ..firms.kill_switch import FirmMetrics
+from ...db.connection import to_datetime
 from ..indicators import drawdown_pct, sharpe as sharpe_ratio, win_rate_pct
 from ..models import FirmRecord
 from ..store import TradingStore
@@ -102,6 +103,37 @@ class Scorecard:
             "score": self.score,
             "sufficient_data": self.sufficient_data,
         }
+
+
+# How many bar-lengths of silence still counts as "the next bar". Three, so a
+# weekend, a holiday and a short outage all stay inside one series, and a change
+# of resolution or a week of missing data does not.
+MAX_GAP_IN_BARS = 3
+
+
+def _one_unbroken_run(observations, resolution):
+    """The most recent stretch of observations spaced like one bar.
+
+    `observations` is (timestamp, value), oldest first. Returns the tail of it
+    from the last unexplained gap onwards, so the series that reaches `sharpe`
+    is one series sampled one way.
+
+    Timestamps that cannot be read are not guessed at — they end the run, on
+    the same principle as everywhere else here: an observation whose place in
+    time is unknown is not evidence about a rate.
+    """
+    if len(observations) < 2:
+        return list(observations)
+    limit = resolution.seconds * MAX_GAP_IN_BARS
+    start = 0
+    for i in range(1, len(observations)):
+        before, now = observations[i - 1][0], observations[i][0]
+        if before is None or now is None:
+            start = i
+            continue
+        if (now - before).total_seconds() > limit:
+            start = i
+    return list(observations[start:])
 
 
 class Evaluator:
@@ -194,17 +226,40 @@ class Evaluator:
         # observation is a trading day, so two ticks against the same bar have
         # to be one observation. Collapsing by `as_of` is what makes the ratio
         # mean what its name says.
+        #
+        # **And one series, not two spliced together.** The annualisation
+        # assumes every step is one bar wide. It stops being true the moment
+        # the bar changes size — switch a running village from daily to hourly
+        # and the history holds forty daily steps followed by forty hourly
+        # ones, differenced together and annualised at the hourly rate. The
+        # daily steps are about six and a half times too large, which inflates
+        # the deviation and drags the ratio down by about a fifth. Same shape
+        # of error, arriving through the door marked "upgrade".
+        #
+        # A gap in the feed does the same thing more crudely: a week of silence
+        # differenced as a single step is a week of movement wearing one bar's
+        # clothing.
+        #
+        # So the series is cut at any gap wider than a few bars and only the
+        # most recent unbroken run is used. This needs no record of when the
+        # resolution changed, because the change announces itself in the
+        # spacing — which is the only place it was ever really visible.
+        resolution = self.config.data.resolution
         history = self.store.performance_history(firm.id, limit=90)
         by_bar: dict = {}
         for row in reversed(history):          # oldest first; last row per bar wins
-            by_bar[str(row["as_of"])] = (
-                D(row["realized_pnl"]) + D(row["unrealized_pnl"]) - D(row.get("fees") or 0)
+            key = resolution.bar_key(row["as_of"]) or str(row["as_of"])
+            by_bar[key] = (
+                to_datetime(row["as_of"]),
+                D(row["realized_pnl"]) + D(row["unrealized_pnl"]) - D(row.get("fees") or 0),
             )
         # The reading being taken now belongs to the current bar, and replaces
         # any earlier reading of it rather than being appended beside it.
-        by_bar[str(market.as_of())] = net_pnl
+        now_key = resolution.bar_key(market.as_of()) or str(market.as_of())
+        by_bar[now_key] = (to_datetime(market.as_of()), net_pnl)
 
-        pnl_curve = list(by_bar.values())
+        observations = list(by_bar.values())
+        pnl_curve = [value for _, value in _one_unbroken_run(observations, resolution)]
         returns = (
             [(b - a) / capital_base for a, b in zip(pnl_curve, pnl_curve[1:])]
             if capital_base > 0
