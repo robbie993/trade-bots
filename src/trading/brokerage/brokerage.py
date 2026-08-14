@@ -104,7 +104,7 @@ class Brokerage:
         report.cards = self.evaluator.evaluate_all(firms, market)
         feed_name = str(getattr(getattr(market, "feed", None), "name", "") or "")
         for card in report.cards:
-            self.evaluator.persist(card, feed_name)
+            self.evaluator.persist(card, feed_name, market.as_of())
 
         report.paused, report.kills_requested = self.check_kills(firms, report.cards)
 

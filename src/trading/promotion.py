@@ -27,8 +27,12 @@ good, the other eight are how you find out after they have paid for it.
     The one that matters most, and the one a track record cannot fake. A
     strategy measured against a seeded random walk has demonstrated that it can
     trade a random walk — no gaps, no halts, no earnings, no correlation, no
-    liquidity. Migration 020 records which feed each scorecard was written
-    under, so this is read rather than assumed.
+    liquidity. Migration 021 records one row per firm per feed per *market
+    bar*, so this is read rather than assumed — and, since the bar is the key,
+    cannot be inflated by a loop that ticks faster than the market moves. The
+    first version of it counted scorecards, which meant it counted ticks, and
+    a village left running over lunch reported 136 bars against a feed whose
+    date had advanced once.
 
 ``min_expectancy_t``
     Not "did it make money" — *is the mean trade distinguishable from zero*. A
@@ -140,36 +144,61 @@ def closed_trades(store, firm_id: int) -> list:
     return [D(f.realized_pnl) for f in store.fills(firm_id) if D(f.realized_pnl) != 0]
 
 
+def bar_key(as_of) -> str:
+    """The market's bar, as the string the history is keyed on.
+
+    A date, not a timestamp, so that a daily feed records one bar a day however
+    often it is asked — and so that moving to hourly bars later is a change of
+    this one function rather than a change of meaning everywhere else.
+    """
+    if as_of is None:
+        return ""
+    text = getattr(as_of, "isoformat", lambda: str(as_of))()
+    return str(text)[:10]
+
+
 def bars_on(store, firm_id: int, feed_name: str) -> int:
-    """Scorecards written for this firm while that feed was in use."""
+    """Distinct market bars this firm was measured on, under that feed.
+
+    Counts rows rather than reading a counter. The difference is the whole
+    point: a counter is incremented by whatever calls it, and what called it
+    was the tick loop.
+    """
     try:
         row = store.db.query_one(
-            "SELECT bars FROM firm_feeds WHERE firm_id = ? AND priced_by = ?",
+            "SELECT COUNT(*) AS n FROM firm_feed_bars "
+            "WHERE firm_id = ? AND priced_by = ?",
             (firm_id, str(feed_name)),
         )
     except Exception:  # noqa: BLE001 - an un-migrated database has no history
         return 0
-    return int((row or {}).get("bars") or 0)
+    return int((row or {}).get("n") or 0)
 
 
-def record_bar(store, firm_id: int, feed_name: str) -> None:
-    """Count one scorecard against the feed that priced it. See migration 020."""
-    if not firm_id or not feed_name:
+def record_bar(store, firm_id: int, feed_name: str, as_of=None) -> None:
+    """Note that this firm was measured on this feed, on this market bar.
+
+    Idempotent by construction — the bar is part of the key, so a thousand
+    ticks against one bar record one bar. See migration 021 for what this
+    replaced and why it mattered.
+
+    A tick whose market cannot say what bar it is on records **nothing**. An
+    unknown bar is not evidence, and guessing one here would put a number in
+    front of the decision that spends real money.
+    """
+    bar = bar_key(as_of)
+    if not firm_id or not feed_name or not bar:
         return
     try:
         existing = store.db.query_one(
-            "SELECT bars FROM firm_feeds WHERE firm_id = ? AND priced_by = ?",
-            (firm_id, str(feed_name)),
+            "SELECT 1 AS hit FROM firm_feed_bars "
+            "WHERE firm_id = ? AND priced_by = ? AND bar_date = ?",
+            (firm_id, str(feed_name), bar),
         )
         if existing is None:
             store.db.insert(
-                "firm_feeds",
-                {"firm_id": firm_id, "priced_by": str(feed_name), "bars": 1},
-            )
-        else:
-            store.db.execute(
-                "UPDATE firm_feeds SET bars = bars + 1 WHERE firm_id = ? AND priced_by = ?",
-                (firm_id, str(feed_name)),
+                "firm_feed_bars",
+                {"firm_id": firm_id, "priced_by": str(feed_name), "bar_date": bar},
             )
     except Exception:  # noqa: BLE001 - never break a tick to keep a statistic
         pass
@@ -309,5 +338,5 @@ def table(readiness: Readiness) -> list:
 
 __all__ = [
     "Check", "INVENTED_FEEDS", "LiveReadiness", "Readiness", "assess",
-    "bars_on", "closed_trades", "expectancy_t", "record_bar", "table",
+    "bar_key", "bars_on", "closed_trades", "expectancy_t", "record_bar", "table",
 ]

@@ -60,6 +60,20 @@ def _fills(store, firm, pnls, symbol="SPY"):
         })
 
 
+def _bars(store, firm, feed, n, start=1):
+    """N distinct market bars on a feed.
+
+    Distinct on purpose: `record_bar` is keyed on the bar, so calling it in a
+    loop with the same date records one bar. That is the whole fix — the
+    counter it replaced would have recorded N.
+    """
+    from datetime import date, timedelta
+
+    for i in range(n):
+        promotion.record_bar(store, firm.id, feed,
+                             date(2026, 1, 1) + timedelta(days=start + i))
+
+
 def test_a_fresh_firm_meets_almost_nothing(store, firm_record, market_data):
     from src.trading.brokerage.evaluator import Evaluator
     from src.trading.config import TradingConfig
@@ -85,8 +99,7 @@ def test_a_synthetic_record_is_never_evidence(store, firm_record):
     """The check a track record cannot fake. A firm can be perfect on a random
     walk — no gaps, no halts, no earnings, no liquidity — and know nothing."""
     _fills(store, firm_record, [Decimal("50")] * 200)
-    for _ in range(500):
-        promotion.record_bar(store, firm_record.id, "synthetic")
+    _bars(store, firm_record, "synthetic", 500)
 
     verdict = assess(store, firm_record, None, "synthetic")
     names = {c.name for c in verdict.failures}
@@ -94,20 +107,55 @@ def test_a_synthetic_record_is_never_evidence(store, firm_record):
 
 
 def test_bars_are_counted_per_feed(store, firm_record):
-    for _ in range(7):
-        promotion.record_bar(store, firm_record.id, "alpaca")
-    for _ in range(3):
-        promotion.record_bar(store, firm_record.id, "synthetic")
+    _bars(store, firm_record, "alpaca", 7)
+    _bars(store, firm_record, "synthetic", 3)
     assert promotion.bars_on(store, firm_record.id, "alpaca") == 7
     assert promotion.bars_on(store, firm_record.id, "synthetic") == 3
     assert promotion.bars_on(store, firm_record.id, "yahoo") == 0
 
 
+def test_a_thousand_ticks_on_one_bar_is_one_bar(store, firm_record):
+    """The bug this table was rewritten for.
+
+    The counter it replaced was incremented once per scorecard, and a scorecard
+    is written once per *tick*. A village left running over lunch reported 136
+    bars against a feed whose date had advanced once, and the promotion gate —
+    the check a track record is not supposed to be able to fake — read that
+    number and cleared.
+    """
+    from datetime import date
+
+    for _ in range(1000):
+        promotion.record_bar(store, firm_record.id, "alpaca", date(2026, 8, 13))
+    assert promotion.bars_on(store, firm_record.id, "alpaca") == 1
+
+    promotion.record_bar(store, firm_record.id, "alpaca", date(2026, 8, 14))
+    assert promotion.bars_on(store, firm_record.id, "alpaca") == 2
+
+
+def test_a_tick_that_cannot_name_its_bar_records_nothing(store, firm_record):
+    """A blind feed has no bar date. Counting the tick anyway would let an
+    outage build a track record."""
+    for _ in range(50):
+        promotion.record_bar(store, firm_record.id, "alpaca", None)
+    assert promotion.bars_on(store, firm_record.id, "alpaca") == 0
+
+
+def test_the_time_of_day_does_not_start_a_new_bar(store, firm_record):
+    """Same trading day, different clock times — still one observation of the
+    market, whatever the wall clock thinks."""
+    from datetime import datetime, timezone
+
+    for hour in range(24):
+        promotion.record_bar(store, firm_record.id, "alpaca",
+                             datetime(2026, 8, 13, hour, tzinfo=timezone.utc))
+    assert promotion.bars_on(store, firm_record.id, "alpaca") == 1
+
+
 def test_a_record_on_one_feed_does_not_qualify_you_on_another(store, firm_record):
     """Switching feeds must not inherit the history. Otherwise a firm
     re-qualifies by changing what it reads."""
-    for _ in range(100):
-        promotion.record_bar(store, firm_record.id, "yahoo")
+    _bars(store, firm_record, "yahoo", 100)
     verdict = assess(store, firm_record, None, "alpaca")
     unmet = {c.name for c in verdict.failures}
     assert "Bars on alpaca" in unmet
@@ -163,8 +211,7 @@ def test_a_firm_with_real_evidence_passes(store, firm_record, market_data):
 
     _fills(store, firm_record, [Decimal("40"), Decimal("30"), Decimal("50"),
                                 Decimal("-10")] * 20)
-    for _ in range(60):
-        promotion.record_bar(store, firm_record.id, "alpaca")
+    _bars(store, firm_record, "alpaca", 60)
 
     card = Scorecard(
         firm_key=firm_record.firm_key, firm_id=firm_record.id,
@@ -191,8 +238,7 @@ def test_readiness_grants_nothing(store, firm_record, market_data):
 
     before = store.require_firm_by_id(firm_record.id)
     _fills(store, firm_record, [Decimal("40")] * 100)
-    for _ in range(60):
-        promotion.record_bar(store, firm_record.id, "alpaca")
+    _bars(store, firm_record, "alpaca", 60)
     assess(store, firm_record, Scorecard(
         firm_key=firm_record.firm_key, firm_id=firm_record.id,
         drawdown_pct=Decimal("1"), win_rate_pct=Decimal("90"),
@@ -233,8 +279,7 @@ def _make_ready(store, firm, feed="alpaca"):
 
     _fills(store, firm, [Decimal("40"), Decimal("30"), Decimal("50"),
                          Decimal("-10")] * 20)
-    for _ in range(60):
-        promotion.record_bar(store, firm.id, feed)
+    _bars(store, firm, feed, 60)
     return Scorecard(firm_key=firm.firm_key, firm_id=firm.id,
                      drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"))
 

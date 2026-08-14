@@ -299,7 +299,7 @@ own source to keep it that way.
 |---|---|
 | Status active, book measurable, books reconcile | every figure below is computed from the numbers, so these gate what the rest of them *mean* |
 | Feed is real | a strategy measured against a seeded random walk has demonstrated that it can trade a seeded random walk |
-| Bars on that feed | migration 020 counts scorecards per feed, so "measured on alpaca" is read rather than assumed |
+| Bars on that feed | migration 021 stores one row per firm per feed per *market bar*, so "measured on alpaca" is read rather than assumed — and cannot be inflated by a loop that ticks faster than the market moves |
 | Closed trades ≥ 50 | twenty settles "is this obviously broken"; it does not settle "is this edge real" |
 | Expectancy t ≥ 2.0 | not *did it make money* — is the mean trade distinguishable from zero |
 | Drawdown ≤ 10% | deliberately tighter than the kill limit: the level at which you shut a firm down is not the level at which you hand it money |

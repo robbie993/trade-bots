@@ -260,18 +260,23 @@ class Evaluator:
     def evaluate_all(self, firms, market: MarketData) -> list[Scorecard]:
         return [self.evaluate(firm, market) for firm in firms]
 
-    def persist(self, card: Scorecard, feed_name: str = "") -> int:
+    def persist(self, card: Scorecard, feed_name: str = "", as_of=None) -> int:
         """Write the scorecard and move the firm's high-water mark up.
 
         `feed_name` is counted against the firm's history so that "measured on
-        alpaca" is later a fact rather than an assumption — see migration 020
+        alpaca" is later a fact rather than an assumption — see migration 021
         and src/trading/promotion.py. Promotion to live money turns on it.
+
+        `as_of` is the market's own bar. It is required for that history to
+        mean anything: this is called once per tick, the loop ticks every
+        sixty seconds, and without the bar the record counts minutes of uptime
+        instead of observations of the market.
         """
         row_id = self.store.record_performance(card.firm_id, card.to_row())
         if feed_name:
             from ..promotion import record_bar
 
-            record_bar(self.store, card.firm_id, feed_name)
+            record_bar(self.store, card.firm_id, feed_name, as_of)
         firm = self.store.require_firm_by_id(card.firm_id)
         if card.equity > D(firm.high_water_mark):
             self.store.update_firm_fields(card.firm_id, high_water_mark=money(card.equity))
