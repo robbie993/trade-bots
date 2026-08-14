@@ -738,6 +738,61 @@ def cmd_dashboard(args) -> int:
     return 0
 
 
+def cmd_switches(args) -> int:
+    """The controls on the wall, from a terminal.
+
+    These live in the database rather than the environment because the process
+    that ticks is not the process serving Mission Control — so a switch flipped
+    here reaches a running village on its next pass, with no restart. Until
+    now the only way to touch them was the web page, which is no use to
+    somebody already in a shell.
+    """
+    from .settings import KNOWN, UnknownSetting
+
+    eco = _ecosystem(args)
+    default_living = eco.config.living.enabled
+
+    if not args.name:
+        rows = []
+        for name, about in KNOWN.items():
+            default = False if name in ("paused", "evolution") else default_living
+            on = eco.settings.get(name, default=default)
+            rows.append({
+                "switch": name,
+                "state": "ON" if on else "off",
+                "what it does": about,
+            })
+        print(_table(rows))
+        print("\nFlip one with:  python -m src.main trade switch <name>")
+        print("           or:  python -m src.main trade switch <name> --on")
+        return 0
+
+    name = args.name.strip().lower()
+    default = False if name in ("paused", "evolution") else default_living
+    try:
+        if args.on:
+            now_on = eco.settings.set(name, True, by=args.by)
+        elif args.off:
+            now_on = eco.settings.set(name, False, by=args.by)
+        else:
+            now_on = eco.settings.toggle(name, default=default, by=args.by)
+    except UnknownSetting:
+        print(f"there is no switch called {name!r}. Known: {', '.join(KNOWN)}")
+        return 1
+
+    print(f"{name} is now {'ON' if now_on else 'off'} — {KNOWN[name]}")
+    if name == "evolution" and now_on:
+        print(
+            f"\nEvery {eco.config.brain.evolve_every} market bars each paper firm "
+            "will mutate its\ngenome, and keep a mutant only if it beats the "
+            "incumbent on bars it was\nnot fitted on. Live firms are never "
+            "touched. Watch it with:\n"
+            "  ./scripts/village.sh logs\n"
+            "  python -m src.main trade show <firm>"
+        )
+    return 0
+
+
 def cmd_autonomy(args) -> int:
     """What the village decides for itself, and what it still asks you."""
     from .council.council import PANELS
@@ -1350,6 +1405,19 @@ def add_trade_parser(subparsers) -> None:
     p.add_argument("firm")
     p.add_argument("--venue", default="alpaca")
     p.add_argument("--by", required=True)
+
+    p = add("switches", "the controls on the wall, and how to flip them",
+            cmd_switches)
+    p.add_argument("name", nargs="?")
+    p.add_argument("--on", action="store_true", help="turn it on, whatever it was")
+    p.add_argument("--off", action="store_true", help="turn it off, whatever it was")
+    p.add_argument("--by", default="cli")
+
+    p = add("switch", "flip one control on the wall", cmd_switches)
+    p.add_argument("name")
+    p.add_argument("--on", action="store_true")
+    p.add_argument("--off", action="store_true")
+    p.add_argument("--by", default="cli")
 
     p = add("all-to-paper", "pull every firm off real money, now", cmd_all_to_paper)
     p.add_argument("--reason")

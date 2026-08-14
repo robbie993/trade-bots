@@ -203,3 +203,64 @@ def test_the_switch_is_on_the_wall(ecosystem):
     assert ecosystem.settings.get("evolution", default=False) is False
     ecosystem.settings.toggle("evolution", default=False, by="test")
     assert ecosystem.settings.get("evolution", default=False) is True
+
+
+# =========================================================================
+# flipping it from a terminal
+# =========================================================================
+def test_the_switch_can_be_flipped_without_a_browser(db, tmp_path, firms_yaml,
+                                                     monkeypatch, capsys):
+    """Mission Control was the only way to touch a switch, which is no use to
+    somebody already in a shell — and this village is mostly run from one."""
+    monkeypatch.setenv("DATABASE_URL", db.url)
+    monkeypatch.setenv("TRADE_FIRMS_CONFIG", str(firms_yaml))
+    monkeypatch.setenv("TRADE_AUDIT_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    from src.cli import main
+
+    main(["trade", "init"])
+    capsys.readouterr()
+
+    main(["trade", "switches"])
+    listing = capsys.readouterr().out
+    assert "evolution" in listing and "off" in listing
+
+    main(["trade", "switch", "evolution", "--on"])
+    assert "evolution is now ON" in capsys.readouterr().out
+
+    main(["trade", "switches"])
+    assert "ON" in capsys.readouterr().out
+
+    main(["trade", "switch", "evolution", "--off"])
+    assert "now off" in capsys.readouterr().out
+
+
+def test_an_unknown_switch_is_refused_by_name(db, tmp_path, firms_yaml,
+                                              monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", db.url)
+    monkeypatch.setenv("TRADE_AUDIT_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    from src.cli import main
+
+    assert main(["trade", "switch", "nonsense"]) == 1
+    out = capsys.readouterr().out
+    assert "no switch called" in out
+    assert "evolution" in out, "it should say what the real ones are"
+
+
+def test_the_page_and_the_terminal_flip_the_same_switch(db, tmp_path, firms_yaml,
+                                                        monkeypatch, capsys):
+    """One village, one set of controls. A switch flipped in a shell has to be
+    the switch the page is showing, or the two disagree about what is running."""
+    monkeypatch.setenv("DATABASE_URL", db.url)
+    monkeypatch.setenv("TRADE_FIRMS_CONFIG", str(firms_yaml))
+    monkeypatch.setenv("TRADE_AUDIT_VAULT", str(tmp_path / "vault"))
+    monkeypatch.setenv("MVV_NOTIFICATION_LOG", str(tmp_path / "n.log"))
+    from src.cli import main
+    from src.trading.settings import Settings
+
+    main(["trade", "init"])
+    main(["trade", "switch", "evolution", "--on"])
+    capsys.readouterr()
+
+    assert Settings(db).get("evolution", default=False) is True

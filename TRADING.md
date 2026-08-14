@@ -429,8 +429,15 @@ switch on — on Mission Control, or with `trade` — and the village improves i
 own strategies while it runs:
 
 ```bash
-python -m src.main trade evolve --generations 5     # by hand, any time
+python -m src.main trade switches                   # what is on the wall
+python -m src.main trade switch evolution --on      # start learning
+python -m src.main trade evolve --generations 5     # or one sweep, by hand
 ```
+
+The switches live in the database, not the environment, because the process
+that ticks is not the process serving Mission Control — so one flipped here
+reaches a running village on its next pass, with no restart. The **Evolution**
+row on Mission Control's Switches panel is the same switch.
 
 Automatically, it sweeps one generation every `TRADE_EVOLVE_EVERY` **market
 bars** (20 by default) for every paper firm. Each sweep mutates the seven genes
@@ -1380,6 +1387,8 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade apply-approvals` | carry out what a human approved |
 | `trade resume <firm> --by you` | un-pause a firm |
 | `trade revive --all --by you` | undo kills decided on a feed that had no prices |
+| `trade switches` | the controls on the wall, and their state |
+| `trade switch <name> --on` | flip one without opening a browser |
 | `trade live-status` | how close each firm is to real money (grants nothing) |
 | `trade go-live <firm> --by you` | ask for ONE firm to trade real money |
 | `trade all-to-paper` | pull every firm off real money, now |
