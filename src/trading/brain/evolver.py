@@ -63,10 +63,17 @@ class Candidate:
     result: Optional[BacktestResult] = None
     fitness: Decimal = ZERO
     is_incumbent: bool = False
+    #: Fitness on the held-out tail — bars this candidate was not chosen on.
+    #: `None` means the holdout was too short to say anything, which is a
+    #: refusal to promote rather than a licence to.
+    holdout_fitness: Optional[Decimal] = None
 
     def __str__(self) -> str:
         tag = " (incumbent)" if self.is_incumbent else ""
-        return f"fitness {self.fitness}{tag}: {json.dumps(self.genome, sort_keys=True)}"
+        held = ("" if self.holdout_fitness is None
+                else f" / held-out {self.holdout_fitness}")
+        return (f"fitness {self.fitness}{held}{tag}: "
+                f"{json.dumps(self.genome, sort_keys=True)}")
 
 
 @dataclass
@@ -75,6 +82,8 @@ class Generation:
     candidates: list = field(default_factory=list)
     winner: Optional[Candidate] = None
     promoted: bool = False
+    #: Why the winner was not adopted, when it was not. Empty on a promotion.
+    refused: str = ""
 
     def summary(self) -> str:
         lines = [f"generation {self.number}: {len(self.candidates)} candidates"]
@@ -83,7 +92,8 @@ class Generation:
         if self.winner:
             lines.append(
                 f"  winner: fitness {self.winner.fitness}"
-                + (" — promoted" if self.promoted else " — not promoted (incumbent held)")
+                + (" — promoted" if self.promoted
+                   else f" — not promoted ({self.refused or 'incumbent held'})")
             )
         return "\n".join(lines)
 
@@ -140,6 +150,26 @@ class Evolver:
             out.append(Candidate(genome=self.mutate(base, rng), parent=base))
         return out
 
+    def _split(self, market: MarketData, symbols) -> tuple:
+        """Where the fitted history ends and the held-out tail begins.
+
+        Returns ``(split_index, holdout_bars)``. A split of zero means there
+        is not enough history to divide at all, in which case everything is
+        fitted and nothing can be adopted — which is the correct answer for a
+        village that has been running for an afternoon.
+        """
+        data = MarketData(market.feed, symbols)
+        data.register(list(symbols))
+        total = data.length()
+        fraction = D(self.brain.holdout_fraction)
+        if total < 2 or fraction <= 0 or fraction >= 1:
+            return 0, 0
+        holdout = int(D(total) * fraction)
+        split = total - holdout
+        if split <= 0:
+            return 0, 0
+        return split, holdout
+
     # -- evolution ---------------------------------------------------------
     def evolve(
         self,
@@ -148,26 +178,60 @@ class Evolver:
         generation: int = 1,
         analysts: Sequence[str] = ("technical", "sentiment", "macro"),
     ) -> Generation:
-        """Run one generation for one firm. Writes genomes; promotes at most one."""
+        """Run one generation for one firm. Writes genomes; promotes at most one.
+
+        **Chosen on one half of history, adopted on the other.** Mutants are
+        scored over the early bars and the best is taken; that winner and the
+        incumbent are then re-run over a held-out tail neither was selected
+        against, and the genome only changes if it wins *there* too.
+
+        Without that split this loop is an overfitting machine: it searches a
+        seven-dimensional space for whatever curve best fits bars it has
+        already seen, promotes it, and reports the fit as progress. The result
+        looks like learning and is closer to memorising a past that is not
+        coming back. The held-out tail is the only thing here that can tell
+        the difference.
+
+        If the tail is too short to say anything, the answer is the village's
+        usual one — *insufficient data* — and the incumbent stands.
+        """
         candidates = self.population(firm.genome or BASE_GENOME, generation)
-        for candidate in candidates:
-            # A fresh cursor per candidate: every genome sees identical bars.
-            data = MarketData(market.feed, firm.universe or market.symbols)
-            candidate.result = self.backtester.run(
+        symbols = firm.universe or market.symbols
+        capital = firm.initial_allocation or self.config.firm.allocation
+
+        split, holdout_bars = self._split(market, symbols)
+
+        def score(genome, start=None, steps=None):
+            # A fresh cursor per run: every genome sees identical bars.
+            data = MarketData(market.feed, symbols)
+            return self.backtester.run(
                 firm_key=firm.firm_key,
-                symbols=firm.universe or market.symbols,
+                symbols=symbols,
                 market=data,
-                genome=candidate.genome,
+                genome=genome,
                 analysts=analysts,
-                capital=firm.initial_allocation or self.config.firm.allocation,
+                capital=capital,
                 risk_limit=firm.risk_limit,
+                start=start,
+                steps=steps,
             )
+
+        for candidate in candidates:
+            # Fitted on the early bars only, so the tail stays unseen.
+            candidate.result = score(candidate.genome, steps=split or None)
             candidate.fitness = candidate.result.fitness
 
         gen = Generation(number=generation, candidates=candidates)
         incumbent = next(c for c in candidates if c.is_incumbent)
         best = max(candidates, key=lambda c: c.fitness)
         gen.winner = best
+
+        # The second exam, on bars neither of them was chosen against.
+        enough_holdout = holdout_bars >= self.brain.min_holdout_bars
+        if enough_holdout and best is not incumbent:
+            for candidate in (incumbent, best):
+                candidate.holdout_fitness = score(
+                    candidate.genome, start=split).fitness
 
         # The incumbent goes in first so the mutants can point at it. Every
         # mutant in a generation *is* a mutation of that one genome, and
@@ -187,11 +251,25 @@ class Evolver:
                  "parent_id": parent_id},
             )
 
-        if (
-            self.brain.promote_winners
-            and best is not incumbent
-            and best.fitness > incumbent.fitness
-        ):
+        if not self.brain.promote_winners:
+            gen.refused = "promotion is switched off"
+        elif best is incumbent or best.fitness <= incumbent.fitness:
+            gen.refused = "no mutant beat the incumbent"
+        elif not enough_holdout:
+            gen.refused = (
+                f"only {holdout_bars} held-out bar(s), need "
+                f"{self.brain.min_holdout_bars} — insufficient data to adopt"
+            )
+        elif (best.holdout_fitness is None
+                or incumbent.holdout_fitness is None
+                or best.holdout_fitness <= incumbent.holdout_fitness):
+            gen.refused = (
+                f"it won the fit ({incumbent.fitness} -> {best.fitness}) and lost "
+                f"the held-out bars ({incumbent.holdout_fitness} -> "
+                f"{best.holdout_fitness}) — fitted to the past, not to the market"
+            )
+
+        if not gen.refused:
             self.store.update_firm_fields(firm.id, genome=json.dumps(best.genome, sort_keys=True))
             self.store.record_event(
                 "evolution",

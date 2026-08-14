@@ -322,6 +322,21 @@ class TradingStore:
         return sum_decimal(r["cash_delta"] for r in rows)
 
     # -- performance and events -------------------------------------------
+    def next_generation(self, firm_id: int) -> int:
+        """One past the highest generation this firm has already run.
+
+        Read from the table rather than counted in memory, so a restarted loop
+        continues the lineage instead of overwriting generation 1 forever.
+        """
+        try:
+            row = self.db.query_one(
+                "SELECT MAX(generation) AS g FROM strategy_genomes WHERE firm_id = ?",
+                (firm_id,),
+            )
+        except Exception:  # noqa: BLE001 - an un-migrated database has no lineage
+            return 1
+        return int((row or {}).get("g") or 0) + 1
+
     def record_performance(self, firm_id: int, snapshot: dict) -> int:
         row = dict(snapshot)
         row["firm_id"] = firm_id

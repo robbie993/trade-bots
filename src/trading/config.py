@@ -209,6 +209,22 @@ class BrainConfig:
     promote_winners: bool = field(default_factory=lambda: _env_bool("TRADE_EVO_PROMOTE", True))
     memory_recall_limit: int = field(default_factory=lambda: _env_int("TRADE_MEMORY_RECALL", 20))
 
+    # -- learning without cheating -----------------------------------------
+    #: The tail of history no candidate is fitted on, as a fraction. Mutants
+    #: are chosen on the first part and adopted only if they also beat the
+    #: incumbent on this part, which neither of them was selected against.
+    #: Without it, evolution reliably produces a genome exquisitely fitted to
+    #: the past and worthless ahead of it, and reports the overfit as progress.
+    holdout_fraction: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_EVO_HOLDOUT", "0.30"))
+    #: Fewer held-out bars than this and the answer is "insufficient data",
+    #: not "promote". Same rule as everywhere else in the village.
+    min_holdout_bars: int = field(
+        default_factory=lambda: _env_int("TRADE_EVO_MIN_HOLDOUT", 20))
+    #: Market bars between automatic generations. Bars, never ticks — see
+    #: src/trading/resolution.py for why that distinction has its own module.
+    evolve_every: int = field(default_factory=lambda: _env_int("TRADE_EVOLVE_EVERY", 20))
+
 
 @dataclass(frozen=True)
 class HeartConfig:

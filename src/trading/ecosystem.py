@@ -68,6 +68,7 @@ class TickReport:
     village: list = field(default_factory=list)
     bot_notes: list = field(default_factory=list)
     signals: list = field(default_factory=list)
+    evolved: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -93,6 +94,8 @@ class TickReport:
             lines.append(f"  BOT: {note}")
         for note in self.signals:
             lines.append(f"  SCANNER: {note}")
+        for note in self.evolved:
+            lines.append(f"  BRAIN: {note}")
         return "\n".join(lines)
 
 
@@ -513,6 +516,12 @@ class Ecosystem:
                        "that is what turns an outage into a realised loss. Close "
                        "those by hand." if left else ""),
                 )
+
+        # The village learning what works. Off unless the switch is on; see
+        # `run_evolution` for what it refuses to touch and why.
+        report.evolved = self.run_evolution(market)
+        for line in report.evolved:
+            flow.emit("brain", line[:110], detail=line)
 
         # The arena, the bazaar and the tavern. Off unless TRADE_LIVING is set,
         # and incapable of moving cash when it is on — see src/trading/living.py.
@@ -955,6 +964,119 @@ class Ecosystem:
         if not getattr(venue, "is_live", False):
             raise ValueError(f"{venue_name} is not a live venue; it needs no approval")
         return venue.request_approval(reason)
+
+    def run_evolution(self, market: MarketData) -> list:
+        """Let the village improve its own strategies, on its own, on a cadence.
+
+        This is the thing the brain, the court and the jury were built for: the
+        firms are not supposed to run the genome they were born with forever.
+        It is off until the `evolution` switch is on, and then it runs every
+        `TRADE_EVOLVE_EVERY` **market bars** — bars, never ticks, for the
+        reasons that have their own module.
+
+        **What it will not touch, and why each one matters.**
+
+        *A firm on a live venue.* Changing what a strategy does while it is
+        trading real money, with nobody asked, is the one thing the whole
+        promotion gate exists to prevent. A firm that has been through that
+        gate was approved on the evidence of a specific genome; swapping it
+        underneath would make the approval meaningless. Take it back to paper
+        first and it evolves like everything else.
+
+        *A killed firm.* Killed is terminal. Evolving a corpse is not a
+        resurrection, it is a waste of a backtest.
+
+        *A blind or unreconciled village.* Both are the standing rule: a
+        decision made from numbers the system knows are missing is worse than
+        no decision. `evolve` already refuses on a broken ledger; this refuses
+        earlier and more quietly, because a tick should not raise over an
+        optional improvement.
+
+        Everything it does is a *proposal* recorded in `strategy_genomes`, and
+        the adoption test is a held-out window neither candidate was chosen on
+        — see `Evolver.evolve`. It moves no capital, sends no order and asks
+        for no approval, because it changes what a firm would do rather than
+        what it may risk.
+        """
+        if not self.settings.get("evolution", default=False):
+            return []
+        every = int(self.config.brain.evolve_every or 0)
+        if every <= 0:
+            return []
+
+        from .living import _clock
+
+        day = _clock(market)
+        if day is None or day % every != 0:
+            return []
+
+        # Once per bar, not once per tick inside a qualifying bar. `day % every`
+        # stays true for the whole of that bar, and the loop comes round every
+        # sixty seconds — so without this, a daily village would sweep a whole
+        # generation every minute for a day. That is this repository's oldest
+        # mistake and it does not get a fifth outing.
+        bar = self.config.data.resolution.bar_key(market.as_of())
+        if not bar or self._already_evolved(bar):
+            return []
+        if not self.brokerage.reconcile(market).ok:
+            return ["evolution skipped: the books do not reconcile"]
+        self.store.record_event(
+            "evolution_swept", f"a generation ran on bar {bar}", payload={"bar": bar}
+        )
+
+        out: list = []
+        for record in self.store.firms():
+            if record.is_killed:
+                continue
+            if record.venue != "paper":
+                out.append(
+                    f"{record.firm_key} left alone: it is on {record.venue} with "
+                    "real money, and its genome was what you approved"
+                )
+                continue
+            try:
+                spec = self._specs.get(record.firm_key)
+                analysts = list(getattr(spec, "analysts", None) or
+                                ("technical", "sentiment", "macro"))
+                generation = self.store.next_generation(record.id)
+                gen = self.evolver.evolve(record, market, generation, analysts)
+            except Exception as exc:  # noqa: BLE001 - never fail a tick to learn
+                out.append(f"{record.firm_key} could not evolve: {exc}")
+                continue
+            if gen.promoted:
+                out.append(
+                    f"{record.firm_key} ADOPTED a new genome at generation "
+                    f"{gen.number} — it won the fit and the held-out bars"
+                )
+            elif gen.refused:
+                out.append(f"{record.firm_key} held: {gen.refused}")
+        return out
+
+    def _already_evolved(self, bar: str) -> bool:
+        """Has a generation already run on this market bar?
+
+        Read from the event log rather than held in memory, because the tick
+        loop is restarted routinely and a guard that resets on restart is a
+        guard that scales with how often you deploy.
+        """
+        try:
+            rows = self.db.query(
+                "SELECT payload FROM brokerage_events WHERE event_type = ? "
+                "ORDER BY id DESC LIMIT 4",
+                ("evolution_swept",),
+            )
+        except Exception:  # noqa: BLE001 - never fail a tick over a guard
+            return False
+        for row in rows:
+            payload = row.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except ValueError:
+                    continue
+            if isinstance(payload, dict) and payload.get("bar") == bar:
+                return True
+        return False
 
     def evolve(self, firm_key: Optional[str] = None, generations: int = 1) -> list:
         """Run the evolver. Refuses while the books are broken.

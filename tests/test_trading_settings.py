@@ -81,7 +81,7 @@ def test_an_unmigrated_database_reads_as_undecided(db):
 
 
 def test_the_registry_covers_what_the_page_offers():
-    assert set(KNOWN) == {"paused", "arena", "bazaar", "tavern"}
+    assert set(KNOWN) == {"paused", "arena", "bazaar", "tavern", "evolution"}
 
 
 # =========================================================================

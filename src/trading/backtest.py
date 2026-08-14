@@ -88,6 +88,7 @@ class Backtester:
         capital: Optional[Decimal] = None,
         risk_limit: Optional[Decimal] = None,
         steps: Optional[int] = None,
+        start: Optional[int] = None,
     ) -> BacktestResult:
         start_capital = money(capital if capital is not None else self.config.firm.allocation)
         record = FirmRecord(
@@ -111,7 +112,14 @@ class Backtester:
 
         market.register(record.universe)
         total_bars = market.length()
-        first = min(self.warmup, max(0, total_bars - 2))
+        # `start` runs the strategy over a *later* window than the warmup — the
+        # held-out tail the evolver uses to check whether a genome learned
+        # anything or merely memorised. Indicators still see everything before
+        # it, because `seek(index)` exposes the history up to that bar; only
+        # the scoring begins later.
+        floor = min(self.warmup, max(0, total_bars - 2))
+        first = floor if start is None else max(int(start), floor)
+        first = min(first, max(floor, total_bars - 1))
         last = total_bars if steps is None else min(total_bars, first + steps)
 
         positions: dict = {}

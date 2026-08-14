@@ -422,6 +422,59 @@ equity session, so a crypto-only village at hourly resolution annualises about
 
 ---
 
+## Learning
+
+The firms are not meant to run the genome they were born with forever. Turn the
+switch on — on Mission Control, or with `trade` — and the village improves its
+own strategies while it runs:
+
+```bash
+python -m src.main trade evolve --generations 5     # by hand, any time
+```
+
+Automatically, it sweeps one generation every `TRADE_EVOLVE_EVERY` **market
+bars** (20 by default) for every paper firm. Each sweep mutates the seven genes
+the analysts read, backtests every variant, and keeps at most one winner.
+
+### Chosen on one half of history, adopted on the other
+
+This is the part that makes automatic evolution worth having rather than
+dangerous. A genetic search over seven dimensions will always find *something*
+that fits bars it has already seen. Promote on that alone and the loop is an
+overfitting machine that reports the overfit as progress.
+
+So the history is split. Mutants are fitted on the early bars; the winner and
+the incumbent are then re-run over a held-out tail **neither was selected
+against**, and the genome only changes if the challenger wins there too.
+
+It refuses out loud, which is the useful part:
+
+```
+firm_e_momentum held: it won the fit (3.7500 -> 5.5700) and lost the
+held-out bars (1.5400 -> 1.3950) — fitted to the past, not to the market
+```
+
+Too short a tail to judge? Then the answer is the village's usual one —
+*insufficient data* — and the incumbent stands.
+
+### What it will not touch
+
+| | why |
+|---|---|
+| A firm on a **live venue** | it was approved on the evidence of one specific genome; swapping it with nobody asked makes the approval meaningless. Bring it back to paper and it evolves like everything else |
+| A **killed** firm | killed is terminal; evolving a corpse is not a resurrection |
+| A village whose **books do not reconcile** | the standing rule — a decision made from numbers known to be missing is worse than none |
+
+Evolution moves no capital, sends no order and writes no approval, because it
+changes what a firm *would do* rather than what it may risk. Every candidate is
+recorded in `strategy_genomes` with its lineage, so any promotion can be
+re-derived months later.
+
+`TRADE_EVO_HOLDOUT` (0.30), `TRADE_EVO_MIN_HOLDOUT` (20 bars) and
+`TRADE_EVOLVE_EVERY` (20 bars) are the dials.
+
+---
+
 ## Kill switches
 
 **A book that cannot be priced is never killed.** `MarketData.mark()` answers

@@ -30,6 +30,7 @@ KNOWN = {
     "arena": "the arena holds seasons",
     "bazaar": "the bazaar lists and sells",
     "tavern": "alliances form and rivals scheme",
+    "evolution": "firms improve their own strategies between bars",
 }
 
 TRUE = ("1", "true", "yes", "on")

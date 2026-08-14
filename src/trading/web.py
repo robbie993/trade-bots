@@ -389,6 +389,13 @@ def _switches_panel(eco) -> str:
         + switch("tavern", "Tavern", "alliances form, and rivals scheme",
                  eco.settings.get("tavern", default),
                  ("open", "closed"), ("Close", "Open"))
+        # Deliberately last and deliberately not defaulted from `living`: this
+        # is the only switch on the wall that changes what the firms *do*.
+        + switch("evolution", "Evolution",
+                 "firms mutate their own genomes and keep what survives "
+                 "bars it was not fitted on",
+                 eco.settings.get("evolution", default=False),
+                 ("learning", "frozen"), ("Freeze", "Start learning"))
         + "</table>"
         "<p class=muted>These reach the background loop, not this page: they are "
         "stored in the database and read on every tick, so a switch you flip is "
