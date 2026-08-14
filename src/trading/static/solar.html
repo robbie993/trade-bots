@@ -143,6 +143,23 @@
     height: 100%;
     display: block;
   }
+  #solar-fallback, #solar-noscript {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 34rem;
+    padding: 1.5rem 1.75rem;
+    border: 1px solid #2b3a4d;
+    border-radius: 4px;
+    background: #0c1420;
+    color: #cfe0f0;
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    z-index: 5;
+  }
+  #solar-fallback p { margin: 0 0 .6rem; }
+  #solar-fallback p:last-child { margin: 0; }
+  #solar-fallback .hint { color: #7d93aa; }
+  #solar-fallback code { color: #9fd0ff; }
 
   /* ===== RIGHT PANEL ===== */
   .right-panel {
@@ -424,7 +441,24 @@
 <!-- SOLAR SYSTEM -->
 <div class="solar-viewport">
   <canvas id="solar-canvas"></canvas>
+  <!-- Shown until the first frame is drawn, and left on screen if that never
+       happens. A page whose only failure mode is blackness cannot be
+       diagnosed from the other end of a chat window. -->
+  <div id="solar-fallback">
+    <p><strong>The solar system has not started.</strong></p>
+    <p id="solar-fallback-why">Waiting for the first frame&hellip;</p>
+    <p class="hint">If this stays up: open the browser console (Cmd-Option-J on
+    Chrome, or Develop &rarr; Show JavaScript Console on Safari) and read the
+    error. Check the village is running with
+    <code>./scripts/village.sh status</code>, and that
+    <code>/api/firms</code> answers.</p>
+  </div>
 </div>
+<noscript>
+  <div id="solar-noscript">This page draws the village on a canvas and needs
+  JavaScript. Mission Control at <a href="/village">/village</a> is plain HTML
+  and needs none.</div>
+</noscript>
 
 <!-- ZOOM -->
 <div class="zoom-controls">
@@ -516,12 +550,31 @@ function init() {
   updateClock();
 
   document.getElementById('hud-status').textContent = 'SYSTEM NOMINAL';
+  solarStarted();
+}
+
+function saySolarFailed(why) {
+  const box = document.getElementById('solar-fallback');
+  const line = document.getElementById('solar-fallback-why');
+  if (box) box.style.display = 'block';
+  if (line) line.textContent = why;
+}
+
+function solarStarted() {
+  const box = document.getElementById('solar-fallback');
+  if (box) box.remove();
 }
 
 function resize() {
   const vp = document.querySelector('.solar-viewport');
   W = vp.clientWidth;
   H = vp.clientHeight;
+  if (W < 2 || H < 2) {
+    // A zero-sized viewport draws a zero-sized picture, which looks exactly
+    // like a broken page and is not one.
+    saySolarFailed('The viewport is ' + W + '\u00d7' + H +
+      ' pixels — the window may be too narrow for the roster panel.');
+  }
   canvas.width = W * devicePixelRatio;
   canvas.height = H * devicePixelRatio;
   canvas.style.width = W + 'px';
@@ -992,8 +1045,12 @@ async function refresh(first) {
   }
 }
 
-refresh(true);
+refresh(true).catch(err => saySolarFailed('Could not start: ' + err.message));
 setInterval(() => refresh(false), 15000);
+
+window.addEventListener('error', e => saySolarFailed(
+  'JavaScript error: ' + (e.message || 'unknown') +
+  (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '')));
 
 </script>
 </body>
