@@ -69,16 +69,33 @@ def stdev(values: Sequence[Decimal]) -> Optional[Decimal]:
     return variance.sqrt()
 
 
-def volatility_pct(returns: Sequence[Decimal]) -> Optional[Decimal]:
-    """Annualised volatility of period returns, in percent."""
+def volatility_pct(returns: Sequence[Decimal],
+                   periods_per_year: Decimal = D(TRADING_DAYS)) -> Optional[Decimal]:
+    """Annualised volatility of period returns, in percent.
+
+    `periods_per_year` is how many of these observations a year holds. It is a
+    parameter rather than a constant because the caller is the only thing that
+    knows how long a bar is — see src/trading/resolution.py.
+    """
     sd = stdev(returns)
     if sd is None:
         return None
-    return percent(sd * D(TRADING_DAYS).sqrt() * D(100))
+    per_year = D(periods_per_year)
+    if per_year <= 0:
+        return None
+    return percent(sd * per_year.sqrt() * D(100))
 
 
-def sharpe(returns: Sequence[Decimal], risk_free_annual: Decimal = ZERO) -> Optional[Decimal]:
-    """Annualised Sharpe ratio. None when there is no dispersion to divide by."""
+def sharpe(returns: Sequence[Decimal], risk_free_annual: Decimal = ZERO,
+           periods_per_year: Decimal = D(TRADING_DAYS)) -> Optional[Decimal]:
+    """Annualised Sharpe ratio. None when there is no dispersion to divide by.
+
+    **`periods_per_year` has to match the spacing of `returns`.** Getting it
+    wrong is not a rounding error, it is a scale error: annualising hourly
+    observations as though they were daily overstates the ratio by root-6.5,
+    and this ratio is read by the kill switch. The default is daily because
+    that is what every caller meant before bars could be anything else.
+    """
     if len(returns) < 2:
         return None
     nums = [D(r) for r in returns]
@@ -86,8 +103,11 @@ def sharpe(returns: Sequence[Decimal], risk_free_annual: Decimal = ZERO) -> Opti
     sd = stdev(nums)
     if sd is None or sd == 0:
         return None
-    daily_rf = D(risk_free_annual) / D(TRADING_DAYS)
-    return ((mean - daily_rf) / sd * D(TRADING_DAYS).sqrt()).quantize(D("0.0001"))
+    per_year = D(periods_per_year)
+    if per_year <= 0:
+        return None
+    period_rf = D(risk_free_annual) / per_year
+    return ((mean - period_rf) / sd * per_year.sqrt()).quantize(D("0.0001"))
 
 
 def max_drawdown_pct(equity_curve: Sequence[Decimal]) -> Decimal:

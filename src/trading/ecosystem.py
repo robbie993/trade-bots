@@ -548,7 +548,7 @@ class Ecosystem:
         return report
 
     def _charge_borrow(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
-        """Charge one tick of borrow on whatever this firm is short.
+        """Charge one *bar* of borrow on whatever this firm is short.
 
         Shorting is not free, and a backtest that treats it as free is a
         backtest of a strategy nobody can run. The charge is a fill with no
@@ -556,6 +556,17 @@ class Ecosystem:
         identities are stated in terms of fills and fees, so a cost expressed
         this way is already accounted for everywhere, and a cost expressed any
         other way would break the books.
+
+        **Per bar, and once per bar.** This charged ``rate / 365`` every time it
+        was called, and it is called once per tick — so a village ticking every
+        sixty seconds billed a full day of borrow every minute, which is a year
+        of financing every six hours. Nobody noticed because nothing was short.
+        It is the same mistake as the Sharpe kill and the bar count: a rate
+        quoted per unit of market time, charged per unit of wall-clock time.
+
+        So the charge is prorated by how much calendar time one bar covers, and
+        a bar already billed is skipped. Ticking a thousand times against one
+        bar costs exactly what ticking once costs.
         """
         rate = D(self.config.firm.borrow_rate_annual)
         if rate <= 0:
@@ -564,6 +575,14 @@ class Ecosystem:
         if not shorts:
             return
 
+        resolution = self.config.data.resolution
+        bar = resolution.bar_key(market.as_of())
+        if not bar:
+            return          # no bar, no charge: see the blind-feed rule
+        if self._borrow_already_billed(record, bar, resolution):
+            return
+        per_bar = resolution.calendar_days
+
         from .models import Fill, Side
 
         for position in shorts:
@@ -571,7 +590,7 @@ class Ecosystem:
                 mark = D(market.mark(position.symbol))
             except Exception:  # noqa: BLE001 - no mark, no charge this tick
                 continue
-            fee = money(abs(position.quantity) * mark * rate / D(365))
+            fee = money(abs(position.quantity) * mark * rate / D(365) * per_bar)
             if fee <= 0:
                 continue
             # A firm that cannot pay its borrow is in trouble, but overdrawing
@@ -594,6 +613,23 @@ class Ecosystem:
             ))
             self.flow.emit("ledger", f"borrow on {position.symbol}", firm=record.firm_key,
                            detail=f"{fmt_money(fee)} at {rate * 100}% a year")
+
+    def _borrow_already_billed(self, record: FirmRecord, bar: str, resolution) -> bool:
+        """Has this firm already paid borrow for this bar?
+
+        Read from the ledger rather than kept in memory, because the tick loop
+        is restarted routinely and a charge that resets on restart is a charge
+        that scales with how often you deploy.
+        """
+        try:
+            rows = self.db.query(
+                "SELECT as_of FROM fills WHERE firm_id = ? AND quantity = '0' "
+                "ORDER BY id DESC LIMIT 8",
+                (record.id,),
+            )
+        except Exception:  # noqa: BLE001 - never fail a tick over a fee check
+            return False
+        return any(resolution.bar_key(r.get("as_of")) == bar for r in rows)
 
     def _run_firm(self, record: FirmRecord, market: MarketData, report: TickReport) -> None:
         firm = self.build_firm(record)

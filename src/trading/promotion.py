@@ -99,6 +99,15 @@ class LiveReadiness:
         default_factory=lambda: _env_int("TRADE_LIVE_MIN_TRADES", 50))
     min_bars_on_feed: int = field(
         default_factory=lambda: _env_int("TRADE_LIVE_MIN_BARS", 30))
+    #: And how many calendar days those bars must span.
+    #:
+    #: Without this, moving to hourly bars would quietly weaken the check it
+    #: sits beside: thirty hourly bars is four days of market, and four days of
+    #: market has seen one kind of weather. A bar count alone measures how much
+    #: data you gathered; this measures how much *market* you gathered it
+    #: across, which is the thing the criterion was always reaching for.
+    min_days_on_feed: int = field(
+        default_factory=lambda: _env_int("TRADE_LIVE_MIN_DAYS", 30))
     min_expectancy_t: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_LIVE_MIN_T", "2.0"))
     max_drawdown_pct: Decimal = field(
@@ -144,17 +153,17 @@ def closed_trades(store, firm_id: int) -> list:
     return [D(f.realized_pnl) for f in store.fills(firm_id) if D(f.realized_pnl) != 0]
 
 
-def bar_key(as_of) -> str:
+def bar_key(as_of, resolution=None) -> str:
     """The market's bar, as the string the history is keyed on.
 
-    A date, not a timestamp, so that a daily feed records one bar a day however
-    often it is asked — and so that moving to hourly bars later is a change of
-    this one function rather than a change of meaning everywhere else.
+    Exactly as fine-grained as the bars actually are: a date for a daily feed,
+    a date and hour for an hourly one. Keying hourly bars by date would throw
+    away six sevenths of the record; keying daily bars by the minute would let
+    the tick loop invent history, which is the bug migration 021 exists for.
     """
-    if as_of is None:
-        return ""
-    text = getattr(as_of, "isoformat", lambda: str(as_of))()
-    return str(text)[:10]
+    from .resolution import DAILY
+
+    return (resolution or DAILY).bar_key(as_of)
 
 
 def bars_on(store, firm_id: int, feed_name: str) -> int:
@@ -175,7 +184,36 @@ def bars_on(store, firm_id: int, feed_name: str) -> int:
     return int((row or {}).get("n") or 0)
 
 
-def record_bar(store, firm_id: int, feed_name: str, as_of=None) -> None:
+def days_on(store, firm_id: int, feed_name: str) -> int:
+    """Calendar days between the first and last bar measured on that feed.
+
+    Read from the bars themselves rather than from a timestamp of when the row
+    was written, so replaying history is honest and so leaving the process
+    running overnight adds nothing.
+    """
+    try:
+        row = store.db.query_one(
+            "SELECT MIN(bar_date) AS lo, MAX(bar_date) AS hi FROM firm_feed_bars "
+            "WHERE firm_id = ? AND priced_by = ?",
+            (firm_id, str(feed_name)),
+        )
+    except Exception:  # noqa: BLE001 - an un-migrated database has no history
+        return 0
+    lo, hi = (row or {}).get("lo"), (row or {}).get("hi")
+    if not lo or not hi:
+        return 0
+    from datetime import date
+
+    try:
+        start = date.fromisoformat(str(lo)[:10])
+        end = date.fromisoformat(str(hi)[:10])
+    except ValueError:
+        return 0
+    return (end - start).days + 1
+
+
+def record_bar(store, firm_id: int, feed_name: str, as_of=None,
+               resolution=None) -> None:
     """Note that this firm was measured on this feed, on this market bar.
 
     Idempotent by construction — the bar is part of the key, so a thousand
@@ -186,7 +224,7 @@ def record_bar(store, firm_id: int, feed_name: str, as_of=None) -> None:
     unknown bar is not evidence, and guessing one here would put a number in
     front of the decision that spends real money.
     """
-    bar = bar_key(as_of)
+    bar = bar_key(as_of, resolution)
     if not firm_id or not feed_name or not bar:
         return
     try:
@@ -285,6 +323,16 @@ def assess(store, firm, card, feed_name: str,
         bars >= cfg.min_bars_on_feed,
         f"only {bars} measured on the feed it would trade",
     ))
+    # Bars say how much data; days say how much *market*. On a daily feed the
+    # two move together and this check is free. On an hourly one it is the
+    # difference between a month of weather and an afternoon of it.
+    days = days_on(store, firm.id, feed_name)
+    out.checks.append(Check(
+        "Days of market", days, f">= {cfg.min_days_on_feed}",
+        days >= cfg.min_days_on_feed,
+        f"those bars span only {days} day(s); a fast feed gathers data quickly "
+        "and market slowly",
+    ))
 
     # 3. Enough trades to say anything, and an edge distinguishable from luck.
     trades = closed_trades(store, firm.id)
@@ -338,5 +386,6 @@ def table(readiness: Readiness) -> list:
 
 __all__ = [
     "Check", "INVENTED_FEEDS", "LiveReadiness", "Readiness", "assess",
-    "bar_key", "bars_on", "closed_trades", "expectancy_t", "record_bar", "table",
+    "bar_key", "bars_on", "closed_trades", "days_on", "expectancy_t",
+    "record_bar", "table",
 ]

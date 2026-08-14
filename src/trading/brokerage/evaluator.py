@@ -210,7 +210,11 @@ class Evaluator:
             if capital_base > 0
             else []
         )
-        sharpe = sharpe_ratio(returns) if len(returns) >= 2 else None
+        # Annualised against the bar the returns were actually sampled on.
+        # Passing the wrong figure here is the Sharpe kill, and it is the kill
+        # switch that reads the answer.
+        per_year = self.config.data.resolution.bars_per_year
+        sharpe = sharpe_ratio(returns, periods_per_year=per_year) if len(returns) >= 2 else None
 
         card = Scorecard(
             firm_key=firm.firm_key,
@@ -276,7 +280,8 @@ class Evaluator:
         if feed_name:
             from ..promotion import record_bar
 
-            record_bar(self.store, card.firm_id, feed_name, as_of)
+            record_bar(self.store, card.firm_id, feed_name, as_of,
+                       self.config.data.resolution)
         firm = self.store.require_firm_by_id(card.firm_id)
         if card.equity > D(firm.high_water_mark):
             self.store.update_firm_fields(card.firm_id, high_water_mark=money(card.equity))

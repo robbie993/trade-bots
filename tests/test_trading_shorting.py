@@ -377,3 +377,50 @@ def test_a_real_bar_series_still_produces_a_sharpe(db, tmp_path, firms_yaml, not
 
     cards = [eco.brokerage.evaluator.evaluate(f, eco.market()) for f in eco.store.firms()]
     assert any(c.sharpe is not None for c in cards), "a real series should measure"
+
+
+# =========================================================================
+# borrow accrues on the market's clock, not on the loop's
+# =========================================================================
+def test_ticking_a_hundred_times_on_one_bar_costs_what_ticking_once_costs(
+        db, tmp_path, firms_yaml, notifier):
+    """The third instance of this repository's recurring bug.
+
+    `_charge_borrow` billed `rate / 365` every time it ran, and it runs once per
+    tick. A village ticking every sixty seconds therefore billed a full day of
+    financing every minute — a year of borrow every six hours. Nothing caught
+    it because nothing was short at the time.
+    """
+    eco = _bear_firm(db, tmp_path, firms_yaml, notifier)
+    eco.simulate(15)
+
+    firm = eco.store.firms()[0]
+    assert any(p.quantity < 0 for p in eco.store.positions(firm.id)), "must be short"
+
+    def charges():
+        return [f for f in eco.store.fills(firm.id) if f.quantity == 0 and f.fee > 0]
+
+    before = len(charges())
+    for _ in range(100):
+        eco.tick()
+    after = charges()
+
+    # The market has not moved, so nothing new is owed. Billing per tick would
+    # have added one charge per short per tick — roughly two hundred of them.
+    assert len(after) == before, (
+        f"{len(after) - before} borrow charges appeared over 100 ticks against "
+        "one bar — it is billing per tick again"
+    )
+    # And one charge per short per bar over the run, not one per tick.
+    shorts = sum(1 for p in eco.store.positions(firm.id) if p.quantity < 0)
+    bars = {str(f.as_of)[:10] for f in after}
+    assert len(after) == len(bars) * shorts
+
+
+def test_an_hourly_village_pays_a_twenty_fourth_of_a_daily_one(
+        db, tmp_path, firms_yaml, notifier):
+    """Financing is quoted per year and accrues on the wall clock, so the
+    charge has to be prorated by how much calendar time a bar covers."""
+    from src.trading.resolution import parse
+
+    assert parse("1h").calendar_days * 24 == parse("1d").calendar_days

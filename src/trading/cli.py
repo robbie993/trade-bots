@@ -396,7 +396,8 @@ def cmd_audit(args) -> int:
 def cmd_status(args) -> int:
     eco = _ecosystem(args)
     status = eco.status()
-    print(f"as of        : {status['as_of']}  (data: {status['data_source']})")
+    print(f"as of        : {status['as_of']}  (data: {status['data_source']} "
+          f"{eco.config.data.resolution.name} bars)")
     if status["as_of"] is None:
         # `as of: None` was the whole of what this said when an entire village
         # went blind, which is a symptom with no cause attached. The feed knows

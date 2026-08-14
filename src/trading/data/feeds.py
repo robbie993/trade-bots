@@ -304,20 +304,32 @@ class YahooFeed:
     name = "yahoo"
     ENDPOINT = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
-    def __init__(self, days: int = 180, timeout_s: int = 20):
+    def __init__(self, days: int = 180, timeout_s: int = 20, interval: str = "1d"):
         self.days = int(days)
         self.timeout_s = timeout_s
+        self.interval = interval
         self._cache: dict[str, list[Bar]] = {}
 
     def series(self, symbol: str) -> list[Bar]:
         if symbol in self._cache:
             return self._cache[symbol]
 
-        span = "1y" if self.days <= 365 else "5y"
+        # Yahoo caps intraday history hard — minute bars go back a week, hourly
+        # about two years — and answers a too-large range with an error rather
+        # than with what it has. Asking for a span it will actually serve is
+        # the difference between an hourly village and no village.
+        if self.interval == "1m":
+            span = "7d"
+        elif self.interval in ("5m", "15m"):
+            span = "60d"
+        elif self.interval == "1h":
+            span = "1y" if self.days <= 365 else "2y"
+        else:
+            span = "1y" if self.days <= 365 else "5y"
         try:
             payload = _get_json(
                 self.ENDPOINT.format(symbol=symbol),
-                {"range": span, "interval": "1d"},
+                {"range": span, "interval": self.interval},
                 {"User-Agent": "ai-village-trading/1.0"},
                 self.timeout_s,
             )
@@ -742,19 +754,26 @@ class ChainFeed:
 
 def _one_feed(source: str, config: DataConfig) -> MarketFeed:
     source = (source or "synthetic").strip().lower()
+    bar = config.resolution
+    # `history_days` is stated in calendar days, which is the right unit for a
+    # daily feed and the wrong one for an hourly feed — 180 days of minute bars
+    # is a quarter of a million rows nobody asked for. So an intraday feed asks
+    # for the span that yields a comparable *number of bars* instead.
+    span = (config.history_days if not bar.is_intraday
+            else bar.days_for_bars(config.history_days))
     if source == "synthetic":
         return SyntheticFeed(seed=config.seed, days=config.history_days)
     if source == "csv":
         return CsvFeed(config.csv_dir)
     if source == "yahoo":
-        return YahooFeed(days=config.history_days)
+        return YahooFeed(days=span, interval=bar.yahoo)
     if source == "alpaca":
-        return AlpacaFeed(days=config.history_days)
+        return AlpacaFeed(days=span, timeframe=bar.alpaca)
     if source == "ccxt":
         return CcxtFeed(
             exchange=os.environ.get("TRADE_CCXT_EXCHANGE", "binance"),
-            days=config.history_days,
-            timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME", "1d"),
+            days=span,
+            timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME", "") or bar.ccxt,
         )
     raise FeedNotConfigured(
         f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo, "

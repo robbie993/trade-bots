@@ -12,6 +12,7 @@ that it can trade a seeded random walk. Nobody is offering to pay for that.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from src.trading import promotion
@@ -150,6 +151,45 @@ def test_the_time_of_day_does_not_start_a_new_bar(store, firm_record):
         promotion.record_bar(store, firm_record.id, "alpaca",
                              datetime(2026, 8, 13, hour, tzinfo=timezone.utc))
     assert promotion.bars_on(store, firm_record.id, "alpaca") == 1
+
+
+def test_a_fast_feed_gathers_data_quickly_and_market_slowly(store, firm_record):
+    """The gate that stops intraday bars quietly weakening the one beside them.
+
+    Thirty hourly bars is four days of market, and four days of market has seen
+    one kind of weather. A bar count measures how much data was gathered; the
+    span measures how much market it was gathered across.
+    """
+    from datetime import datetime, timezone
+
+    from src.trading.resolution import parse
+
+    hourly = parse("1h")
+    for day in (12, 13, 14, 15):
+        for hour in range(9, 16):
+            promotion.record_bar(
+                store, firm_record.id, "alpaca",
+                datetime(2026, 8, day, hour, tzinfo=timezone.utc), hourly)
+
+    assert promotion.bars_on(store, firm_record.id, "alpaca") == 28
+    assert promotion.days_on(store, firm_record.id, "alpaca") == 4
+
+    verdict = assess(store, firm_record, None, "alpaca")
+    assert "Days of market" in {c.name for c in verdict.failures}
+
+
+def test_the_span_is_read_from_the_bars_not_the_clock(store, firm_record):
+    """Leaving the process running overnight must add nothing to either
+    figure."""
+    _bars(store, firm_record, "alpaca", 40)
+    assert promotion.days_on(store, firm_record.id, "alpaca") == 40
+    for _ in range(200):
+        promotion.record_bar(store, firm_record.id, "alpaca", date(2026, 1, 2))
+    assert promotion.days_on(store, firm_record.id, "alpaca") == 40
+
+
+def test_a_firm_with_no_history_spans_no_days(store, firm_record):
+    assert promotion.days_on(store, firm_record.id, "alpaca") == 0
 
 
 def test_a_record_on_one_feed_does_not_qualify_you_on_another(store, firm_record):

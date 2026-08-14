@@ -290,6 +290,17 @@ class DataConfig:
     )
     seed: int = field(default_factory=lambda: _env_int("TRADE_DATA_SEED", 20260808))
     history_days: int = field(default_factory=lambda: _env_int("TRADE_HISTORY_DAYS", 180))
+    # How long a bar is. `1d` (the default), `1h`, `15m`, `5m`, `1m`. Every
+    # rate, count and annualisation in the system derives from this one field
+    # rather than assuming — see src/trading/resolution.py for the three
+    # separate bugs that convention exists to prevent.
+    bar: str = field(default_factory=lambda: os.environ.get("TRADE_BAR", "1d"))
+
+    @property
+    def resolution(self):
+        from .resolution import parse
+
+        return parse(self.bar)
     # Paper fills cross the spread and pay a fee, because a backtest that
     # fills at mid for free is a backtest that always wins.
     slippage_bps: Decimal = field(default_factory=lambda: _env_decimal("TRADE_SLIPPAGE_BPS", "5"))

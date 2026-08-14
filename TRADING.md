@@ -300,6 +300,7 @@ own source to keep it that way.
 | Status active, book measurable, books reconcile | every figure below is computed from the numbers, so these gate what the rest of them *mean* |
 | Feed is real | a strategy measured against a seeded random walk has demonstrated that it can trade a seeded random walk |
 | Bars on that feed | migration 021 stores one row per firm per feed per *market bar*, so "measured on alpaca" is read rather than assumed — and cannot be inflated by a loop that ticks faster than the market moves |
+| Days of market | how many calendar days those bars span. On a daily feed this is free; on an hourly one it is the difference between a month of weather and an afternoon of it |
 | Closed trades ≥ 50 | twenty settles "is this obviously broken"; it does not settle "is this edge real" |
 | Expectancy t ≥ 2.0 | not *did it make money* — is the mean trade distinguishable from zero |
 | Drawdown ≤ 10% | deliberately tighter than the kill limit: the level at which you shut a firm down is not the level at which you hand it money |
@@ -378,6 +379,46 @@ so whatever is still held is reported, loudly, for a person to close on purpose.
 **The council may never rule on this.** It has no panel for `LIVE_TRADING`, by
 construction, and there is a test that holds a full council session with a live
 request pending and asserts it is still pending afterwards.
+
+---
+
+## How long a bar is
+
+Every rate, count and annualisation in this system is quoted **per market bar**,
+and one setting decides how long that is:
+
+```bash
+TRADE_BAR=1d     # the default. 1h, 15m, 5m and 1m are the others.
+```
+
+It is the most consequential line in `.env`, because the village measures
+itself in bars. A daily village gathers one observation per trading day, so the
+promotion gate's fifty closed trades is months away; an hourly one gathers
+about seven a day and gets there in weeks.
+
+**Why it is one setting and not several.** The three worst bugs this repository
+has had were the same bug:
+
+| | what it did |
+|---|---|
+| The Sharpe kill | annualised per-tick observations at root-252, killing a firm with an 80% win rate |
+| The bar count | incremented per tick, so two hours of uptime read as 136 bars and cleared the live gate |
+| The borrow charge | billed `rate / 365` per tick — a year of financing every six hours |
+
+All three are *a rate quoted per unit of market time, applied per unit of
+wall-clock time*. `src/trading/resolution.py` is the only place that knows how
+long a bar is; the annualisation, the borrow proration, the bar key and the
+history request all ask it. There is a test that greps the package for a stray
+`252`.
+
+**Faster is not better.** More bars is more data about a *shorter span of
+market*, and four days of hourly bars has seen one kind of weather. That is why
+the promotion gate counts days as well as bars, and why the default stays
+daily.
+
+One known limitation, stated rather than hidden: `bars_per_day` assumes a US
+equity session, so a crypto-only village at hourly resolution annualises about
+2.3× too low. Set `TRADE_BARS_PER_DAY=24` for that case.
 
 ---
 
