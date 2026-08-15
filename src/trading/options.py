@@ -166,6 +166,22 @@ def is_option(symbol: str) -> bool:
     return OCC.match(str(symbol or "").strip().upper().replace(" ", "")) is not None
 
 
+def contract_size(symbol: str) -> int:
+    """Shares one unit of this symbol controls. 100 for options, 1 otherwise.
+
+    **This is the number that makes an option position mean anything**, and it
+    is read from the symbol rather than stored on the row on purpose. A stored
+    multiplier is a column that can be wrong — NULL on rows written before the
+    migration, 1 on an option written by a code path that forgot, 100 on a
+    stock by a bad backfill — and every one of those is a silent
+    factor-of-a-hundred error in cash, equity, drawdown and the position cap.
+    The symbol already carries the fact. Deriving it means a row cannot
+    disagree with itself, and every stock position ever written is correct
+    without touching the database.
+    """
+    return STANDARD_MULTIPLIER if is_option(symbol) else 1
+
+
 def try_parse(symbol: str) -> Optional[Contract]:
     try:
         return parse(symbol)
@@ -245,6 +261,6 @@ def _as_date(value) -> Optional[date]:
 
 __all__ = [
     "CALL", "Contract", "EXPIRY_GRACE_DAYS", "OCC", "OptionSymbolError", "PUT",
-    "STANDARD_MULTIPLIER", "counts_toward_drawdown", "exposure", "is_option",
-    "max_loss", "parse", "premium_at_risk", "try_parse",
+    "STANDARD_MULTIPLIER", "contract_size", "counts_toward_drawdown", "exposure",
+    "is_option", "max_loss", "parse", "premium_at_risk", "try_parse",
 ]

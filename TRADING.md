@@ -1352,6 +1352,59 @@ through an unofficial endpoint.)
 
 ---
 
+## Options
+
+A firm can hold options. The instrument is bookkeeping — a strike, an expiry,
+a right and a multiplier, and OCC already standardised how to write it down:
+
+```
+SPY260918C00450000   ->   SPY 18 Sep 2026 450 call
+```
+
+**The multiplier is the whole game.** An option is quoted per share and traded
+per contract, so one contract at $3.20 costs $320. Every place that turns a
+quantity into dollars — cash, equity, realised P&L, the fee, the position cap —
+is a factor-of-a-hundred error waiting to happen. The contract size is read
+from the symbol (`options.contract_size`) rather than stored on the row,
+because a stored multiplier is a column that can be wrong in four different
+ways and each of them is silent. A stock is a contract of size one, which is
+why none of this changed a single existing number.
+
+**Writing options is refused, not sized.** Every risk limit in the village is
+a fraction of capital, and they work because the most a position can lose is
+knowable in advance. For a written option it is not, which is why
+`options.max_loss` returns `None` for a short rather than the put's arithmetic
+maximum — a caller handed a number will size against it. The risk manager
+blocks the trade and says so. This does not depend on `allow_short`: turning
+shorting on must not quietly turn option writing on with it.
+
+**Drawdown had to learn what expiry is.** A long call that expires worthless
+has lost 100% of its premium *on schedule*. That is the instrument working as
+designed, not a firm that blew up, and a limit that cannot tell those apart
+will kill every option firm it ever supervises — on time, every time. Options
+are measured on premium at risk, and a contract inside its last week is exempt
+from drawdown entirely.
+
+**Expiry settles before anybody deliberates.** A contract that stopped
+existing on Friday must not be an input to Monday's debate. `src/trading/
+expiry.py` closes every expired position at intrinsic value — and this is the
+one moment an option's value is arithmetic rather than a model: the time value
+is gone by definition, and what remains is `max(0, spot - strike)`. No
+Black-Scholes, here or anywhere else in this repository. A contract whose
+underlying cannot be priced that day is *not* settled at zero; it is left
+alone and the refusal recorded, because booking a total loss on a position
+whose value was merely unknown looks exactly like a strategy that failed.
+
+**What it does not model: assignment.** Positions are cash-settled at
+intrinsic. Real equity options are assigned — an in-the-money long call turns
+into a hundred shares and takes `strike × 100` of cash to do it, which is
+capital a firm may not have. Cash settlement gets the P&L exactly right and
+the capital requirement wrong, in the flattering direction: it never bounces a
+firm that could not actually have afforded to exercise. `expiry.SETTLES_FOR_CASH`
+exists so a caller can find that out without reading the source.
+
+---
+
 ## The external frameworks
 
 ```bash

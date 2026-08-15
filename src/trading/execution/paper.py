@@ -19,6 +19,7 @@ from typing import Optional
 from ...money import D, money
 from ..config import DataConfig
 from ..models import Fill, Side, TradeProposal, price, qty
+from ..options import contract_size
 
 BPS = D("10000")
 
@@ -40,7 +41,16 @@ class PaperVenue:
     def __init__(self, config: Optional[DataConfig] = None):
         self.config = config or DataConfig()
 
-    def quote(self, side: Side, reference_price: Decimal, quantity: Decimal) -> Quote:
+    def quote(self, side: Side, reference_price: Decimal, quantity: Decimal,
+              multiplier: int = 1) -> Quote:
+        """Price one fill.
+
+        ``multiplier`` is the contract size — 100 for an option, 1 for a
+        stock. It scales ``gross``, and therefore the fee, because a fee
+        quoted in basis points of a $3.20 quote rather than of the $320
+        premium actually paid is a hundredth of the real cost. The fill
+        *price* is per share and stays per share; only the money is scaled.
+        """
         reference_price = D(reference_price)
         quantity = D(quantity)
         drift = reference_price * D(self.config.slippage_bps) / BPS
@@ -48,18 +58,19 @@ class PaperVenue:
         # lower. A symmetric-noise model would let it cancel out over many
         # trades, which is precisely the flattering assumption to avoid.
         fill_price = price(reference_price + drift if side is Side.BUY else reference_price - drift)
-        gross = money(fill_price * quantity)
+        gross = money(fill_price * quantity * D(multiplier))
         fee = money(gross * D(self.config.fee_bps) / BPS)
         return Quote(
             fill_price=fill_price,
             fee=fee,
-            slippage=money(drift * quantity),
+            slippage=money(drift * quantity * D(multiplier)),
             gross=gross,
         )
 
     def execute(self, proposal: TradeProposal, reference_price: Optional[Decimal] = None) -> Fill:
         reference = D(reference_price if reference_price is not None else proposal.reference_price)
-        quote = self.quote(proposal.side_enum, reference, proposal.quantity)
+        quote = self.quote(proposal.side_enum, reference, proposal.quantity,
+                           contract_size(proposal.symbol))
         return Fill(
             firm_id=proposal.firm_id,
             symbol=proposal.symbol,

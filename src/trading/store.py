@@ -210,7 +210,12 @@ class TradingStore:
         realized = position.apply(fill)
         fill.realized_pnl = realized
         # Buying spends cash, selling returns it; fees always cost.
-        gross = money(fill.quantity * fill.price)
+        #
+        # `fill.gross` rather than quantity * price, because an option is
+        # quoted per share and traded per contract: one contract at $3.20
+        # moves $320 of cash, and computing it here a second way is how the
+        # ledger and the position come to disagree by a factor of a hundred.
+        gross = fill.gross
         fill.cash_delta = money(-gross - fill.fee if fill.side_enum.sign > 0 else gross - fill.fee)
         new_cash = money(firm.cash + fill.cash_delta)
         if new_cash < 0:

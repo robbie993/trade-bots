@@ -69,6 +69,7 @@ class TickReport:
     bot_notes: list = field(default_factory=list)
     signals: list = field(default_factory=list)
     evolved: list = field(default_factory=list)
+    expiries: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = [
@@ -424,6 +425,13 @@ class Ecosystem:
         report.signals = self.scanners.run(market)
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
+
+        # Expiries settle before anybody deliberates. A contract that stopped
+        # existing last Friday must not be an input to this morning's debate,
+        # and a firm must not be able to trade around a position it no longer
+        # holds. This is also the only step in the tick that happens *to* a
+        # firm rather than being decided by one.
+        report.expiries = self._settle_expiries(market, flow)
 
         for record in self.store.firms():
             if record.is_killed and not self.store.positions(record.id):
@@ -1116,6 +1124,35 @@ class Ecosystem:
             elif gen.refused:
                 out.append(f"{record.firm_key} held: {gen.refused}")
         return out
+
+    def _settle_expiries(self, market: MarketData, flow) -> list:
+        """Close every contract that has reached its expiry date.
+
+        Wrapped so an expiry cannot take the tick down with it. An option that
+        fails to settle leaves a position the firm cannot value, which the
+        `CANNOT_VALUE` refusal already handles correctly — whereas an
+        exception here would stop every other firm from trading too.
+        """
+        from . import expiry
+
+        notes: list = []
+        try:
+            report = expiry.settle_all(
+                self.store, self.store.firms(), market, market.as_of()
+            )
+        except Exception as exc:  # noqa: BLE001 - one bad contract is not a tick
+            note = f"expiry settlement failed: {exc}"
+            flow.emit("market", note[:70], kind="blocked", detail=note[:300])
+            return [note]
+
+        for done in report.settled:
+            notes.append(str(done))
+            flow.emit("market", f"expired: {done.symbol}", detail=str(done)[:300])
+        for refused in report.refused:
+            notes.append(str(refused))
+            flow.emit("market", f"cannot settle {refused.symbol}",
+                      kind="blocked", detail=str(refused)[:300])
+        return notes
 
     def _already_evolved(self, bar: str) -> bool:
         """Has a generation already run on this market bar?

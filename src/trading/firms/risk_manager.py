@@ -21,6 +21,7 @@ from typing import Optional, Sequence
 from ...money import D, ZERO, money, percent
 from ..config import FirmDefaults
 from ..models import CashView, FirmRecord, Position, RiskVerdict, Side, qty
+from ..options import contract_size
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,28 @@ class RiskManager:
             # a short meets every limit below, like any other new risk.
 
         # -- opening or increasing: every limit applies --------------------
+        # Writing an option comes first, and does not depend on `allow_short`,
+        # because it is the one risk none of the limits below can bound. They
+        # are all fractions of capital, and they work because the most a
+        # position can lose is knowable in advance. For a written option it is
+        # not: `options.max_loss` returns None for a short precisely so that no
+        # caller can be handed a comforting number for an unbounded loss, and a
+        # cap computed from the premium would size a naked call as though the
+        # few hundred dollars collected were the exposure.
+        #
+        # So this blocks rather than guesses, and says which fact stopped it —
+        # turning shorting on must not quietly turn option writing on with it.
+        # Buying options is unaffected: the premium is the maximum loss, and
+        # the caps below measure it correctly.
+        if side is Side.SELL and contract_size(symbol) > 1 and held <= 0:
+            return RiskDecision(
+                RiskVerdict.BLOCK.value,
+                f"{symbol} would be a written option, whose loss is unbounded — "
+                "no capital limit here can size that, so this village does not "
+                "write options it does not hold",
+                ZERO,
+            )
+
         if side is Side.SELL and not self.limits.allow_short:
             # A firm may only sell what it owns, so a bear verdict on a name it
             # does not hold is simply "do nothing".
@@ -97,7 +120,13 @@ class RiskManager:
                     ZERO,
                 )
 
-        notional = money(quantity * reference_price)
+        # Contract size, so every cap below is denominated in the dollars that
+        # actually leave the account. An option is quoted per share and traded
+        # per contract: sizing a $3.20 quote as $3.20 of capital lets a firm
+        # open a hundred times the position every limit here intends.
+        size = D(contract_size(symbol))
+        unit_price = money(reference_price * size)
+        notional = money(quantity * unit_price)
         reasons: list[str] = []
 
         # 1. Risk limit: fraction of allocation exposed to one new position.
@@ -105,14 +134,14 @@ class RiskManager:
         if risk_cap <= 0:
             return RiskDecision(RiskVerdict.BLOCK.value, "firm has no allocation", ZERO)
         if notional > risk_cap:
-            quantity = qty(risk_cap / reference_price)
+            quantity = qty(risk_cap / unit_price)
             reasons.append(f"risk limit {percent(D(firm.risk_limit) * 100)}% of allocation")
 
         # 2. Position cap: total holding in one name against equity.
         # `abs`, because `held` is signed. Without it a short position makes
         # its own cap bigger — existing_value goes negative, room grows, and
         # the more short you are the more you may short.
-        existing_value = money(abs(held) * reference_price)
+        existing_value = money(abs(held) * unit_price)
         position_cap = money(self.limits.max_position_pct * D(equity))
         room = position_cap - existing_value
         if room <= 0:
@@ -122,8 +151,8 @@ class RiskManager:
                 f"{percent(self.limits.max_position_pct * 100)}% position cap",
                 ZERO,
             )
-        if money(quantity * reference_price) > room:
-            quantity = qty(room / reference_price)
+        if money(quantity * unit_price) > room:
+            quantity = qty(room / unit_price)
             reasons.append(f"position cap {percent(self.limits.max_position_pct * 100)}% of equity")
 
         # 2b. Gross exposure: longs plus the absolute value of shorts.
@@ -136,7 +165,8 @@ class RiskManager:
             # price and the other positions carry no mark, so pricing them all
             # at this symbol's price would be arithmetic dressed as a limit.
             gross = sum(
-                (money(abs(p.quantity) * p.avg_price) for p in positions if p.is_open),
+                (money(abs(p.quantity) * p.avg_price * D(p.multiplier))
+                 for p in positions if p.is_open),
                 ZERO,
             )
             gross_cap = money(self.limits.max_gross_exposure * firm.allocation)
@@ -148,8 +178,8 @@ class RiskManager:
                     f"{percent(self.limits.max_gross_exposure * 100)}% cap",
                     ZERO,
                 )
-            if money(quantity * reference_price) > gross_room:
-                quantity = qty(gross_room / reference_price)
+            if money(quantity * unit_price) > gross_room:
+                quantity = qty(gross_room / unit_price)
                 reasons.append(
                     f"gross exposure cap "
                     f"{percent(self.limits.max_gross_exposure * 100)}% of allocation"
@@ -175,12 +205,12 @@ class RiskManager:
                 f"cash {money(firm.cash)} is at or below the reserve floor {purse.reserve}",
                 ZERO,
             )
-        if money(quantity * reference_price) > spendable:
-            quantity = qty(spendable / reference_price)
+        if money(quantity * unit_price) > spendable:
+            quantity = qty(spendable / unit_price)
             reasons.append("cash floor")
 
         quantity = qty(quantity)
-        if quantity <= 0 or money(quantity * reference_price) <= 0:
+        if quantity <= 0 or money(quantity * unit_price) <= 0:
             return RiskDecision(
                 RiskVerdict.BLOCK.value,
                 "size fell to zero after limits: " + ("; ".join(reasons) or "no room"),

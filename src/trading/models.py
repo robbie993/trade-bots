@@ -257,8 +257,27 @@ class Fill:
         return Side(self.side)
 
     @property
+    def multiplier(self) -> int:
+        """Shares one unit controls: 100 for an option, 1 for everything else.
+
+        Derived from the symbol rather than stored — see
+        `options.contract_size` for why a stored multiplier is a column that
+        can be wrong in four different ways, each of them a silent
+        factor-of-a-hundred error in the money.
+        """
+        from .options import contract_size
+
+        return contract_size(self.symbol)
+
+    @property
     def gross(self) -> Decimal:
-        return money(self.quantity * self.price)
+        """What this fill is worth in cash, contract size included.
+
+        An option is quoted per share and traded per contract. One contract at
+        $3.20 costs $320, and a `gross` that answered $3.20 would understate
+        every cash movement, position cap and reconciliation by a hundred.
+        """
+        return money(self.quantity * self.price * D(self.multiplier))
 
     def to_row(self) -> dict:
         return {
@@ -313,13 +332,23 @@ class Position:
     def is_long(self) -> bool:
         return self.quantity > 0
 
+    @property
+    def multiplier(self) -> int:
+        """Shares one unit controls: 100 for an option, 1 otherwise.
+
+        Derived from the symbol — see `options.contract_size`.
+        """
+        from .options import contract_size
+
+        return contract_size(self.symbol)
+
     def market_value(self, mark: Decimal) -> Decimal:
-        return money(self.quantity * D(mark))
+        return money(self.quantity * D(mark) * D(self.multiplier))
 
     def unrealized_pnl(self, mark: Decimal) -> Decimal:
         if self.quantity == 0:
             return ZERO
-        return money((D(mark) - self.avg_price) * self.quantity)
+        return money((D(mark) - self.avg_price) * self.quantity * D(self.multiplier))
 
     def apply(self, fill: Fill) -> Decimal:
         """Fold a fill into the position. Returns realised P&L for this fill."""
@@ -339,7 +368,9 @@ class Position:
         else:
             closing = min(abs(signed), abs(old_qty))
             direction = D(1) if old_qty > 0 else D(-1)
-            realized = money((fill.price - self.avg_price) * closing * direction)
+            realized = money(
+                (fill.price - self.avg_price) * closing * direction * D(self.multiplier)
+            )
             self.realized_pnl = money(self.realized_pnl + realized)
             if abs(signed) > abs(old_qty):
                 # Flipped through zero: the remainder opens the other way.
