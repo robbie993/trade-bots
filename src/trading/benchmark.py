@@ -56,7 +56,8 @@ class Comparison:
     firm_key: str
     benchmark: str = DEFAULT_BENCHMARK
     bars: int = 0
-    capital: Decimal = ZERO
+    capital: Decimal = ZERO       # entrusted now — what both sides are given
+    handed_over: Decimal = ZERO   # the opening mandate, for the caveat below
     firm_equity: Decimal = ZERO
     hold_equity: Decimal = ZERO
     why_not: str = ""
@@ -64,6 +65,18 @@ class Comparison:
     @property
     def measurable(self) -> bool:
         return not self.why_not and self.bars > 0 and self.capital > 0
+
+    @property
+    def capital_moved(self) -> bool:
+        """Did the firm's mandate change mid-window?
+
+        When it did, this is a return on capital entrusted rather than a
+        time-weighted return, and the comparison is looser than it looks: the
+        firm earned part of its P&L on money it no longer holds. Said out loud
+        rather than buried, because the alternative — measuring against the
+        opening mandate — is not looser, it is simply wrong.
+        """
+        return bool(self.handed_over) and self.handed_over != self.capital
 
     @property
     def firm_return_pct(self) -> Optional[Decimal]:
@@ -97,11 +110,14 @@ class Comparison:
         if not self.enough_data:
             return (f"{head} — {excess}%, but {self.bars} bars is not a verdict. "
                     f"Ask again at {MIN_BARS}.")
+        tail = (" (its mandate changed mid-window, so this is a return on "
+                "capital entrusted, not a time-weighted one)"
+                if self.capital_moved else "")
         if excess > 0:
-            return f"{head} — BEATING it by {excess}%"
+            return f"{head} — BEATING it by {excess}%{tail}"
         if excess < 0:
-            return f"{head} — LOSING to it by {abs(excess)}%"
-        return f"{head} — dead level"
+            return f"{head} — LOSING to it by {abs(excess)}%{tail}"
+        return f"{head} — dead level{tail}"
 
 
 def buy_and_hold(market, symbol: str, capital, bars: int,
@@ -163,7 +179,12 @@ def compare(firm, card, market, bars: int,
     two to disagree.
     """
     out = Comparison(firm_key=firm.firm_key, benchmark=benchmark, bars=int(bars))
-    out.capital = money(firm.initial_allocation or firm.allocation)
+    # Capital *entrusted*, not capital originally handed over. The brokerage
+    # withdraws from losers, and measuring equity against the opening mandate
+    # counts every withdrawal as a trading loss: firm_a_etf read as -76.29%
+    # against SPY's 1.22% when it had lost 1.66% and had $74,581 taken off it.
+    out.capital = money(firm.allocation or firm.initial_allocation)
+    out.handed_over = money(firm.initial_allocation or firm.allocation)
     out.firm_equity = money(card.equity) if card is not None else money(firm.cash)
 
     if card is not None and not card.can_be_valued:
@@ -240,6 +261,7 @@ def table(comparisons) -> list:
             "excess": "—" if c.excess_pct is None else f"{c.excess_pct}%",
             "verdict": ("not yet" if not c.enough_data
                         else ("beats it" if c.excess_pct > 0 else "loses to it")),
+            "capital": "moved" if c.capital_moved else "",
         })
     return rows
 

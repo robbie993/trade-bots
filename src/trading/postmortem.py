@@ -64,10 +64,20 @@ class SymbolLine:
 @dataclass
 class PostMortem:
     firm_key: str
-    capital: Decimal = ZERO
+    capital: Decimal = ZERO      # what it was originally handed
+    entrusted: Decimal = ZERO    # what it is holding a mandate for now
     equity: Decimal = ZERO
     realized: Decimal = ZERO
     unrealized: Decimal = ZERO
+    #: Commission. A term in the reconciler's identity, and the only cost that
+    #: is one.
+    fees: Decimal = ZERO
+    #: Paid by crossing the spread, so it is already inside the fill price and
+    #: therefore already inside `realized`. Kept separately because it is a
+    #: real cost worth naming, and added into `costs` for the diagnosis — but
+    #: it must never be subtracted a second time, which is what the old
+    #: "fees and slippage" row did.
+    slippage: Decimal = ZERO
     costs: Decimal = ZERO
     fills: int = 0
     closed: int = 0
@@ -80,8 +90,28 @@ class PostMortem:
 
     # -- the ratios that name the disease ---------------------------------
     @property
+    def returned(self) -> Decimal:
+        """Capital the brokerage took back. Positive means money went out.
+
+        This is not a loss and must never be reported as one. It is the
+        village withdrawing a mandate, and the firm never had the chance to
+        lose it. ``firm_a_etf`` read as -76.29% here when it had lost 1.66% —
+        the other $74,581 had simply been taken off it.
+        """
+        return money(self.capital - self.entrusted)
+
+    @property
     def net(self) -> Decimal:
-        return money(self.equity - self.capital)
+        """P&L: what the firm did with the money it was actually holding.
+
+        Measured against capital *entrusted* rather than capital originally
+        handed over, because those differ by every withdrawal the brokerage
+        ever made, and a firm cannot lose money that was taken away from it.
+        This is the reconciler's own identity read backwards —
+        ``equity = allocation + Σ realised + unrealised − Σ fees`` — so it
+        agrees with the lines above it by construction rather than by luck.
+        """
+        return money(self.equity - self.entrusted)
 
     @property
     def win_rate(self) -> Optional[Decimal]:
@@ -131,13 +161,18 @@ def examine(store, firm, card=None) -> PostMortem:
     """Take one firm apart. Reads the ledger; changes nothing."""
     out = PostMortem(firm_key=firm.firm_key)
     out.capital = money(firm.initial_allocation or firm.allocation)
+    out.entrusted = money(firm.allocation)
     out.equity = money(card.equity) if card is not None else money(firm.cash)
     out.unrealized = money(card.unrealized_pnl) if card is not None else ZERO
 
     by_symbol: dict = {}
     for fill in store.fills(firm.id):
         out.fills += 1
-        cost = _cost_of(fill)
+        fee = money(D(fill.fee or 0))
+        slip = money(abs(D(getattr(fill, "slippage", 0) or 0)))
+        out.fees = money(out.fees + fee)
+        out.slippage = money(out.slippage + slip)
+        cost = money(fee + slip)
         out.costs = money(out.costs + cost)
         pnl = D(fill.realized_pnl or 0)
         line = by_symbol.setdefault(fill.symbol, SymbolLine(symbol=fill.symbol))
@@ -231,15 +266,31 @@ def _diagnose(pm: PostMortem) -> list:
 
 def table(pm: PostMortem) -> list:
     """The identity, one line per cause. Every row is read, none is modelled."""
-    rows = [
-        {"line": "capital entrusted", "amount": fmt_money(pm.capital)},
-        {"line": "realised P&L (gross)", "amount": fmt_money(pm.realized)},
+    rows = [{"line": "capital handed over", "amount": fmt_money(pm.capital)}]
+    # Only shown when it happened, and shown *above* the P&L rather than
+    # folded into them, because a withdrawal is the one line here that is not
+    # a trading outcome and must not be read as one.
+    if pm.returned != 0:
+        rows.append({
+            "line": ("capital taken back" if pm.returned > 0 else "capital added"),
+            "amount": fmt_money(-pm.returned),
+        })
+        rows.append({"line": "capital entrusted now", "amount": fmt_money(pm.entrusted)})
+    rows += [
+        {"line": "realised P&L (after slippage)", "amount": fmt_money(pm.realized)},
         {"line": "  from winners", "amount": fmt_money(pm.gross_won)},
         {"line": "  from losers", "amount": fmt_money(pm.gross_lost)},
-        {"line": "fees and slippage", "amount": fmt_money(-pm.costs)},
+        {"line": "fees", "amount": fmt_money(-pm.fees)},
         {"line": "open positions (unrealised)", "amount": fmt_money(pm.unrealized)},
         {"line": "equity now", "amount": fmt_money(pm.equity)},
-        {"line": "NET", "amount": fmt_money(pm.net)},
+        {"line": "NET (trading)", "amount": fmt_money(pm.net)},
+        # Below the line, deliberately. Slippage is paid by crossing the
+        # spread, so it is inside the fill price and already inside the
+        # realised figure above. Subtracting it again as its own row made the
+        # column stop adding up -- the table showed -$1,828.94 of causes for
+        # a -$1,705.46 loss, and every row in it was individually true.
+        {"line": "  (memo) slippage, already in the above",
+         "amount": fmt_money(-pm.slippage)},
     ]
     return rows
 

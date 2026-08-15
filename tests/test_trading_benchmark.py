@@ -40,11 +40,11 @@ class _Card:
 
 
 class _Firm:
-    def __init__(self, key="alpha", capital="100000"):
+    def __init__(self, key="alpha", capital="100000", entrusted=None):
         self.firm_key = key
         self.initial_allocation = Decimal(capital)
-        self.allocation = Decimal(capital)
-        self.cash = Decimal(capital)
+        self.allocation = Decimal(entrusted if entrusted is not None else capital)
+        self.cash = self.allocation
 
 
 # =========================================================================
@@ -188,3 +188,40 @@ def test_repeated_readings_of_one_bar_are_one_bar(store, firm_record):
             "equity": "100000",
         })
     assert benchmark.bars_lived(store, firm_record.id) == 1
+
+
+# =========================================================================
+# same money, which is the other half of a comparison that means anything
+# =========================================================================
+def test_capital_withdrawn_is_not_counted_as_underperformance():
+    """The bug that made this whole scoreboard lie.
+
+    ``firm_a_etf`` reported -76.29% against SPY's 1.22% -- the worst thing in
+    the village by a factor of ten. It had lost 1.66%. The allocator had taken
+    $74,581 of its $100,000 back, and comparing today's equity to the opening
+    mandate charged every withdrawal to the strategy. Across the village that
+    one firm turned a real +0.20% into a reported -11.80%.
+    """
+    firm = _Firm(capital="100000", entrusted="25418.66")
+    out = compare(firm, _Card("23713.20"), _Market(), 90)
+
+    assert out.measurable
+    assert out.capital == Decimal("25418.66")     # what it actually holds
+    assert out.handed_over == Decimal("100000.00")
+    assert out.firm_return_pct < 0                # it did lose money
+    assert out.firm_return_pct > Decimal("-10")   # but nothing like -76%
+
+
+def test_a_moved_mandate_is_declared_rather_than_hidden():
+    """Measuring against capital entrusted is right, and it is still not a
+    time-weighted return. The looser claim is made out loud."""
+    moved = compare(_Firm(capital="100000", entrusted="50000"),
+                    _Card("55000"), _Market(), 90)
+    assert moved.capital_moved is True
+    assert "mandate changed mid-window" in moved.verdict()
+    assert benchmark.table([moved])[0]["capital"] == "moved"
+
+    steady = compare(_Firm(capital="100000"), _Card("110000"), _Market(), 90)
+    assert steady.capital_moved is False
+    assert "mandate changed" not in steady.verdict()
+    assert benchmark.table([steady])[0]["capital"] == ""

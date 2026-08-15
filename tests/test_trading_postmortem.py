@@ -121,8 +121,63 @@ def test_the_identity_adds_up(store, firm_record):
     assert pm.gross_lost == Decimal("-300.00")
     assert pm.realized == pm.gross_won + pm.gross_lost
     assert pm.costs == Decimal("40.00")          # 10*(2+1) + 5*2
+    assert pm.fees == Decimal("30.00")           # 15 * 2
+    assert pm.slippage == Decimal("10.00")       # 10 * 1
     assert pm.closed == 15 and pm.wins == 10 and pm.losses == 5
-    assert len(postmortem.table(pm)) == 8
+
+
+def test_slippage_is_not_subtracted_twice():
+    """The thing this file's name promises: the column actually adds up.
+
+    It did not. Slippage is paid by crossing the spread, so it is inside the
+    fill price and therefore already inside `realized`. Subtracting it again
+    as its own row made the causes overstate the loss — firm_a_etf's table
+    showed -$1,828.94 of causes for a -$1,705.46 loss, and every row in it was
+    individually true.
+    """
+    pm = postmortem.PostMortem(
+        firm_key="x",
+        capital=Decimal("100000.00"), entrusted=Decimal("100000.00"),
+        equity=Decimal("100980.00"),      # 100000 + 1000 realised - 20 fees
+        realized=Decimal("1000.00"), gross_won=Decimal("1000.00"),
+        fees=Decimal("20.00"), slippage=Decimal("70.00"), costs=Decimal("90.00"),
+    )
+    assert pm.net == Decimal("980.00")
+    assert pm.net == pm.realized - pm.fees + pm.unrealized
+
+    lines = {r["line"]: r["amount"] for r in postmortem.table(pm)}
+    assert lines["fees"] == "-$20.00"
+    assert lines["NET (trading)"] == "$980.00"
+    # Present, but below the line and named as a memo.
+    assert lines["  (memo) slippage, already in the above"] == "-$70.00"
+
+
+def test_capital_taken_back_is_not_reported_as_a_loss():
+    """firm_a_etf read as -76.29% when it had lost 1.66%.
+
+    The allocator had withdrawn $74,581 of its $100,000, and the post-mortem
+    measured equity against the opening mandate — so every withdrawal showed
+    up as a trading loss on a firm that never had the chance to lose it.
+    """
+    pm = postmortem.PostMortem(
+        firm_key="firm_a_etf",
+        capital=Decimal("100000.00"), entrusted=Decimal("25418.66"),
+        equity=Decimal("23713.20"),
+        realized=Decimal("-1655.90"), fees=Decimal("49.38"),
+        slippage=Decimal("123.47"), costs=Decimal("172.85"),
+        unrealized=Decimal("-0.19"),
+    )
+    assert pm.returned == Decimal("74581.34")
+    assert pm.net == Decimal("-1705.46")          # not -$76,286.80
+
+    lines = {r["line"]: r["amount"] for r in postmortem.table(pm)}
+    assert lines["capital taken back"] == "-$74,581.34"
+    assert lines["capital entrusted now"] == "$25,418.66"
+
+    # And a firm whose mandate never moved does not get the extra rows.
+    steady = postmortem.PostMortem(firm_key="b", capital=Decimal("100000.00"),
+                                   entrusted=Decimal("100000.00"))
+    assert "capital taken back" not in {r["line"] for r in postmortem.table(steady)}
 
 
 def test_slippage_counts_as_a_cost_not_a_rounding_error(store, firm_record):
