@@ -738,6 +738,41 @@ def cmd_dashboard(args) -> int:
     return 0
 
 
+def cmd_benchmark(args) -> int:
+    """Did the village beat just buying the index?"""
+    from . import benchmark
+
+    eco = _ecosystem(args)
+    market = eco.market()
+    market.register([args.symbol])
+    firms = sorted(eco.store.firms(), key=lambda f: f.firm_key)
+    cards = {c.firm_id: c for c in eco.brokerage.evaluator.evaluate_all(firms, market)}
+
+    comparisons = []
+    for firm in firms:
+        spec = eco._specs.get(firm.firm_key)
+        costs = spec.costed(eco.config.data) if spec else eco.config.data
+        bars = args.bars or benchmark.bars_lived(eco.store, firm.id)
+        comparisons.append(benchmark.compare(
+            firm, cards.get(firm.id), market, bars, args.symbol,
+            slippage_bps=costs.slippage_bps, fee_bps=costs.fee_bps))
+
+    print(_table(benchmark.table(comparisons)))
+    result = benchmark.village(comparisons)
+    print(f"\n{result['summary']}")
+    if not result["measurable"]:
+        return 0
+    print(f"\n  capital      : {fmt_money(result['capital'])}")
+    print(f"  the village  : {fmt_money(result['equity'])}   ({result['return_pct']}%)")
+    print(f"  buy-and-hold : {fmt_money(result['hold_equity'])}   "
+          f"({result['benchmark_pct']}%)")
+    print(f"  EXCESS       : {result['excess_pct']}%")
+    if any(not c.enough_data for c in comparisons if c.measurable):
+        print(f"\nA firm with fewer than {benchmark.MIN_BARS} bars is not a verdict, "
+              "whichever way it\nis pointing. Two good weeks is a fortnight of luck.")
+    return 0
+
+
 def cmd_postmortem(args) -> int:
     """Where the money went, per firm, from the ledger."""
     from . import postmortem
@@ -1452,6 +1487,10 @@ def add_trade_parser(subparsers) -> None:
     p.add_argument("firm")
     p.add_argument("--venue", default="alpaca")
     p.add_argument("--by", required=True)
+
+    p = add("benchmark", "did it beat just buying the index?", cmd_benchmark)
+    p.add_argument("--symbol", default="SPY")
+    p.add_argument("--bars", type=int, help="compare over exactly this many bars")
 
     p = add("post-mortem", "where the money went, and which cause it was",
             cmd_postmortem)

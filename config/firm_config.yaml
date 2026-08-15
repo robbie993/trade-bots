@@ -56,13 +56,16 @@ firms:
     risk_limit: 0.05
     capital_allocation: 50000
     # What this desk's venue really charges, per side, in basis points.
-    # Crypto exchanges take 0.5-0.6%; the village default is 0.05%, which is an
-    # ETF default. Costing a crypto book at ETF rates flatters it by an order
-    # of magnitude, and for a strategy whose deficit is smaller than its fees
-    # that is not a detail, it is the whole result.
+    #
+    # These are **Alpaca crypto** rates, which is where this village trades.
+    # An earlier version of this block used Coinbase's 0.6% — a number that
+    # came from a dossier about a different bot on a different exchange, and
+    # had no business here. Alpaca's crypto tier is roughly 0.25% a side for
+    # retail volume; equities are commission-free, which is why the other
+    # desks carry no override at all.
     costs:
-      fee_bps: 50
-      slippage_bps: 15
+      fee_bps: 25
+      slippage_bps: 10
     universe: [BTC-USD, ETH-USD, SOL-USD]
     analysts: [technical, sentiment, onchain]
     genome:
@@ -179,10 +182,12 @@ firms:
     # emptied by one name.
     risk_limit: 0.015
     capital_allocation: 30000
-    # See firm_c_crypto for why these are not the village default.
+    # Same Alpaca crypto fee as firm_c_crypto, but a much wider slippage
+    # assumption: these are thin books and a market order in DOGE or WIF does
+    # not fill where a market order in BTC fills.
     costs:
-      fee_bps: 60
-      slippage_bps: 40
+      fee_bps: 25
+      slippage_bps: 35
     universe: [DOGE-USD, SHIB-USD, PEPE-USD, WIF-USD]
     analysts: [technical, sentiment, onchain]
     genome:
