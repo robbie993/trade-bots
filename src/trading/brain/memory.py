@@ -97,6 +97,107 @@ class AgentMemory:
             },
         )
 
+    # -- the four kinds of memory -----------------------------------------
+    #
+    # Borrowed from MindCache's taxonomy (user / decisions / episodic /
+    # knowledge), which is better structure than the flat table this had. The
+    # library itself is not used and will not be: its premise is a language
+    # model that summarises and reorganises what it stores, and this village's
+    # premise is that the ledger is the only source of truth and every figure
+    # is reproducible from it. A memory that rewrites itself puts unverifiable
+    # state into the loop that decides trades, and there is no held-out test
+    # that could catch it drifting. The shape is the good idea; the mechanism
+    # is not.
+    #
+    # `TRADE` and `LESSON` already existed under other names. `DECISION` is the
+    # one that was missing, and it is the interesting one: the village makes
+    # decisions constantly — kills, revivals, promotions, adopted genomes — and
+    # remembered none of them in a form anything could recall. "We did this
+    # before and here is what happened next" is precisely the evidence a kill
+    # switch should have and did not.
+    TRADE = "trade"          # episodic: a thing that happened
+    LESSON = "lesson"        # knowledge: a durable fact drawn from many things
+    DECISION = "decision"    # what was chosen, why, and how it turned out
+    PREFERENCE = "preference"  # a standing instruction from the human
+
+    KINDS = (TRADE, LESSON, DECISION, PREFERENCE)
+
+    def remember_decision(
+        self,
+        what: str,
+        why: str,
+        *,
+        firm_id: Optional[int] = None,
+        symbol: str = "",
+        payload: Optional[dict] = None,
+    ) -> int:
+        """Record a decision *before* its outcome is known.
+
+        Deliberately separate from `settle_decision`: writing the reason at the
+        moment of choosing, and the result later, is what makes the pair
+        evidence rather than a story told backwards. A decision whose rationale
+        is written after the outcome is known is not a record, it is a
+        rationalisation, and this system has enough ways to fool itself.
+        """
+        return self.remember(
+            f"{what} — {why}",
+            symbol=symbol,
+            firm_id=firm_id,
+            memory_type=self.DECISION,
+            outcome="pending",
+            payload={"what": what, "why": why, **(payload or {})},
+        )
+
+    def settle_decision(self, memory_id: int, outcome: str,
+                        reward: Decimal = ZERO) -> bool:
+        """Close the loop on a decision. `outcome` is free text: what happened.
+
+        Returns False if there is no such pending decision, rather than
+        inventing one — a settled outcome attached to nothing would be a fact
+        about a decision nobody made.
+        """
+        row = self.store.db.query_one(
+            "SELECT id FROM trade_memory WHERE id = ? AND memory_type = ?",
+            (memory_id, self.DECISION),
+        )
+        if row is None:
+            return False
+        self.store.db.update("trade_memory", memory_id,
+                             {"outcome": str(outcome)[:200], "reward": money(reward)})
+        return True
+
+    def precedent(self, what: str, firm_id: Optional[int] = None,
+                  limit: int = 10) -> list:
+        """What happened the last times the village did this.
+
+        The point of keeping decisions at all. Reads settled ones first,
+        because a pending decision is not yet evidence about anything.
+        """
+        clauses = ["memory_type = ?", "summary LIKE ?"]
+        params: list = [self.DECISION, f"{what}%"]
+        if firm_id is not None:
+            clauses.append("firm_id = ?")
+            params.append(firm_id)
+        params.append(limit)
+        rows = self.store.db.query(
+            f"SELECT * FROM trade_memory WHERE {' AND '.join(clauses)} "
+            "ORDER BY CASE WHEN outcome = 'pending' THEN 1 ELSE 0 END, id DESC "
+            "LIMIT ?",
+            tuple(params),
+        )
+        return [Memory.from_row(r) for r in rows]
+
+    def by_kind(self, kind: str, firm_id: Optional[int] = None,
+                limit: int = 20) -> list:
+        clauses, params = ["memory_type = ?"], [kind]
+        if firm_id is not None:
+            clauses.append("firm_id = ?")
+            params.append(firm_id)
+        params.append(limit)
+        return [Memory.from_row(r) for r in self.store.db.query(
+            f"SELECT * FROM trade_memory WHERE {' AND '.join(clauses)} "
+            "ORDER BY id DESC LIMIT ?", tuple(params))]
+
     def remember(
         self,
         summary: str,

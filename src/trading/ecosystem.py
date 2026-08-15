@@ -496,6 +496,12 @@ class Ecosystem:
                 report.errors.append(
                     f"{firm.firm_key} PULLED OFF REAL MONEY: {trouble}"
                 )
+                # Close the loop on the decision that put it there, so the next
+                # time this firm is proposed for real money the village can say
+                # what happened last time rather than starting the argument
+                # from nothing.
+                self._settle_decision(f"put {firm.firm_key} on real money",
+                                      f"pulled back: {trouble}", firm.id)
                 flow.emit("brokerage", f"{firm.firm_key} back to paper: {trouble}"[:110],
                           kind="alarm", firm=firm.firm_key, detail=trouble)
                 left = done.get("still_open") or []
@@ -622,6 +628,29 @@ class Ecosystem:
             ))
             self.flow.emit("ledger", f"borrow on {position.symbol}", firm=record.firm_key,
                            detail=f"{fmt_money(fee)} at {rate * 100}% a year")
+
+    def _remember_decision(self, what: str, why: str, firm_key: str = "",
+                           payload: Optional[dict] = None) -> None:
+        """Note what the village chose and why, before the result is known.
+
+        Best-effort by design: a village that cannot write a diary entry still
+        has to be able to kill a firm. Nothing here may raise into a decision.
+        """
+        try:
+            record = self.store.get_firm(firm_key) if firm_key else None
+            self.memory.remember_decision(
+                what, why, firm_id=getattr(record, "id", None), payload=payload)
+        except Exception:  # noqa: BLE001 - a diary is never worth a tick
+            pass
+
+    def _settle_decision(self, what: str, outcome: str,
+                         firm_id: Optional[int] = None) -> None:
+        """Record how the most recent decision of this kind turned out."""
+        try:
+            for memory in self.memory.precedent(what, firm_id=firm_id, limit=1):
+                self.memory.settle_decision(memory.id, outcome)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _costed_for(self, record: FirmRecord) -> TradingConfig:
         """The village config, with this firm's own trading costs in it.
@@ -915,6 +944,9 @@ class Ecosystem:
                     details["firm"], details.get("reason", "approved by human")
                 )
                 applied.append(f"killed {result['firm']} (returned {result['returned']})")
+                self._remember_decision(
+                    f"killed {result['firm']}", result.get("reason", ""),
+                    firm_key=result["firm"], payload=result)
             elif (approval.action == ApprovalAction.LIVE_TRADING.value
                     and details.get("firm")):
                 # A per-firm promotion to real money, distinguished from the
@@ -938,6 +970,11 @@ class Ecosystem:
                     f"{done['firm']} is LIVE on {done['venue']} with "
                     f"{fmt_money(done['capital'])}"
                 )
+                self._remember_decision(
+                    f"put {done['firm']} on real money",
+                    f"approved by {approval.approved_by or 'human'} at "
+                    f"{fmt_money(done['capital'])} on {done['venue']}",
+                    firm_key=done["firm"], payload=done)
                 self.notifier.send(
                     f"🟢 {done['firm']} is trading REAL MONEY",
                     f"{done['firm']} was approved for {done['venue']} with "
@@ -949,6 +986,10 @@ class Ecosystem:
                     details["firm"], approval.approved_by or "the council"
                 )
                 applied.append(f"resumed {result['firm']}")
+                self._remember_decision(
+                    f"resumed {result['firm']}",
+                    f"approved by {approval.approved_by or 'the council'}",
+                    firm_key=result["firm"], payload=result)
             elif approval.action == ApprovalAction.ALLOCATE_CAPITAL.value and details.get("firm"):
                 if details.get("kind") == "capital_transfer":
                     continue  # settled through the black market, not here
@@ -1067,6 +1108,11 @@ class Ecosystem:
                     f"{record.firm_key} ADOPTED a new genome at generation "
                     f"{gen.number} — it won the fit and the held-out bars"
                 )
+                self._remember_decision(
+                    f"adopted a genome for {record.firm_key}",
+                    f"generation {gen.number}: won the fit and the held-out bars",
+                    firm_key=record.firm_key,
+                    payload={"generation": gen.number})
             elif gen.refused:
                 out.append(f"{record.firm_key} held: {gen.refused}")
         return out
