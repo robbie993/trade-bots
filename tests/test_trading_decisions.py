@@ -14,7 +14,6 @@ only source of truth. The shape is the good idea; the mechanism is not.
 
 from __future__ import annotations
 
-from decimal import Decimal
 
 
 def test_the_four_kinds_exist_and_trade_and_lesson_are_not_renamed(store):
