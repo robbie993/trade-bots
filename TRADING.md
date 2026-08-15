@@ -451,6 +451,31 @@ village that rule got broken.
 
 ---
 
+## Options
+
+The vocabulary exists (`src/trading/options.py`): OCC symbols, contracts,
+expiries, notional, premium, exposure. **Nothing trades them yet** — this is
+the groundwork, not the feature.
+
+The instrument was the easy half. The hard half is that every risk limit here
+was written for a linear instrument, and each means something different once an
+option is in the book:
+
+| limit | what breaks | what this does about it |
+|---|---|---|
+| **Drawdown** | a long call expiring worthless has lost 100% of its premium *on schedule* — that is the instrument, not a blown-up firm | contracts inside their last week are exempt from drawdown; options are measured on **premium at risk**, not position value |
+| **Position size** | one contract on a $500 name is $50,000 of exposure for $300 of premium | `exposure()` and `premium_at_risk()` are separate functions with different names, so a caller must say which it means |
+| **Single loss** | survives for long options — the premium *is* the maximum | `max_loss()` returns **`None`** for shorts rather than a comforting number, because the loss is unbounded |
+
+**There is no pricing model and there will not be one.** A model price is not a
+mark, and this village's standing rule is that a number the feed did not give
+us is not evidence. An option with no quote is `unpriceable`, exactly like a
+stock with no bar, and the kill switch already knows what to do with that.
+There is a test that walks the module's syntax tree and fails if anything
+called `price`, `delta` or `black_scholes` ever appears in it.
+
+---
+
 ## Learning
 
 The firms are not meant to run the genome they were born with forever. Turn the
