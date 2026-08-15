@@ -74,7 +74,9 @@ class Brokerage:
         self.gate = gate
         self.reconciler = Reconciler(store, self.config.brokerage)
         self.evaluator = Evaluator(store, self.config)
-        self.allocator = Allocator(store, self.config.brokerage, gate)
+        self.allocator = Allocator(
+            store, self.config.brokerage, gate, self.config.data.resolution
+        )
         self.kill_switch = BrokerageKillSwitch(store, self.config, gate)
 
     # -- the gate ---------------------------------------------------------
@@ -116,7 +118,7 @@ class Brokerage:
             report.leaderboard = Leaderboard(report.cards, self.store.firms())
             return report
 
-        changes = self.allocator.plan(report.cards, firms)
+        changes = self.allocator.plan(report.cards, firms, market.as_of())
         report.allocation_changes = self.allocator.apply(changes)
         report.leaderboard = Leaderboard(report.cards, self.store.firms())
         return report

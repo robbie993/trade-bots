@@ -292,6 +292,76 @@ def test_cuts_stop_at_the_minimum(store, gate):
 
 
 # =========================================================================
+# when capital may move — the thirteen cuts in four seconds
+# =========================================================================
+def test_capital_moves_once_per_bar_however_often_the_loop_runs(store, gate, trading_config):
+    """The bug this file exists to keep fixed.
+
+    ``firm_a_etf`` took thirteen 10% cuts inside four wall-clock seconds and
+    came out holding 25.4% of its capital (0.9^13 = 0.254). Nothing about the
+    firm changed in those four seconds; the tick loop simply asked the same
+    question thirteen times, and the allocator charged for each answer.
+    """
+    firm = store.upsert_firm(
+        FirmRecord(firm_key="a", allocation=D("100000"), initial_allocation=D("100000"),
+                   cash=D("100000"), universe=["SPY"])
+    )
+    allocator = Allocator(store, trading_config.brokerage, gate)
+    bar = "2026-08-14"
+
+    for _ in range(13):
+        current = store.require_firm_by_id(firm.id)
+        allocator.apply(allocator.plan([card_for(current, 10)], [current], bar))
+
+    # One cut, not thirteen. 0.9^13 would have left $25,418.66.
+    assert store.require_firm_by_id(firm.id).allocation == Decimal("90000.00")
+
+    # The next bar is a new judgement, and is allowed to act.
+    current = store.require_firm_by_id(firm.id)
+    allocator.apply(allocator.plan([card_for(current, 10)], [current], "2026-08-15"))
+    assert store.require_firm_by_id(firm.id).allocation == Decimal("81000.00")
+
+
+def test_a_deferred_cut_still_uses_up_the_bar(store, gate, trading_config):
+    """"Not today" is an answer. Re-asking four seconds later cannot improve it."""
+    firm = store.upsert_firm(
+        FirmRecord(firm_key="a", allocation=D("100000"), initial_allocation=D("100000"),
+                   cash=D("0"), universe=["SPY"])
+    )
+    allocator = Allocator(store, trading_config.brokerage, gate)
+    assert allocator.plan([card_for(firm, 10)], [firm], "2026-08-14") == []
+
+    # Cash frees up mid-bar. The firm has still had its review for this bar,
+    # so the cut waits for the next one rather than firing the moment the
+    # money lands — which, at one tick a second, is the compounding again.
+    firm.cash = D("100000")
+    store.upsert_firm(firm)
+    assert allocator.plan([card_for(firm, 10)], [firm], "2026-08-14") == []
+    assert allocator.plan([card_for(firm, 10)], [firm], "2026-08-15") != []
+
+
+def test_a_paused_firm_is_not_cut_for_a_score_it_cannot_change(store, gate, trading_config):
+    """All thirteen cuts landed on a firm the kill switch had already paused.
+
+    A paused firm is not trading, so its score is frozen, so it qualifies for a
+    cut on every bar from now until the minimum. That is a ratchet with no exit.
+    Reclaiming its capital is still correct — but that is ``release()``, one
+    deliberate act with a reason on it, not a decay.
+    """
+    firm = store.upsert_firm(
+        FirmRecord(firm_key="a", allocation=D("100000"), initial_allocation=D("100000"),
+                   cash=D("100000"), universe=["SPY"], status=FirmStatus.PAUSED.value)
+    )
+    allocator = Allocator(store, trading_config.brokerage, gate)
+    assert allocator.plan([card_for(firm, 10)], [firm], "2026-08-14") == []
+    assert store.require_firm_by_id(firm.id).allocation == Decimal("100000.00")
+
+    # release() is still available, and still takes the money back.
+    change = allocator.release(firm, "stopped trading")
+    assert change.applied is True
+
+
+# =========================================================================
 # leaderboard
 # =========================================================================
 def test_the_leaderboard_ranks_measured_firms_above_unmeasured_ones(store):

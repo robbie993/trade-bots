@@ -17,10 +17,31 @@ computed from four trades is not evidence:
 * Total deployed capital may never exceed ``brokerage.total_capital``. If the
   winners' raises would breach it, the raises are trimmed to what is left,
   not the cap.
+
+**And two about *when*, which is what went wrong here.**
+
+A 10% cut is a judgement about a firm's quarter. It was being applied once per
+*tick*, and the tick runs as often as the loop runs — so ``firm_a_etf`` took
+thirteen cuts in four seconds and came out holding 25.4% of its capital
+(``0.9^13 = 0.254``). Nothing about the firm changed in those four seconds; the
+village simply asked the same question thirteen times and charged for each
+answer. Capital now moves at most once per market bar, and the guard is read
+from the event log rather than held in memory, because the loop is restarted
+routinely and a guard that resets on restart is a guard that scales with how
+often you deploy.
+
+Worse, every one of those thirteen cuts landed on a firm the kill switch had
+already **paused** two seconds earlier. A paused firm is not trading, so its
+score cannot move, so it qualifies for a cut on every bar forever — a ratchet
+with no exit, punishing a firm for a number it has been forbidden from
+changing. Cuts now apply only to firms that are actually trading. Reclaiming a
+stopped firm's capital is still available and still correct, but it is
+``release()`` — one deliberate act with a reason on it, not a decay.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, Sequence
@@ -41,6 +62,10 @@ class AllocationChange:
     reason: str
     applied: bool = False
     approval_id: Optional[int] = None
+    #: The market bar this judgement was made on, carried into the event
+    #: payload so the cadence guard reads back the bar rather than inferring
+    #: one from when the row happened to be written.
+    bar: str = ""
 
     @property
     def delta(self) -> Decimal:
@@ -68,16 +93,30 @@ class Allocator:
         store: TradingStore,
         config: Optional[BrokerageConfig] = None,
         gate=None,
+        resolution=None,
     ):
         self.store = store
         self.config = config or BrokerageConfig()
         self.gate = gate  # HumanGate, or None when increases are disabled
+        self.resolution = resolution  # how long a bar is; None means daily
 
-    def plan(self, cards: Sequence[Scorecard], firms: Sequence[FirmRecord]) -> list:
-        """Work out every change without touching anything."""
+    def plan(
+        self,
+        cards: Sequence[Scorecard],
+        firms: Sequence[FirmRecord],
+        as_of=None,
+    ) -> list:
+        """Work out every change without touching anything.
+
+        ``as_of`` is the market's timestamp, and it is what stops the same
+        judgement being charged for on every tick. Without it the cadence guard
+        cannot run, so a caller that omits it gets one review per call — which
+        is what the tests want and what production must not have.
+        """
         by_id = {f.id: f for f in firms}
         deployed = sum((D(f.allocation) for f in firms if not f.is_killed), ZERO)
         headroom = money(D(self.config.total_capital) - deployed)
+        bar = self._bar_key(as_of)
         changes: list = []
 
         for card in cards:
@@ -88,6 +127,18 @@ class Allocator:
 
             if not card.sufficient_data:
                 continue  # still being measured; capital does not move
+
+            # A paused firm is not trading, so its score is frozen and it
+            # qualifies for the same cut on every bar from now until the
+            # minimum — a ratchet that punishes it for a number it has been
+            # forbidden from changing. Its capital comes back via release().
+            if not firm.is_active:
+                continue
+
+            # One judgement per bar. Thirteen ticks inside one bar is thirteen
+            # readings of the same score, not thirteen pieces of evidence.
+            if bar and self._already_moved(firm, bar):
+                continue
 
             if card.score >= self.config.good_score:
                 ceiling = money(D(firm.initial_allocation) * self.config.max_allocation_multiple)
@@ -106,6 +157,7 @@ class Allocator:
                         current,
                         target,
                         f"score {card.score} at or above {self.config.good_score}",
+                        bar=bar,
                     )
                 )
             elif card.score <= self.config.poor_score:
@@ -132,7 +184,8 @@ class Allocator:
                         f"{firm.firm_key}: cut to {fmt_money(target)} deferred — "
                         f"no uninvested cash to withdraw",
                         firm_id=firm.id,
-                        payload={"target": str(target), "cash": str(firm.cash)},
+                        payload={"target": str(target), "cash": str(firm.cash),
+                                 "bar": bar},
                     )
                     continue
                 changes.append(
@@ -147,6 +200,7 @@ class Allocator:
                             if withdrawable < current - target
                             else ""
                         ),
+                        bar=bar,
                     )
                 )
         return changes
@@ -168,6 +222,7 @@ class Allocator:
                         "new": str(change.new_allocation),
                         "reason": change.reason,
                         "approval_id": change.approval_id,
+                        "bar": change.bar,
                     },
                 )
                 continue
@@ -182,6 +237,7 @@ class Allocator:
                     "old": str(change.old_allocation),
                     "new": str(change.new_allocation),
                     "reason": change.reason,
+                    "bar": change.bar,
                 },
             )
         return list(changes)
@@ -232,6 +288,52 @@ class Allocator:
             payload={"returned": str(returned), "reason": reason},
         )
         return change
+
+    def _bar_key(self, as_of) -> str:
+        if as_of is None:
+            return ""
+        resolution = self.resolution
+        if resolution is None:
+            from ..resolution import DAILY
+
+            resolution = DAILY
+        return resolution.bar_key(as_of) or ""
+
+    def _already_moved(self, firm: FirmRecord, bar: str) -> bool:
+        """Has this firm's capital already been judged on this bar?
+
+        Read from the event log rather than kept in memory, because the tick
+        loop is restarted routinely and a guard that resets on restart is a
+        guard that scales with how often you deploy.
+
+        A deferred cut counts. The firm was reviewed and the answer was "not
+        today"; asking again four seconds later cannot produce a better one,
+        and re-asking is exactly how the cut ended up compounding.
+
+        The bar is read back out of the payload rather than derived from the
+        row's ``created_at``. Those are two different clocks — the market's and
+        the machine's — and this whole class of bug is what happens when one is
+        quietly substituted for the other.
+        """
+        try:
+            rows = self.store.db.query(
+                "SELECT payload FROM brokerage_events WHERE firm_id = ? "
+                "AND event_type IN ('allocation', 'allocation_deferred', "
+                "'allocation_requested') ORDER BY id DESC LIMIT 8",
+                (firm.id,),
+            )
+        except Exception:  # noqa: BLE001 - never fail a pass over a guard
+            return False
+        for row in rows:
+            payload = row.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except ValueError:
+                    continue
+            if isinstance(payload, dict) and payload.get("bar") == bar:
+                return True
+        return False
 
     def _request_increase(self, change: AllocationChange):
         if self.gate is None:
