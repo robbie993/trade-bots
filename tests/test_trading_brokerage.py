@@ -220,6 +220,27 @@ def test_an_approved_increase_is_the_only_way_capital_grows(store, firm_record, 
     assert firm.cash == Decimal("110000.00")  # the new money arrives as cash
 
 
+def test_the_ledger_says_whether_a_raise_was_earned_or_a_correction(
+    store, firm_record, trading_config
+):
+    """Two very different things arrive through this one door.
+
+    A firm given more money because it earned it, and money put back because
+    the village took it by mistake, are both increases and both need a human.
+    Only one is evidence about the strategy, and a reader six months from now
+    cannot tell them apart from "approved by human" alone.
+    """
+    allocator = Allocator(store, trading_config.brokerage)
+    allocator.apply_approved_increase(
+        "test_firm", Decimal("110000"),
+        reason="12 of 13 cuts were the per-tick bug", by="robbie")
+
+    [event] = [e for e in store.events(firm_record.id)
+               if e.get("event_type") == "allocation"]
+    assert "per-tick bug" in event["detail"]
+    assert "[by robbie]" in event["detail"]
+
+
 def test_two_firms_each_get_their_own_approval(store, gate, trading_config):
     firms = [
         store.upsert_firm(

@@ -242,21 +242,38 @@ class Allocator:
             )
         return list(changes)
 
-    def apply_approved_increase(self, firm_key: str, new_allocation: Decimal) -> AllocationChange:
-        """Called once a human has approved a raise. The only way capital grows."""
+    def apply_approved_increase(
+        self,
+        firm_key: str,
+        new_allocation: Decimal,
+        reason: str = "approved by human",
+        by: str = "",
+    ) -> AllocationChange:
+        """Called once a human has approved a raise. The only way capital grows.
+
+        ``reason`` and ``by`` exist so the ledger can tell apart the two very
+        different things that arrive through this one door: a firm being given
+        more money because it earned it, and money being put back because the
+        village took it by mistake. Both are increases and both need a human;
+        only one of them is evidence about the strategy, and a reader
+        six months from now has no way to reconstruct which was which from
+        "approved by human" alone.
+        """
         firm = self.store.get_firm(firm_key)
         if firm is None:
             raise ValueError(f"unknown firm {firm_key}")
         change = AllocationChange(
-            firm_key, firm.id, D(firm.allocation), money(new_allocation), "approved by human"
+            firm_key, firm.id, D(firm.allocation), money(new_allocation), reason
         )
         self.store.set_allocation(firm.id, change.new_allocation, change.delta)
         change.applied = True
         self.store.record_event(
             "allocation",
-            str(change),
+            str(change) + (f" [by {by}]" if by else ""),
             firm_id=firm.id,
-            payload={"old": str(change.old_allocation), "new": str(change.new_allocation)},
+            payload={"old": str(change.old_allocation),
+                     "new": str(change.new_allocation),
+                     "reason": reason, "by": by},
         )
         return change
 
