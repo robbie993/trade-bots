@@ -131,7 +131,15 @@ def _one_unbroken_run(observations, resolution):
         if before is None or now is None:
             start = i
             continue
-        if (now - before).total_seconds() > limit:
+        elapsed = (now - before).total_seconds()
+        # Not just "too big a gap" but "any step that is not forward". Time
+        # running backwards or standing still means two different passes over
+        # the same bars have been spliced together, and the caller sorts
+        # precisely so this should never fire — it is here because a silent
+        # scramble is what this whole function exists to have caught once
+        # already, and the cheapest guard against the next one is to refuse
+        # anything that is not a step forward in time.
+        if elapsed <= 0 or elapsed > limit:
             start = i
     return list(observations[start:])
 
@@ -258,7 +266,19 @@ class Evaluator:
         now_key = resolution.bar_key(market.as_of()) or str(market.as_of())
         by_bar[now_key] = (to_datetime(market.as_of()), net_pnl)
 
-        observations = list(by_bar.values())
+        # **Sorted by the bar, not by insertion.** `by_bar` is a dict keyed on
+        # the bar date, and a dict keeps the position of a key's *first*
+        # insertion. So when a replay revisits bars the history already holds —
+        # `trade simulate` run twice, which is a documented thing to do — the
+        # values update and the order does not, and the series comes out as
+        # bars 31..60 followed by bars 1..30.
+        #
+        # Every difference across that seam is nonsense, and the Sharpe built
+        # on it is nonsense with a decimal point. On a clean village, running
+        # `simulate` a second time took `firm_b_stocks` from Sharpe 3.4004 to
+        # -0.0644 and filed a kill request against a firm that had won 69% of
+        # its trades, drawn down 0.42% and made money.
+        observations = sorted(by_bar.values(), key=lambda pair: (pair[0] is None, pair[0]))
         pnl_curve = [value for _, value in _one_unbroken_run(observations, resolution)]
         returns = (
             [(b - a) / capital_base for a, b in zip(pnl_curve, pnl_curve[1:])]

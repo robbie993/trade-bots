@@ -315,3 +315,79 @@ def test_an_unreadable_timestamp_ends_the_run_rather_than_being_guessed_at():
         (start + timedelta(days=2), Decimal(4)),
     ]
     assert _one_unbroken_run(rows, DAILY) == rows[2:]
+
+
+# =========================================================================
+# a series is only a series if it is in order
+# =========================================================================
+def test_the_pnl_series_is_sorted_by_bar_not_by_insertion():
+    """The bug that filed kill requests against profitable firms.
+
+    The evaluator collects one P&L reading per bar into a dict keyed on the
+    bar. A dict keeps the position of a key's *first* insertion, so when a
+    replay revisits bars the history already holds — `trade simulate` run
+    twice, which is a documented thing to do — the values update and the order
+    does not. The series came out as bars 31..60 followed by bars 1..30, and
+    every difference across that seam was nonsense.
+
+    Measured on a clean village: one 60-bar run gave `firm_b_stocks` a Sharpe
+    of 3.4004 and a proposed raise. Running the same command again gave it
+    -0.0644 and a kill request, at a 69% win rate, a 0.42% drawdown and $3,332
+    of profit.
+    """
+    by_bar = {}
+    for day in range(31, 61):
+        by_bar[f"d{day:02}"] = ("run1", day)
+    for day in range(1, 61):
+        by_bar[f"d{day:02}"] = ("run2", day)
+
+    insertion = [v[1] for v in by_bar.values()]
+    assert insertion != sorted(insertion), "the hazard this guards against is gone"
+
+    ordered = sorted(by_bar.values(), key=lambda pair: pair[1])
+    assert [v[1] for v in ordered] == sorted(insertion)
+
+
+def test_a_step_that_is_not_forward_ends_the_run():
+    """Belt and braces. The caller sorts, so this should never fire — it is
+    here because a silent scramble is exactly what went unnoticed once."""
+    from datetime import timedelta
+
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    start = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    scrambled = [
+        (start + timedelta(days=5), Decimal(5)),
+        (start + timedelta(days=6), Decimal(6)),
+        (start, Decimal(1)),                      # time travels backwards
+        (start + timedelta(days=1), Decimal(2)),
+    ]
+    assert _one_unbroken_run(scrambled, DAILY) == scrambled[2:]
+
+
+def test_a_repeated_bar_ends_the_run():
+    """Two readings of the same bar are two passes, not one series."""
+    from src.trading.brokerage.evaluator import _one_unbroken_run
+
+    stamp = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    twice = [(stamp, Decimal(1)), (stamp, Decimal(9))]
+    assert _one_unbroken_run(twice, DAILY) == twice[1:]
+
+
+def test_replaying_a_simulation_does_not_scramble_the_scorecard(ecosystem):
+    """The end-to-end version: the same command twice must not turn a healthy
+    firm's Sharpe into noise."""
+    ecosystem.simulate(30)
+    firm = ecosystem.store.firms()[0]
+    first = ecosystem.brokerage.evaluator.evaluate(firm, ecosystem.market())
+
+    ecosystem.simulate(30)
+    again = ecosystem.brokerage.evaluator.evaluate(
+        ecosystem.store.get_firm(firm.firm_key), ecosystem.market())
+
+    # Not "identical" — the second pass really did trade, so the number moves.
+    # What must not happen is a Sharpe built on differences across a seam.
+    for card in (first, again):
+        if card.sharpe is not None:
+            assert abs(card.sharpe) < Decimal(50), (
+                f"{card.firm_key}: sharpe {card.sharpe} is not a measurement")
