@@ -738,6 +738,53 @@ def cmd_dashboard(args) -> int:
     return 0
 
 
+def cmd_postmortem(args) -> int:
+    """Where the money went, per firm, from the ledger."""
+    from . import postmortem
+
+    eco = _ecosystem(args)
+    market = eco.market()
+    firms = ([eco.store.get_firm(args.firm)] if args.firm
+             else sorted(eco.store.firms(), key=lambda f: f.firm_key))
+    if firms == [None]:
+        print(f"unknown firm {args.firm}")
+        return 1
+
+    cards = {c.firm_id: c for c in eco.brokerage.evaluator.evaluate_all(firms, market)}
+    worst = []
+    for firm in firms:
+        pm = postmortem.examine(eco.store, firm, cards.get(firm.id))
+        worst.append(pm)
+        if args.firm or pm.fills:
+            print(f"\n=== {pm.firm_key} ===")
+            print(_table(postmortem.table(pm)))
+            bits = []
+            if pm.win_rate is not None:
+                bits.append(f"win rate {pm.win_rate}%")
+            if pm.breakeven_win_rate is not None:
+                bits.append(f"needs {pm.breakeven_win_rate}%")
+            if pm.payoff is not None:
+                bits.append(f"avg loss / avg win {pm.payoff}x")
+            if pm.cost_share is not None:
+                bits.append(f"costs {pm.cost_share}% of winnings")
+            if bits:
+                print("  " + " · ".join(bits))
+            for note in pm.notes:
+                print(f"\n  {note}")
+
+    if not args.firm:
+        losing = sorted((p for p in worst if p.net < 0), key=lambda p: p.net)
+        print("\n=== the village ===")
+        total = sum((p.net for p in worst), D(0))
+        costs = sum((p.costs for p in worst), D(0))
+        print(f"  net across {len(worst)} firm(s): {fmt_money(total)}")
+        print(f"  paid in fees and slippage:      {fmt_money(costs)}")
+        if losing:
+            print("  losing firms: "
+                  + ", ".join(f"{p.firm_key} ({fmt_money(p.net)})" for p in losing[:5]))
+    return 0
+
+
 def cmd_switches(args) -> int:
     """The controls on the wall, from a terminal.
 
@@ -1405,6 +1452,10 @@ def add_trade_parser(subparsers) -> None:
     p.add_argument("firm")
     p.add_argument("--venue", default="alpaca")
     p.add_argument("--by", required=True)
+
+    p = add("post-mortem", "where the money went, and which cause it was",
+            cmd_postmortem)
+    p.add_argument("firm", nargs="?")
 
     p = add("switches", "the controls on the wall, and how to flip them",
             cmd_switches)

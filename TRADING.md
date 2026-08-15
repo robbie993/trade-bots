@@ -422,6 +422,35 @@ equity session, so a crypto-only village at hourly resolution annualises about
 
 ---
 
+## When it is losing money
+
+```bash
+python -m src.main trade post-mortem            # every firm
+python -m src.main trade post-mortem firm_c_crypto
+```
+
+Four things empty a paper account, they look identical on an equity curve, and
+they want completely different fixes. This decomposes the loss into an identity
+read straight from `fills` — nothing modelled, nothing assumed — and names
+which one it is:
+
+| cause | what it looks like | what fixes it |
+|---|---|---|
+| **Costs** | fees and slippage are a large share of gross winnings | trade *less often* — a slower `TRADE_BAR`, a higher confidence floor |
+| **The exit** | average loss much bigger than average win, even when most trades win | a stop, or a slower exit. Better entries do not repair it |
+| **Win rate** | wins less often than the payoff ratio needs to break even | better entries, or bigger winners |
+| **One bad name** | most of the loss is one symbol | narrow the universe |
+
+It prints the break-even win rate beside the actual one, because "55% of trades
+win" means nothing until you know whether 55% is enough.
+
+**Below twenty closed trades it refuses to diagnose** and says so. A run of bad
+luck and a broken strategy are indistinguishable at that size, and a
+post-mortem that ignored the sample gate would be the loudest place in the
+village that rule got broken.
+
+---
+
 ## Learning
 
 The firms are not meant to run the genome they were born with forever. Turn the
@@ -1387,6 +1416,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade apply-approvals` | carry out what a human approved |
 | `trade resume <firm> --by you` | un-pause a firm |
 | `trade revive --all --by you` | undo kills decided on a feed that had no prices |
+| `trade post-mortem [firm]` | where the money went, and which of the four causes it was |
 | `trade switches` | the controls on the wall, and their state |
 | `trade switch <name> --on` | flip one without opening a browser |
 | `trade live-status` | how close each firm is to real money (grants nothing) |
