@@ -47,7 +47,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Optional, Sequence
 
-from ..money import ZERO, D, money
+from ..money import ZERO, D, money, percent
 from .models import Position, Side, TradeProposal
 
 # A bot gets this long to answer before the tick moves on without it. Generous
@@ -122,6 +122,38 @@ class Context:
     def quantity(self, symbol: str) -> Decimal:
         held = self.position(symbol)
         return held.quantity if held else ZERO
+
+    def entry(self, symbol: str) -> Optional[Decimal]:
+        """What this firm paid, on average, for what it is holding.
+
+        The one number a stop needs, and it was missing. Every imported bot
+        with a stop or a target had to anchor it to some past close instead —
+        a proxy that drifts away from the truth the moment the position is
+        added to. The data was always here on the position; it simply was not
+        reachable from a strategy.
+
+        None when the firm holds nothing, because there is no entry to speak
+        of and zero would read as a 100% loss.
+        """
+        held = self.position(symbol)
+        return held.average_price if held and held.quantity != 0 else None
+
+    def unrealized_pct(self, symbol: str) -> Optional[Decimal]:
+        """How far this position is up or down, in percent of what it cost.
+
+        Signed for the direction actually held: a short that has fallen is up.
+        None if there is no position or no mark — never zero, which would read
+        as "flat" rather than "unknown".
+        """
+        held = self.position(symbol)
+        mark = self.price(symbol)
+        if held is None or held.quantity == 0 or mark is None:
+            return None
+        entry = D(held.average_price)
+        if entry <= 0:
+            return None
+        move = (D(mark) - entry) / entry * D(100)
+        return percent(move if held.quantity > 0 else -move)
 
     @property
     def positions(self) -> list:

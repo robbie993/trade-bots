@@ -21,11 +21,13 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from ...money import ZERO, money
+from ...money import D, ZERO, money, percent
 from ..config import FirmDefaults, FirmKillConfig, TradingConfig
 from ..data.market_data import MarketData
 from .. import adapter
-from ..models import FirmRecord, FirmStatus, Position, Signal, TradeProposal, price
+from ..models import (
+    FirmRecord, FirmStatus, Position, Side, Signal, TradeProposal, price, qty,
+)
 from .analysts import build_analysts
 from .kill_switch import FirmMetrics, KillSwitch
 from .researchers import DebateResult, DebateRoom
@@ -114,11 +116,23 @@ class Firm:
         as_of = market.as_of()
         proposals: list[TradeProposal] = []
 
-        raw = (
+        # The stop runs first and outside the debate, because a position past
+        # its stop is not a question the analysts get a vote on. This is the
+        # house rule at position scale: the system may always stop the
+        # bleeding. Without it a losing trade rides until the bear case wins
+        # the argument — which, for a trend-follower, is long after the trend
+        # broke, and is exactly how a village ends up with an average loss
+        # eight times its average win.
+        stopped = self._stops(market, positions, as_of)
+        raw = list(stopped) + list(
             self._from_bot(market, positions, equity, as_of)
             if adapter.is_bot(self.record.strategy or "")
             else self._from_pod(market, positions, as_of)
         )
+        # A symbol the stop is closing is not also a symbol to trade on
+        # opinion this bar. Closing wins.
+        closing = {p.symbol for p in stopped}
+        raw = list(stopped) + [p for p in raw[len(stopped):] if p.symbol not in closing]
 
         for proposal in raw:
             reference = proposal.reference_price or price(market.mark(proposal.symbol))
@@ -127,6 +141,65 @@ class Firm:
                 proposals.append(reviewed)
 
         return proposals
+
+    @staticmethod
+    def _gene_value(genome, name, default):
+        try:
+            return D((genome or {}).get(name, default))
+        except Exception:  # noqa: BLE001 - a malformed gene is a default gene
+            return D(default)
+
+    def _stops(self, market: MarketData, positions: Sequence[Position], as_of) -> list:
+        """Close anything that has fallen further than the firm will tolerate.
+
+        Reads `stop_loss_pct` from the genome, so the level is a gene and
+        evolution can find the right one per firm — a crypto desk and a rates
+        desk should not have the same tolerance, and neither should be a number
+        I picked. Zero switches it off, which is what every firm did before
+        this existed.
+
+        The whole position goes, not half of it. A stop that closes a fraction
+        is not a stop, it is an opinion about size, and the reason this exists
+        is that opinions were what kept the losers on the books.
+
+        Unpriceable positions are left alone: a symbol with no mark reads as a
+        total loss, and selling on that is the blind-feed massacre with extra
+        steps.
+        """
+        limit = self._gene_value(self.record.genome, "stop_loss_pct", 0)
+        if limit <= 0:
+            return []
+
+        out = []
+        for held in positions:
+            if not held.is_open:
+                continue
+            entry = D(held.avg_price)
+            if entry <= 0 or held.symbol in getattr(market, "unpriceable", {}):
+                continue
+            mark = price(market.mark(held.symbol))
+            if mark <= 0 or market.bar(held.symbol) is None:
+                continue
+            move = (mark - entry) / entry * D(100)
+            # Signed for the direction held: a short is losing when price rises.
+            against = -move if held.quantity > 0 else move
+            if against < limit:
+                continue
+            out.append(TradeProposal(
+                firm_id=self.record.id,
+                symbol=held.symbol,
+                side=(Side.SELL if held.quantity > 0 else Side.BUY).value,
+                quantity=qty(abs(held.quantity)),
+                confidence=D(100),
+                reference_price=mark,
+                rationale=(
+                    f"STOP: {held.symbol} is {percent(against)}% against a "
+                    f"{limit}% stop (in at {entry}, now {mark}). Closed whole, "
+                    "without a debate."
+                ),
+                as_of=as_of,
+            ))
+        return out
 
     # -- where a proposal comes from ---------------------------------------
     def _from_pod(self, market, positions, as_of) -> list:

@@ -56,6 +56,36 @@ class FirmSpec:
     universe: tuple = ()
     analysts: tuple = DEFAULT_ANALYSTS
     genome: dict = field(default_factory=dict)
+    #: What this firm's venue actually charges, in basis points per side.
+    #: `None` means "use the village default", which is right for an ETF desk
+    #: and badly wrong for a crypto exchange: Coinbase takes 0.6% a side, some
+    #: venues 0.55%, and the default here is 0.05%. Costing a crypto bot at
+    #: ETF rates flatters it by an order of magnitude, and for a strategy whose
+    #: deficit is smaller than its fees that is the entire result.
+    fee_bps: Optional[Decimal] = None
+    slippage_bps: Optional[Decimal] = None
+
+    @property
+    def costs_overridden(self) -> bool:
+        return self.fee_bps is not None or self.slippage_bps is not None
+
+    def costed(self, data):
+        """`data` with this firm's own costs, or `data` unchanged.
+
+        Returned rather than mutated because `DataConfig` is frozen, and
+        because a firm quietly editing the village's cost model would be a
+        much worse bug than the one this fixes.
+        """
+        if not self.costs_overridden:
+            return data
+        import dataclasses
+
+        return dataclasses.replace(
+            data,
+            fee_bps=D(self.fee_bps if self.fee_bps is not None else data.fee_bps),
+            slippage_bps=D(self.slippage_bps if self.slippage_bps is not None
+                           else data.slippage_bps),
+        )
 
     @classmethod
     def from_mapping(cls, key: str, raw: dict, defaults: Optional[FirmDefaults] = None) -> "FirmSpec":
@@ -87,6 +117,24 @@ class FirmSpec:
         if not isinstance(genome, dict):
             raise FirmSpecError(f"firm {key!r}: genome must be a mapping")
 
+        # `costs: {fee_bps: 60, slippage_bps: 20}`, or the two at the top level.
+        costs = raw.get("costs") or {}
+        if not isinstance(costs, dict):
+            raise FirmSpecError(f"firm {key!r}: costs must be a mapping")
+
+        def _bps(name):
+            value = costs.get(name, raw.get(name))
+            if value is None:
+                return None
+            try:
+                out = D(value)
+            except Exception as exc:  # noqa: BLE001
+                raise FirmSpecError(
+                    f"firm {key!r}: {name} must be a number, got {value!r}") from exc
+            if out < 0:
+                raise FirmSpecError(f"firm {key!r}: {name} cannot be negative")
+            return out
+
         return cls(
             firm_key=key,
             name=str(raw.get("name") or key),
@@ -98,6 +146,8 @@ class FirmSpec:
             universe=tuple(str(s).upper() for s in universe),
             analysts=tuple(str(a) for a in analysts),
             genome={str(k): v for k, v in genome.items()},
+            fee_bps=_bps("fee_bps"),
+            slippage_bps=_bps("slippage_bps"),
         )
 
 

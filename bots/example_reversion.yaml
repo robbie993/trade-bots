@@ -13,5 +13,10 @@ genome:
   value_window: 60
   fair_band_pct: 6
   calm_vol_pct: 30
+  # How far a position may fall from what it cost before it is closed without
+  # a debate. 0 turns the stop off, which is what every firm did before this
+  # gene existed — and is how a village ends up with an average loss eight
+  # times its average win.
+  stop_loss_pct: 0
 
 universe: [AAPL, MSFT, JNJ, KO]

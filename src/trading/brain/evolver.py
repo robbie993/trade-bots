@@ -43,6 +43,10 @@ GENES: dict = {
     "value_window": (D(30), D(150), True),
     "fair_band_pct": (D(2), D(25), False),
     "calm_vol_pct": (D(10), D(90), False),
+    # How far a position may fall from what it cost before it is closed
+    # regardless of what the analysts think. Zero switches it off, which is
+    # what every firm did before this gene existed.
+    "stop_loss_pct": (ZERO, D(25), False),
 }
 
 BASE_GENOME: dict = {
@@ -53,6 +57,18 @@ BASE_GENOME: dict = {
     "value_window": 90,
     "fair_band_pct": 8,
     "calm_vol_pct": 35,
+    # Off by default, and that is a measured decision rather than caution.
+    # A stop looked like the obvious fix for an average loss eight times the
+    # average win, so it was A/B'd over 120 bars before shipping: at 8% the
+    # village made $9,671 with a 1.07 loss/win ratio, and with the stop off it
+    # made $16,587 at 0.84. The stop was converting recoverable drawdowns into
+    # realised losses faster than it was cutting real ones.
+    #
+    # So it is a gene at zero. Evolution can find the level that suits a
+    # particular firm on a particular market, which is the whole reason it is
+    # a gene and not a constant — and one number picked by hand for nine very
+    # different desks was never going to be right for any of them.
+    "stop_loss_pct": 0,
 }
 
 

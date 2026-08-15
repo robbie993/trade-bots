@@ -623,6 +623,21 @@ class Ecosystem:
             self.flow.emit("ledger", f"borrow on {position.symbol}", firm=record.firm_key,
                            detail=f"{fmt_money(fee)} at {rate * 100}% a year")
 
+    def _costed_for(self, record: FirmRecord) -> TradingConfig:
+        """The village config, with this firm's own trading costs in it.
+
+        Read from the firm's spec rather than the database because costs are a
+        property of the venue it trades, which is configuration, not ledger.
+        Firms with nothing declared get the village default and the same object
+        back, so the common case allocates nothing.
+        """
+        spec = self._specs.get(record.firm_key)
+        if spec is None or not getattr(spec, "costs_overridden", False):
+            return self.config
+        import dataclasses
+
+        return dataclasses.replace(self.config, data=spec.costed(self.config.data))
+
     def _borrow_already_billed(self, record: FirmRecord, bar: str, resolution) -> bool:
         """Has this firm already paid borrow for this bar?
 
@@ -644,7 +659,11 @@ class Ecosystem:
         firm = self.build_firm(record)
         market.register(record.universe)
         positions = self.store.positions(record.id)
-        venue = build_venue(record.venue, self.config, self.gate)
+        # A venue costed for *this* firm. Coinbase charges 0.6% a side and an
+        # ETF desk 0.05%; one number for both makes the crypto firms look ten
+        # times better than they are, and for a strategy whose deficit is
+        # smaller than its fees that is the whole result rather than a detail.
+        venue = build_venue(record.venue, self._costed_for(record), self.gate)
 
         flow = self.flow
         raw = firm.propose(market, positions)
