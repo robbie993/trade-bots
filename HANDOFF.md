@@ -32,17 +32,55 @@ time, with no exceptions and no quorum that can override it.
 
 ## 2. Current state
 
-**Branch:** `claude/ai-village-trading-build-m4bg19`, **45 commits ahead** of the
-default branch `claude/mvv-phase-1-spec-ib4eui`. **No PR is open.** ~100 files,
-+16,500 lines.
+**Branch:** `claude/ai-village-trading-build-m4bg19`, **22 commits ahead** of the
+default branch `claude/mvv-phase-1-spec-ib4eui` (which is itself 6 ahead of us).
+**No PR is open.** 53 files changed, +7,101 / −87.
+
+> *Corrected 2026-08-15.* The previous line said 45 commits and +16,500 lines.
+> Measured: `git rev-list --left-right --count` says 6/22, and
+> `git diff --shortstat` says 53 files. Nothing turns on the number; it is
+> corrected because a handoff that is loose about the checkable things earns
+> no trust on the things you cannot check.
 
 **Tests:** 1347 passing, 2 skipped. `ruff check src/` clean. Six pre-existing
 lint warnings remain in `tests/` (`test_cli.py` E702 ×3, `test_trading_api.py`
 F401, `test_trading_living.py` E741 ×2) — untouched, unrelated to this work.
 
-**Money:** all 9 firms are `venue=paper`. 7 active, 2 paused. **Nothing has ever
-touched real money.** `trade live-status --summary` reports 0 of 9 firms meeting
-the promotion criteria, which is the expected answer for a village this young.
+**Money:** all 9 firms are `venue=paper`. **Nothing has ever touched real
+money.** `trade live-status --summary` reports 0 of 9 firms meeting the
+promotion criteria, which is the expected answer for a village this young.
+
+> **⚠ Read this before you believe any number in this section.**
+>
+> Everything below was measured **in a container, against that container's own
+> `data/mvv.db`**. `data/*.db` is gitignored, so that ledger never left the
+> container and the one on the operator's machine is a **different database
+> with different contents**. The original text warned that the *feed* differed.
+> That was too weak. On the operator's machine, on the same day:
+>
+> | | this section | the real ledger |
+> |---|---|---|
+> | firms | 7 active, 2 paused | **8 active, 1 killed** |
+> | `firm_a_etf` | cut to 25.4%, restored to $90,000 | **$100,000, never cut** |
+> | capital | $620,000 | **$595,472.53** |
+>
+> The thirteen cuts, the $64,581 restore and the cadence guard all happened to
+> a ledger that does not exist anywhere any more. **They are not fixes to the
+> running system; they are a description of a bug, verified somewhere else.**
+> The bug is real and the guard is real. The money movements are not.
+
+**Autonomy — §1 is conditional, and on the operator's machine the condition is
+off.** §1 says killing a firm needs a human "with no exceptions and no quorum
+that can override it". The code default is `TRADE_AUTONOMY=human` and honours
+that. The machine's `.env` sets `TRADE_AUTONOMY=council`. On 2026-08-14
+`firm_e_momentum` was killed and $34,527.47 released, `approved_by='the
+council'`, requested and approved **in the same second**, `applied: true`. No
+human was involved and none was asked.
+
+Nothing is broken here — the switch is documented and does what it says. But §1
+states the invariant as a property of the system, and it is a property of a
+setting. If the promise in §1 is the one you want, `TRADE_AUTONOMY` is the line
+that keeps it.
 
 **The scoreboard, as of the last run:**
 
@@ -67,6 +105,12 @@ call one below 60 bars for a reason. Treat it as "not yet losing".
 GitHub HTML (403). `git ls-remote` and PyPI work. Numbers above come from the
 local SQLite ledger, not live Alpaca data. **On the user's own machine
 `trade benchmark` will give a different — and real — answer.**
+
+> *2026-08-15, from the machine that can reach Alpaca.* It gave a different
+> answer for a reason nobody predicted: **the feed had not returned a bar
+> newer than 2026-06-04 since the day it started.** See §4a. Everything the
+> running village decided between 2026-08-13 and 2026-08-15 was decided on
+> ten-week-old prices, and the ledger it wrote is not evidence about anything.
 
 ---
 
@@ -162,6 +206,121 @@ settles expired contracts at intrinsic value before any firm deliberates.
 
 ---
 
+## 4a. The session of 2026-08-15 — run on the real machine
+
+The first time any of this was checked against the operator's own hardware.
+Three defects, all in the same organ, all invisible from inside the container.
+
+**The village had been blind since it started.** `AlpacaFeed` read one page of
+Alpaca's answer and ignored `next_page_token`. Alpaca returns the **oldest**
+page first, so a request for eighty days of hourly bars came back with the
+oldest ~260 of them and a token for the rest, which nobody followed. Measured
+on 2026-08-15: the newest `ETH-USD` bar the village could see was
+**2026-06-04**, and the newest `SPY` bar was **2026-07-01**. Every mark, every
+indicator, every score and every ethics verdict for three days was computed
+against June. Credentials were valid, every request returned 200, nothing was
+logged, and no test failed. Fixed by following the token, plus `_assert_fresh`,
+which refuses a series whose newest bar is older than `TRADE_MAX_STALE_DAYS`
+(default 4) — because pagination was one way to go blind and it will not be the
+last, and the check that catches the next one must not need to know its name.
+
+**The bar count that was a day count.** `bars = bars[-self.days:]` — and
+`self.days` is *calendar days*, which is what `_start()` reaches back by. On a
+daily feed the two are the same number, which is why it survived. On the `1h`
+bar the village actually runs, it kept **43 bars of the 180 it asked for**.
+Fixed by giving the feed a separate `keep_bars`. **This is the eighth
+appearance of the bug class in §5** and the second in this one function.
+
+**A cache with no expiry.** `series()` stored bars per symbol and never let go,
+and `ecosystem.feed` builds one feed for the life of the process. The loop had
+been up since 2026-08-14. Even with pagination fixed, every tick after the
+first would have been answered from the bars fetched at boot. The cache now
+expires after one bar (`ttl_s=bar.seconds`) — long enough to keep forty symbols
+a minute under the rate limit, short enough that nothing new can have happened.
+
+**The ethics layer blocked an exit, 1,053 times.** Of 3,866 brokerage events on
+the real ledger, **3,847 were ethics BLOCKs** — and all of them were the same
+three orders, re-proposed and re-refused every sixty seconds from 2026-08-13 to
+2026-08-15. The village had not filled an order since 2026-08-14T15:06Z. One of
+the three was `firm_c_crypto` trying to **sell** 6.66 ETH.
+
+`_liberty` divided the order by the mean volume of 20 **bars** and called the
+result a share of a **day** — the same bug class again, ninth appearance — so
+6.66 ETH read as 318% of a day's volume when it was nearer 4%. But the unit bug
+is the smaller half. The larger half is that the check applied to a *reducing*
+order at all: the foundation whose entire purpose is that the operator can
+always get out was the thing standing between a firm and the way out, while
+`care` in the same payload said "reducing exposure cannot harm the capital".
+
+**A reducing order is now never refused by `liberty`** — not for size, not for
+liquidity, not for anything that foundation knows about. Illiquidity is a
+reason to be slower getting *in*. It is never a reason to be barred from
+getting out. The denominator goes through `resolution.py` (and crypto's day is
+24 hours of bars, not the 6.5-hour equity session).
+
+**Verified after the fix, against live Alpaca:** `ETH-USD` newest bar
+`2026-08-16T04:00Z`, `WIF-USD` `2026-08-16T05:00Z`, `SPY` `2026-08-14T20:00Z`
+(Friday's close — correct for a Saturday), 180 bars each instead of 43.
+
+**Deployed and observed.** Both processes were stopped and restarted on the
+fixed code at `2026-08-17T05:40Z`. First tick five minutes later:
+
+```
+tick @ 2026-08-17 05:45 — 6 proposal(s), 1 filled, 3 blocked by risk, 2 blocked by ethics
+reconciled: 9 firm(s), no breaks
+```
+
+The first fill since `2026-08-14T15:06Z`. The two identities still hold. The
+ETH exit is no longer refused — and note *why* it is not simply passing now:
+against August prices the firm no longer wants to sell ETH at all. **The exit
+that was blocked 1,053 times was itself a June artefact.** The two remaining
+ethics blocks are `SOL-USD` and `DOGE-USD` **buys** at 20.9% and 42.0% of daily
+volume — entries, correctly refused, and now with numbers that mean something.
+
+**One honest caveat: the retry loop is not gone, it is only correct.** Those
+two buys are re-proposed and re-refused every sixty seconds, exactly as the ETH
+sell was. Nothing is wrong with either decision; the firm simply wants a
+position bigger than Alpaca's book will absorb and has no way to learn that.
+Vetoing an order the venue cannot fill, forever, is still the wrong shape — it
+should be **sized down to the liquidity limit**, not refused. Until then the
+"alarm on repetition" in the conscience section below is what would have caught
+the original outage on day one, and it would catch this too.
+
+### What this does *not* fix
+
+- **The ledger is not a track record.** Positions were opened on June prices
+  and are now marked at August ones. The P&L that appears is a measurement
+  artefact of the fix, not a result. Do not benchmark across 2026-08-15.
+- **`firm_e_momentum` is killed and still holds $45,472.53** in three open
+  positions (NVDA, AMZN, TSLA). The kill returned $34,527.47 of *cash* and
+  abandoned the book. A killed firm does not tick, and `_authority` blocks its
+  orders anyway — including sells — so nothing will ever close them. The same
+  inversion as `liberty`, in a second place.
+
+  **There is already a right way to handle this and it was not invented here.**
+  `brokerage.revive_firm` exists for "a kill decided on numbers that were not
+  real", and its docstring records the precedent: an Alpaca outage once killed
+  a village of eleven by marking every position to zero. This kill qualifies on
+  the facts — the six consecutive losing trades that triggered it were all
+  executed against June prices on 2026-08-14. The function is guarded exactly
+  as you would want: it re-evaluates against a working feed and **refuses if
+  the firm would be killed again today**, and it restores status only, never
+  capital.
+
+  ```bash
+  trade revive firm_e_momentum --by "<name>"
+  ```
+
+  **Left for the operator deliberately.** It is not a bug fix — it either
+  reverses a judgement or moves $45k of book back into play, and the guard
+  makes it safe to *attempt*, not automatic to decide.
+- **The test suite reads the operator's `.env`.** `src/config.py:22` calls
+  `_load_dotenv()` at import, so `TRADE_BAR=1h` from the machine's `.env` lands
+  in every test process. `test_ccxt_is_reachable_by_configuration` fails on a
+  clean checkout on that machine and passes in the container, on identical
+  code. Two tests now pin their own resolution; the general problem — a suite
+  whose result depends on machine config — is untouched.
+
 ## 5. Failed attempts
 
 **Read this section before proposing anything.** Most of it is me being wrong.
@@ -178,6 +337,15 @@ settles expired contracts at intrinsic value before any firm deliberates.
    every minute.
 5. The `by_bar` insertion-order scramble (below).
 6. Allocation cuts per tick → the thirteen cuts.
+7. `bars[-self.days:]` — calendar days used as a bar count → 43 bars of the
+   180 asked for, on every symbol, for the life of the deployment (§4a).
+8. `_liberty` dividing by mean *bar* volume and calling it *daily* volume →
+   an exit refused 1,053 times (§4a).
+
+Two of those eight were found on the same day, in the same organ, by running
+the thing on a machine that could reach the market. The container could not,
+so in the container both were unreachable and neither test suite nor review
+would ever have caught them. **The bug class is not slowing down.**
 
 `src/trading/resolution.py` exists so there is exactly one place that knows how
 long a bar is. **If you are writing anything that divides by time, go through
@@ -232,9 +400,19 @@ it.** Assume this bug is still hiding somewhere and look for it.
 
 Roughly in order of value to the goal.
 
+0. **Decide what happens to the poisoned ledger** *(new, and ahead of the
+   benchmark)*. The village traded for three days on June prices and then
+   stopped trading at all. Its 262 fills are not a record of a strategy; they
+   are a record of a broken feed. Benchmarking it answers a question nobody
+   asked. The two honest options are to reset the paper ledger and start the
+   clock at the fix, or to keep it and mark everything before 2026-08-15 as
+   uncounted. `data/mvv.db.before-feedfix-2026-08-15` is the pre-fix ledger,
+   kept for exactly this decision.
+
 1. **Run `trade benchmark` on the real machine.** Every number in §2 comes from
    a container that cannot reach Alpaca. The real answer may differ. Nothing
-   below is worth doing if the scoreboard says something else.
+   below is worth doing if the scoreboard says something else. *Do this after
+   0, not before — on the current ledger it measures the bug.*
 2. **The five losing firms.** `trade post-mortem <firm>` names one of four
    causes — costs, exit, win rate, one bad symbol. `firm_c_crypto` (−5.03%) and
    `firm_i_memecoins` (−3.48%) are the worst. Note the post-mortem refuses to
@@ -252,6 +430,65 @@ Roughly in order of value to the goal.
 7. AlphaGBM / Unusual Whales as inputs to the signals board.
 8. Lattice at `/village/lattice` *(#25)*, OmniRoute *(#26)*, Perplexica +
    AnythingLLM *(#27)*.
+
+### On keeping the conscience at all
+
+Asked directly on 2026-08-15: should the ethics layer be deleted? The record,
+from the real ledger, before any interpretation:
+
+| | |
+|---|---|
+| reviews performed | 3,860 |
+| non-`allow` findings | 3,860 |
+| …from `liberty` | **3,860 (100%)** |
+| …from the other five foundations | **0** |
+| correct refusals, all time | **0** |
+
+Every refusal the conscience has ever issued came from one foundation, and
+every one of them was the unit bug in §4a. `care`, `fairness`, `loyalty`,
+`authority` and `sanctity` have not objected to anything, once, ever.
+
+That is a real argument for deletion and it should not be waved away. The
+argument against deletion is that it is the wrong cut. Read the six by what
+they *do* rather than what they are named:
+
+| foundation | what it actually checks | who else already checks it |
+|---|---|---|
+| `care` | concentration, equity floor | `risk_manager` |
+| `loyalty` | symbol ∈ firm universe | `risk_manager` |
+| `authority` | killed / paused / venue gates | the gate |
+| `fairness` | wash trades, churn | nobody — and it matters live |
+| `sanctity` | operator's restricted list | nobody — operator policy |
+| `liberty` | order vs. venue liquidity | nobody — real risk |
+
+Three duplicate checks that already exist upstream, which is *why* they have
+never fired: something else refuses first. Three are load-bearing and have no
+other home.
+
+So: **keep the checks, drop the frame.** The moral vocabulary is not neutral
+decoration — it is what caused the outage. "Liberty: never take a position the
+operator cannot get out of" is a sentence about *entering*, and implemented as
+a veto over every order it silently became a veto over *leaving*. Had it been
+called `liquidity_risk` and lived in `risk_manager` beside the other sizing
+rules, the exemption for a reducing order would have been the first thing
+anyone wrote, because `risk_manager` already knows the difference between
+opening and closing and the conscience does not.
+
+A second cost: six foundations reporting on every order made 3,847 identical
+blocks look like a system working hard rather than a system stuck. The signal
+that mattered — *nothing has filled in 33 hours* — was not in the payload
+anywhere.
+
+**Recommended, not done** (each is a decision, not a bug fix):
+
+- Fold `care`, `loyalty` and `authority` into `risk_manager`; delete the
+  duplicates rather than keeping two places that can disagree.
+- Rename what remains for what it is: `restricted_list` and `liquidity_risk`.
+  Keep `fairness` — a wash trade is meaningless on paper and not meaningless
+  on a real venue.
+- Alarm on *repetition*: the same order refused for the same reason N times is
+  a defect report, whatever the reason is. That alarm would have caught this on
+  day one and does not depend on anyone guessing which check breaks next.
 
 ### Standing constraints — do not quietly relax these
 
