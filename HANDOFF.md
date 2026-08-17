@@ -42,7 +42,11 @@ default branch `claude/mvv-phase-1-spec-ib4eui` (which is itself 6 ahead of us).
 > corrected because a handoff that is loose about the checkable things earns
 > no trust on the things you cannot check.
 
-**Tests:** 1347 passing, 2 skipped. `ruff check src/` clean. Six pre-existing
+**Tests:** 1347 passing, 2 skipped **in the container**. On the operator's
+machine the same commit gives **63 failed, 27 errors** — a broken suite, not a
+broken branch. See the end of §4a before drawing any conclusion from a suite
+run. `ruff check src/` clean (ruff is not installed on the operator's machine,
+so this is a container-only claim). Six pre-existing
 lint warnings remain in `tests/` (`test_cli.py` E702 ×3, `test_trading_api.py`
 F401, `test_trading_living.py` E741 ×2) — untouched, unrelated to this work.
 
@@ -320,6 +324,38 @@ the original outage on day one, and it would catch this too.
   clean checkout on that machine and passes in the container, on identical
   code. Two tests now pin their own resolution; the general problem — a suite
   whose result depends on machine config — is untouched.
+
+- **"1347 passing" does not reproduce here, and the gap is not this branch.**
+  Measured on the operator's machine, at commit `3a6e3b6`, *before* any change
+  in §4a: **63 failed, 27 errors.** After: 70 failed, 27 errors — and every one
+  of the seven new failures is a test added in §4a that **passes when its file
+  is run alone**. One baseline failure was fixed. No existing test changed from
+  passing to failing.
+
+  The cause is not the branch, it is the suite. `test_asgi.py`,
+  `test_deploy.py`, `test_trading_webhooks.py` and `test_access.py` call
+  `importlib.reload()`, and when those files fail — as they do on this machine
+  — they leave `sys.modules` half-rebuilt. Everything downstream that
+  monkeypatches a module global then patches an object the code no longer
+  resolves against, and the fake is silently bypassed. Demonstrated:
+
+  ```
+  pytest tests/test_trading_ccxt_feed.py                       →  54 passed
+  pytest tests/test_asgi.py tests/test_deploy.py \
+         tests/test_trading_ccxt_feed.py                       →  20 failed
+  ```
+
+  The visible symptom is the worst possible one: **the feed tests stop being
+  fakes and make real HTTP requests to Alpaca**, with the fixture's dummy
+  credentials, and fail on 401. Seventeen such calls in one run. A suite that
+  reaches the network when it believes it is offline can fail for reasons that
+  have nothing to do with the code, and — more dangerously — can *pass* for
+  reasons that have nothing to do with the code.
+
+  **Do not read a green or red full-suite run on this machine as evidence
+  about a change.** Run the files that cover what you touched, alone, and
+  compare against the same files alone at the previous commit. That is what
+  was done for §4a.
 
 ## 5. Failed attempts
 
