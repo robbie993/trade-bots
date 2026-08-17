@@ -477,6 +477,17 @@ class CcxtFeed:
         return bars
 
 
+def _env_float(name: str, default: float) -> float:
+    """A float from the environment. A bad value is the default, not a crash."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 class AlpacaFeed:
     """Stocks and crypto from one place.
 
@@ -513,14 +524,47 @@ class AlpacaFeed:
 
     def __init__(self, days: int = 180, timeout_s: int = 20,
                  timeframe: str = "1Day", stock_feed: str = "",
-                 min_interval_s: float = 0.35):
+                 min_interval_s: float = 0.35, keep_bars: Optional[int] = None,
+                 max_stale_days: Optional[float] = None, ttl_s: float = 0.0):
         self.days = int(days)
         self.timeout_s = timeout_s
         self.timeframe = timeframe
         self.stock_feed = stock_feed or os.environ.get("TRADE_ALPACA_FEED", "iex")
         self.min_interval_s = float(min_interval_s)   # ~170 requests a minute
+        # How many *bars* to keep. `days` is calendar days — it sets how far
+        # back to ask — and the two are not the same number on any intraday
+        # resolution. Keeping `days` bars of hourly data kept 43 of them.
+        self.keep_bars = int(keep_bars) if keep_bars else None
+        self.max_stale_days = (
+            float(max_stale_days) if max_stale_days is not None
+            else _env_float("TRADE_MAX_STALE_DAYS", 4.0)
+        )
+        # How long a symbol's bars stay cached. Zero means forever, which is
+        # correct for a backtest and silently wrong for a loop: a village that
+        # runs for a week on one process would answer every tick from the bars
+        # it fetched on the first one. See `_cached`.
+        self.ttl_s = float(ttl_s)
         self._cache: dict[str, list[Bar]] = {}
+        self._fetched_at: dict[str, float] = {}
         self._last_call = 0.0
+
+    def _cached(self, symbol: str) -> Optional[list]:
+        """The stored bars, if they are still allowed to be the answer.
+
+        The cache exists because forty symbols asked once a minute is a rate
+        limit; the expiry exists because the same cache, unbounded, is how a
+        long-running process stops seeing the market at all. One bar is the
+        right lifetime: nothing new can have happened until the bar turns over.
+        """
+        if symbol not in self._cache:
+            return None
+        if self.ttl_s <= 0:
+            return self._cache[symbol]
+        import time
+
+        if time.monotonic() - self._fetched_at.get(symbol, 0.0) > self.ttl_s:
+            return None
+        return self._cache[symbol]
 
     def _be_polite(self) -> None:
         """Space the requests out. See the note in `series`."""
@@ -583,28 +627,17 @@ class AlpacaFeed:
         span = int(self.days * 1.7) + 10
         return (datetime.now(timezone.utc) - timedelta(days=span)).date().isoformat()
 
-    def series(self, symbol: str) -> list[Bar]:
-        if symbol in self._cache:
-            return self._cache[symbol]
-        upper = symbol.upper()
-        crypto = self.is_crypto(upper)
-        if crypto:
-            url = self.CRYPTO
-            params = {"symbols": self.pair(upper), "timeframe": self.timeframe,
-                      "start": self._start(), "limit": 10000}
-        else:
-            url = self.STOCKS.format(symbol=upper)
-            params = {"timeframe": self.timeframe, "start": self._start(),
-                      "limit": 10000, "feed": self.stock_feed}
+    def _one_page(self, url: str, params: dict, symbol: str, crypto: bool) -> dict:
+        """One request, with the refusals Alpaca actually returns.
 
-        # A village of forty symbols asks forty times in a burst, and the free
-        # tier allows two hundred a minute. Spacing the calls costs a few
-        # seconds once — the bars are cached after that — and is the difference
-        # between a village that starts and one that rate-limits itself blind.
+        A village of forty symbols asks forty times in a burst, and the free
+        tier allows two hundred a minute. Spacing the calls costs a few seconds
+        once — the bars are cached after that — and is the difference between a
+        village that starts and one that rate-limits itself blind.
+        """
         self._be_polite()
-
         try:
-            payload = _get_json(url, params, self._headers(), self.timeout_s) or {}
+            return _get_json(url, params, self._headers(), self.timeout_s) or {}
         except FeedHTTPError as exc:
             if exc.status in (401, 403):
                 raise FeedNotConfigured(
@@ -622,7 +655,7 @@ class AlpacaFeed:
 
                 time.sleep(2.0)
                 try:
-                    payload = _get_json(
+                    return _get_json(
                         url, params, self._headers(), self.timeout_s
                     ) or {}
                 except FeedHTTPError as retry_exc:
@@ -632,17 +665,90 @@ class AlpacaFeed:
                         "short tick interval will hit it. Raise MVV_TICK_INTERVAL, or "
                         "trim the universes in config/firm_config.yaml."
                     ) from retry_exc
-                # The retry worked. Falling through to the raise below would
-                # have thrown away the bars it just fetched.
-            else:
-                raise FeedNotConfigured(
-                    f"alpaca returned {exc.status} for {symbol}: {exc.body}"
-                ) from exc
+            raise FeedNotConfigured(
+                f"alpaca returned {exc.status} for {symbol}: {exc.body}"
+            ) from exc
 
-        rows = payload.get("bars")
-        if isinstance(rows, dict):          # the crypto endpoint keys by pair
-            rows = rows.get(self.pair(upper)) or []
-        rows = rows or []
+    def _all_pages(
+        self, url: str, params: dict, symbol: str, crypto: bool, upper: str
+    ) -> list:
+        """Every page of the window, oldest first.
+
+        **Alpaca paginates, and the page it gives you first is the oldest one.**
+        `limit` caps rows per *page*, not per answer: ask for 10,000 hourly bars
+        over eighty days and the first page comes back with a couple of hundred
+        of them and a `next_page_token` for the rest. Reading only that page
+        does not return "slightly less history" — it returns history that
+        *stops*, at a date that drifts further into the past every day the
+        process keeps running, while every credential works and every request
+        returns 200.
+
+        This is how the village spent its first days pricing August against
+        June: the newest bar anyone could see was 2026-06-04, so every mark,
+        every indicator and every score was computed on ten-week-old prices.
+        Nothing logged an error, because nothing had gone wrong that the code
+        knew how to notice.
+        """
+        rows: list = []
+        token = None
+        for _ in range(50):     # a hard stop: a token loop must not run forever
+            page = dict(params)
+            if token:
+                page["page_token"] = token
+            payload = self._one_page(url, page, symbol, crypto)
+            batch = payload.get("bars")
+            if isinstance(batch, dict):     # the crypto endpoint keys by pair
+                batch = batch.get(self.pair(upper)) or []
+            rows.extend(batch or [])
+            token = payload.get("next_page_token")
+            if not token:
+                return rows
+        return rows
+
+    def _assert_fresh(self, bars: list, symbol: str) -> None:
+        """Refuse a series that stops in the past.
+
+        Pagination was one way to go blind on live credentials; it will not be
+        the last. This is the check that does not care *why* the newest bar is
+        old — an outage, a cache, a token loop, a symbol the venue quietly
+        stopped covering — only that it is, and that trading on it is not a
+        decision anybody made.
+
+        Generous by default: four calendar days clears a long weekend on an
+        equity, and crypto never closes at all. `TRADE_MAX_STALE_DAYS` moves it,
+        and the refusal is a `FeedNotConfigured`, so the symbol is reported
+        unpriceable rather than taking the village down.
+        """
+        if not bars or self.max_stale_days <= 0:
+            return
+        newest = bars[-1].as_of
+        if newest is None:
+            return
+        age_days = (datetime.now(timezone.utc) - newest).total_seconds() / 86_400
+        if age_days > self.max_stale_days:
+            raise FeedNotConfigured(
+                f"alpaca's newest bar for {symbol} is {newest.date().isoformat()}, "
+                f"{age_days:.1f} days old (limit {self.max_stale_days}). Refusing to "
+                "price a book against history that stops. Raise TRADE_MAX_STALE_DAYS "
+                "if this symbol genuinely does not trade that often."
+            )
+
+    def series(self, symbol: str) -> list[Bar]:
+        cached = self._cached(symbol)
+        if cached is not None:
+            return cached
+        upper = symbol.upper()
+        crypto = self.is_crypto(upper)
+        if crypto:
+            url = self.CRYPTO
+            params = {"symbols": self.pair(upper), "timeframe": self.timeframe,
+                      "start": self._start(), "limit": 10000}
+        else:
+            url = self.STOCKS.format(symbol=upper)
+            params = {"timeframe": self.timeframe, "start": self._start(),
+                      "limit": 10000, "feed": self.stock_feed}
+
+        rows = self._all_pages(url, params, symbol, crypto, upper)
 
         bars: list[Bar] = []
         for row in rows:
@@ -666,8 +772,18 @@ class AlpacaFeed:
                 f"({'crypto' if crypto else self.stock_feed}); refusing to run "
                 "indicators on a truncated history"
             )
-        bars = bars[-self.days :]
+        bars.sort(key=lambda b: b.as_of)
+        self._assert_fresh(bars, symbol)
+        # Bars, not days. `self.days` is calendar days — it is what `_start`
+        # reaches back by — and using it as a bar count kept 43 hourly bars out
+        # of the 180 the village asked for. See `resolution.py`: a number in
+        # one unit of time is not a number in another.
+        keep = self.keep_bars or self.days
+        bars = bars[-keep:]
+        import time
+
         self._cache[symbol] = bars
+        self._fetched_at[symbol] = time.monotonic()
         return bars
 
 
@@ -768,7 +884,13 @@ def _one_feed(source: str, config: DataConfig) -> MarketFeed:
     if source == "yahoo":
         return YahooFeed(days=span, interval=bar.yahoo)
     if source == "alpaca":
-        return AlpacaFeed(days=span, timeframe=bar.alpaca)
+        # `span` is how far back to ask; `history_days` is how many bars to
+        # keep. On a daily feed they are the same number, which is why the one
+        # that was doing both jobs looked correct for so long.
+        return AlpacaFeed(
+            days=span, timeframe=bar.alpaca, keep_bars=config.history_days,
+            ttl_s=bar.seconds,
+        )
     if source == "ccxt":
         return CcxtFeed(
             exchange=os.environ.get("TRADE_CCXT_EXCHANGE", "binance"),

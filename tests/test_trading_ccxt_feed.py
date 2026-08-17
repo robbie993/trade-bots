@@ -12,7 +12,7 @@ to test a feed — a test that needs an exchange to be up is not a test.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -179,7 +179,12 @@ def test_the_default_feed_is_still_the_deterministic_one(monkeypatch):
 def test_ccxt_is_reachable_by_configuration(fake_ccxt):
     from src.trading.config import DataConfig
 
-    feed = build_feed(DataConfig(source="ccxt", history_days=60))
+    # `bar` pinned rather than inherited. `src/config.py` loads the operator's
+    # `.env` at import time, so an unpinned resolution makes this test read
+    # whatever the machine is running — on a `1h` village it asks for 15
+    # calendar days, and this fixture answers a window in days regardless of
+    # timeframe, so the feed sees a truncated history and refuses.
+    feed = build_feed(DataConfig(source="ccxt", history_days=60, bar="1d"))
     assert feed.name == "ccxt"
     assert feed.series("BTC-USD")
 
@@ -428,12 +433,23 @@ def fake_http(monkeypatch):
     that had ceased to exist. The feeds run on urllib now, and this fixture
     fakes the seam that actually exists.
     """
-    state = {"calls": [], "status": 200, "bars": 200, "payload": None}
+    # `pages` fakes Alpaca's pagination: the real API answers a wide window
+    # with its *oldest* rows and a `next_page_token`, and a feed that reads one
+    # page gets history that stops months ago while every call returns 200.
+    # `newest` is when the last bar is dated — the fixture used to date them all
+    # to January, which is precisely the state the freshness check now refuses.
+    state = {"calls": [], "status": 200, "bars": 200, "payload": None,
+             "pages": 1, "newest": None}
 
-    def rows(n):
-        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    def rows(n, page):
+        newest = state["newest"] or datetime.now(timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        )
+        # Oldest page first, so page 0 is the far end of the window.
+        offset = (state["pages"] - 1 - page) * n
         return [
-            {"t": (base.replace(day=1 + (i % 27))).isoformat().replace("+00:00", "Z"),
+            {"t": (newest - timedelta(days=offset + n - 1 - i))
+                .isoformat().replace("+00:00", "Z"),
              "o": 100 + i, "h": 101 + i, "l": 99 + i, "c": 100.5 + i, "v": 1000 + i}
             for i in range(n)
         ]
@@ -441,16 +457,23 @@ def fake_http(monkeypatch):
     def get_json(url, params=None, headers=None, timeout=None):
         from src.trading.data.feeds import FeedHTTPError
 
-        state["calls"].append({"url": url, "params": params or {},
+        params = params or {}
+        state["calls"].append({"url": url, "params": params,
                                "headers": headers or {}})
         if state["status"] != 200:
             raise FeedHTTPError(state["status"], "nope")
         if state["payload"] is not None:
             return state["payload"]
+        page = int(params.get("page_token") or 0)
+        body = rows(state["bars"], page)
+        answer = {}
+        if page + 1 < state["pages"]:
+            answer["next_page_token"] = str(page + 1)
         if "crypto" in url:
-            pair = (params or {}).get("symbols")
-            return {"bars": {pair: rows(state["bars"])}}
-        return {"bars": rows(state["bars"])}
+            answer["bars"] = {params.get("symbols"): body}
+        else:
+            answer["bars"] = body
+        return answer
 
     monkeypatch.setattr("src.trading.data.feeds._get_json", get_json)
     return state
@@ -545,6 +568,108 @@ def test_money_stays_decimal(alpaca_keys, fake_http):
     assert bar.as_of.tzinfo is not None
 
 
+# -- pagination, and the stale history it caused ---------------------------
+def test_every_page_is_followed_not_just_the_first(alpaca_keys, fake_http):
+    """The bug that had the village pricing August against June.
+
+    Alpaca answers a wide window with its oldest rows and a token for the
+    rest. Reading page one returns history that *stops*, on working
+    credentials, with no error anywhere.
+    """
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["pages"] = 4
+    fake_http["bars"] = 50
+
+    bars = AlpacaFeed(days=500).series("SPY")
+
+    assert len(fake_http["calls"]) == 4, "one call per page"
+    assert len(bars) == 200, "every page kept, not just the first"
+    assert fake_http["calls"][1]["params"]["page_token"] == "1"
+
+
+def test_a_series_that_stops_in_the_past_is_refused(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed, FeedNotConfigured
+
+    fake_http["newest"] = datetime.now(timezone.utc) - timedelta(days=70)
+
+    with pytest.raises(FeedNotConfigured, match="days old"):
+        AlpacaFeed(days=60).series("SPY")
+
+
+def test_a_long_weekend_is_not_stale(alpaca_keys, fake_http):
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["newest"] = datetime.now(timezone.utc) - timedelta(days=3)
+    assert AlpacaFeed(days=60).series("SPY"), "an equity shuts for three days"
+
+
+def test_how_many_bars_to_keep_is_bars_not_calendar_days(alpaca_keys, fake_http):
+    """`days` reaches back; `keep_bars` decides how many bars survive.
+
+    One number was doing both jobs, which is only correct on a daily feed. On
+    the hourly bar it kept 43 of the 180 the village asked for.
+    """
+    from src.trading.data.feeds import AlpacaFeed
+
+    fake_http["bars"] = 400
+    kept = AlpacaFeed(days=43, timeframe="1Hour", keep_bars=180).series("SPY")
+
+    assert len(kept) == 180
+
+
+def test_an_hourly_feed_asks_for_days_and_keeps_bars(alpaca_keys, fake_http):
+    from src.trading.config import DataConfig
+    from src.trading.data.feeds import build_feed
+
+    fake_http["bars"] = 400
+    feed = build_feed(DataConfig(source="alpaca", history_days=180, bar="1h"))
+
+    assert feed.keep_bars == 180, "bars, the unit the village asked in"
+    assert feed.days < 180, "calendar days, a smaller number on an hourly bar"
+
+
+def test_bars_are_cached_but_not_forever(alpaca_keys, fake_http, monkeypatch):
+    """A cache with no expiry is how a week-old process stops seeing the market.
+
+    The village runs one loop for days on one feed object. Caching per symbol
+    is what keeps forty symbols a minute under the rate limit; caching them
+    *permanently* means every tick after the first is answered from the bars
+    fetched at boot.
+    """
+    from src.trading.data.feeds import AlpacaFeed
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("time.monotonic", lambda: clock["t"])
+    feed = AlpacaFeed(days=60, min_interval_s=0, ttl_s=3600)
+
+    feed.series("SPY")
+    feed.series("SPY")
+    assert len(fake_http["calls"]) == 1, "inside the bar, the cache answers"
+
+    clock["t"] += 3601
+    feed.series("SPY")
+    assert len(fake_http["calls"]) == 2, "the bar turned over; ask again"
+
+
+def test_a_feed_with_no_ttl_still_caches_forever(alpaca_keys, fake_http):
+    """Backtests reuse one feed for thousands of ticks and must not refetch."""
+    from src.trading.data.feeds import AlpacaFeed
+
+    feed = AlpacaFeed(days=60, min_interval_s=0)
+    feed.series("SPY")
+    feed.series("SPY")
+    assert len(fake_http["calls"]) == 1
+
+
+def test_a_running_village_gets_a_ttl_of_one_bar(alpaca_keys, fake_http):
+    from src.trading.config import DataConfig
+    from src.trading.data.feeds import build_feed
+
+    feed = build_feed(DataConfig(source="alpaca", history_days=60, bar="1h"))
+    assert feed.ttl_s == 3600
+
+
 def test_alpaca_is_reachable_by_configuration(alpaca_keys, fake_http):
     from src.trading.config import DataConfig
     from src.trading.data.feeds import build_feed
@@ -618,9 +743,9 @@ def test_a_rate_limit_is_retried_before_being_believed(alpaca_keys, fake_http,
         if calls["n"] == 1:
             raise FeedHTTPError(429, '{"message": "too many requests."}')
         real["calls"].append({"url": url, "params": params or {}, "headers": headers or {}})
-        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        newest = datetime.now(timezone.utc)
         return {"bars": [
-            {"t": base.replace(day=1 + (i % 27)).isoformat().replace("+00:00", "Z"),
+            {"t": (newest - timedelta(days=119 - i)).isoformat().replace("+00:00", "Z"),
              "o": 100, "h": 101, "l": 99, "c": 100.5, "v": 10}
             for i in range(120)
         ]}

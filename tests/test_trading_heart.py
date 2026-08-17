@@ -172,13 +172,76 @@ def test_liberty_blocks_a_position_that_cannot_be_exited(market):
     assert "exited quickly" in review.reason
 
 
-def test_liberty_warns_before_it_blocks(market):
+def test_liberty_warns_before_it_blocks(market, monkeypatch):
+    # Pinned: the share is per *day*, so what counts as 5% of one depends on
+    # the bar. `src/config.py` loads the operator's `.env` at import, so an
+    # unpinned resolution here is whatever the machine happens to be running.
+    monkeypatch.setenv("TRADE_BAR", "1d")
     market.seek(150)
     typical = sum((b.volume for b in market.history("SPY", 20)), D(0)) / D(20)
     review = Conscience().review(
         proposal(quantity=str(typical * D("0.05"))), firm(), [], market
     )
     assert finding(review, "liberty").warns
+
+
+def test_liberty_never_blocks_the_way_out(market):
+    """The inversion that ran for three days.
+
+    A check whose stated purpose is that the operator can always exit refused
+    1,053 consecutive exits, because the size test did not ask which direction
+    the order went. Nothing about liquidity is a reason to bar a firm from
+    reducing: the system may always stop the bleeding.
+    """
+    market.seek(150)
+    held = [Position(firm_id=1, symbol="SPY", quantity=D("500000"), avg_price=D("100"))]
+
+    review = Conscience().review(
+        proposal(side=Side.SELL.value, quantity="500000"), firm(), held, market
+    )
+
+    assert not finding(review, "liberty").blocks
+    assert not review.blocked
+    assert "way out" in finding(review, "liberty").reason
+
+
+def test_liberty_still_blocks_an_entry_that_size_cannot_leave(market):
+    """The exemption is for reducing, not for everything."""
+    market.seek(150)
+    review = Conscience().review(proposal(quantity="10000000"), firm(), [], market)
+    assert finding(review, "liberty").blocks
+
+
+def test_closing_a_short_is_also_a_way_out(market):
+    market.seek(150)
+    short = [Position(firm_id=1, symbol="SPY", quantity=D("-500000"), avg_price=D("100"))]
+
+    review = Conscience().review(
+        proposal(side=Side.BUY.value, quantity="500000"), firm(), short, market
+    )
+
+    assert not finding(review, "liberty").blocks
+
+
+def test_liberty_measures_a_day_not_a_bar(market, monkeypatch):
+    """Twenty hourly bars are not a day, and the check compares against a day.
+
+    On `1h` the old reading divided by the mean *hourly* volume, so an order
+    worth a few percent of a day's turnover reported as several hundred
+    percent of it — which is how a live exit came to be refused.
+    """
+    market.seek(150)
+    per_bar = sum((b.volume for b in market.history("SPY", 20)), D(0)) / D(20)
+    # 20% of one bar: a block on the old reading, comfortable against a day.
+    size = proposal(quantity=str(per_bar * D("0.2")))
+
+    monkeypatch.setenv("TRADE_BAR", "1d")
+    daily = Conscience().review(size, firm(), [], market)
+    monkeypatch.setenv("TRADE_BAR", "1h")
+    hourly = Conscience().review(size, firm(), [], market)
+
+    assert finding(daily, "liberty").blocks, "20% of a daily bar is 20% of a day"
+    assert not finding(hourly, "liberty").blocks, "the same order is ~3% of an hourly day"
 
 
 # -- aggregation ----------------------------------------------------------

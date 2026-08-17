@@ -27,15 +27,68 @@ stops it. Set ``TRADE_ETHICS_STRICT=1`` and warns become blocks.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional, Sequence
 
 from ...money import D, ZERO, fmt_money, money, percent
+from .. import resolution
 from ..config import HeartConfig
 from ..data.market_data import MarketData
 from ..models import EthicsVerdict, FirmRecord, Position, Side, TradeProposal
 from .restrictions import AssetRestrictions
 
 FOUNDATIONS = ("care", "fairness", "loyalty", "authority", "sanctity", "liberty")
+
+#: Bars of volume history behind the liquidity estimate. Bars, not days — the
+#: number of them is a lookback, and turning them into a *rate per day* is
+#: `_bars_per_day`'s job and nothing else's.
+_LIBERTY_LOOKBACK_BARS = 20
+
+
+def _bars_per_day(symbol: str) -> Decimal:
+    """How many bars of this symbol's series make one day of trading.
+
+    The liberty check compares an order against a **daily** volume, and the
+    series it reads is in whatever bar the village is running on. On the hourly
+    bar those differ by 6.5× for an equity and 24× for a coin, and the original
+    check skipped the conversion entirely: it divided by the mean *hourly*
+    volume and called the answer a share of the day. A 6.66 ETH order read as
+    318% of a day's volume when it was closer to 4%.
+
+    That is the mistake `resolution.py` exists to prevent, in its eighth
+    outfit. So this asks that module for the bar, and only the session length
+    is decided here — crypto does not close, so its day is 24 hours of bars
+    rather than the 6.5-hour equity session `bars_per_day` assumes.
+    """
+    bar = resolution.from_env()
+    if not bar.is_intraday:
+        return D(1)
+    # The village spells crypto with a quote currency: BTC-USD, not BTC.
+    if "-" in str(symbol):
+        return D(86_400) / D(bar.seconds)
+    return bar.bars_per_day
+
+
+def _reduces_a_position(
+    proposal: TradeProposal, positions: Sequence[Position]
+) -> bool:
+    """Does this order make an existing position smaller?
+
+    Signed quantity, so a buy can be a reduction too — closing a short is
+    getting out just as much as selling a long is.
+    """
+    held = next(
+        (
+            p for p in positions
+            if p.symbol.upper() == proposal.symbol.upper() and p.is_open
+        ),
+        None,
+    )
+    if held is None:
+        return False
+    if held.quantity > 0:
+        return proposal.side_enum is Side.SELL
+    return proposal.side_enum is Side.BUY
 
 
 @dataclass
@@ -103,7 +156,7 @@ class Conscience:
             self._loyalty(proposal, firm),
             self._authority(proposal, firm),
             self._sanctity(proposal),
-            self._liberty(proposal, market),
+            self._liberty(proposal, positions, market),
         ]
         review = EthicsReview(findings=findings)
         if any(f.blocks for f in findings):
@@ -249,15 +302,44 @@ class Conscience:
             "rules cannot be applied to it)",
         )
 
-    def _liberty(self, proposal: TradeProposal, market: MarketData) -> FoundationFinding:
-        """A position the operator cannot exit is a position that owns them."""
-        bars = market.history(proposal.symbol, 20)
+    def _liberty(
+        self,
+        proposal: TradeProposal,
+        positions: Sequence[Position],
+        market: MarketData,
+    ) -> FoundationFinding:
+        """A position the operator cannot exit is a position that owns them.
+
+        Read that sentence twice before changing anything here, because the
+        first implementation of it did the opposite. It vetoed *any* order too
+        large against the venue's volume — and an order that closes a position
+        is an order. So the check whose whole purpose is that the operator can
+        always get out became the thing standing between a firm and the way
+        out: `firm_c_crypto` proposed the same exit 1,053 times over three days
+        and was refused every time, by the foundation that exists to protect
+        its right to leave.
+
+        The system may always stop the bleeding and may never start it. A
+        reducing order is the system stopping the bleeding. It is never
+        refused here — not for size, not for liquidity, not for anything this
+        foundation knows about. Illiquidity is a reason to be slower to get
+        *in*; it is never a reason to be barred from getting out.
+        """
+        if _reduces_a_position(proposal, positions):
+            return _ok(
+                "liberty",
+                f"the order reduces an existing {proposal.symbol} position — the "
+                "way out is never blocked",
+            )
+
+        bars = market.history(proposal.symbol, _LIBERTY_LOOKBACK_BARS)
         volumes = [b.volume for b in bars if b.volume > 0]
         if not volumes:
             return _warn("liberty", f"no volume history for {proposal.symbol}; exit untested")
-        typical = sum(volumes, ZERO) / D(len(volumes))
-        if typical <= 0:
+        per_bar = sum(volumes, ZERO) / D(len(volumes))
+        if per_bar <= 0:
             return _warn("liberty", f"{proposal.symbol} shows no traded volume")
+        typical = per_bar * _bars_per_day(proposal.symbol)
         share = percent(D(proposal.quantity) / typical * D(100))
         if share > D(10):
             return _block(
