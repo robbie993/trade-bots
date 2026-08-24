@@ -246,18 +246,26 @@ class Allocator:
         self,
         firm_key: str,
         new_allocation: Decimal,
-        reason: str = "approved by human",
+        reason: str = "approved increase",
         by: str = "",
     ) -> AllocationChange:
-        """Called once a human has approved a raise. The only way capital grows.
+        """Called once a raise has been approved. The only way capital grows.
 
         ``reason`` and ``by`` exist so the ledger can tell apart the two very
         different things that arrive through this one door: a firm being given
         more money because it earned it, and money being put back because the
-        village took it by mistake. Both are increases and both need a human;
+        village took it by mistake. Both are increases and both need approval;
         only one of them is evidence about the strategy, and a reader
         six months from now has no way to reconstruct which was which from
         "approved by human" alone.
+
+        **The default no longer claims a human.** It used to, and a caller that
+        forgot to pass ``by`` — `ecosystem.apply_approvals` did, for every
+        allocate_capital row — wrote those exact words into the ledger against
+        raises the council had granted itself. An unattributed increase is a
+        gap in the record; an increase falsely attributed to a human is worse
+        than a gap, because nobody goes looking for it. If this field does not
+        know who authorised the money, it says so.
         """
         firm = self.store.get_firm(firm_key)
         if firm is None:

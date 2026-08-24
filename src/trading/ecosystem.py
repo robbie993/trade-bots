@@ -1015,8 +1015,19 @@ class Ecosystem:
                     self.db.update("human_approvals", approval.id,
                                    {"details": json.dumps(details, default=str)})
                     continue
+                # The authoriser travels with the money. Every other branch in
+                # this method already passes `approval.approved_by`; this one
+                # did not, so the ledger fell back to the default reason and an
+                # empty `by` — and wrote the words "approved by human" against
+                # six raises that took firm_b_stocks from $100,000 to $177,156
+                # on the council's authority, with no human anywhere near them.
+                # A raise is the one direction the system is never allowed to
+                # take by itself, so of every field in this ledger, this is the
+                # one that must not be able to say something untrue.
                 change = self.brokerage.allocator.apply_approved_increase(
-                    details["firm"], D(details["new_allocation"])
+                    details["firm"], D(details["new_allocation"]),
+                    reason=approval.reason or "approved increase",
+                    by=approval.approved_by or "",
                 )
                 applied.append(str(change))
             else:

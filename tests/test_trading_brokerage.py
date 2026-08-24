@@ -7,6 +7,7 @@ anything at all on books that do not reconcile.
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 import pytest
@@ -239,6 +240,26 @@ def test_the_ledger_says_whether_a_raise_was_earned_or_a_correction(
                if e.get("event_type") == "allocation"]
     assert "per-tick bug" in event["detail"]
     assert "[by robbie]" in event["detail"]
+
+
+def test_an_unattributed_raise_never_claims_a_human(
+    store, firm_record, trading_config
+):
+    """A gap in the record is survivable. A false entry is not.
+
+    The default used to read "approved by human", and `apply_approvals` never
+    passed `by` for an allocate_capital row — so six council-granted raises
+    that took a firm from $100,000 to $177,156 were all written into the
+    ledger as human decisions. Nobody audits a line that already says the
+    right thing.
+    """
+    allocator = Allocator(store, trading_config.brokerage)
+    allocator.apply_approved_increase("test_firm", Decimal("110000"))
+
+    [event] = [e for e in store.events(firm_record.id)
+               if e.get("event_type") == "allocation"]
+    assert "human" not in event["detail"].lower()
+    assert json.loads(event["payload"])["by"] == "", "unknown, and saying so"
 
 
 def test_two_firms_each_get_their_own_approval(store, gate, trading_config):

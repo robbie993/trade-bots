@@ -357,7 +357,73 @@ the original outage on day one, and it would catch this too.
   compare against the same files alone at the previous commit. That is what
   was done for §4a.
 
-## 5. Failed attempts
+## 4b. The week of 2026-08-17 — six firms killed, three of them profitable
+
+A week of live running after §4a. 336 fills, then six of nine firms dead. The
+kill reason on **all six** was the same: *"6 consecutive losing trades (limit
+5)"*. Their actual records:
+
+| firm | closed | win rate | realised P&L | killed |
+|---|---|---|---|---|
+| `firm_b_stocks` | 34 | **71%** | **+$2,367.67** | yes |
+| `firm_i_memecoins` | 9 | 22% | **+$1,400.61** | yes |
+| `firm_c_crypto` | 7 | 14% | **+$38.67** | yes |
+| `firm_h_global` | 8 | 12% | −$596.29 | yes |
+| `firm_e_momentum` | 6 | 0% | −$278.96 | yes |
+| `firm_a_etf` | 6 | 0% | −$220.79 | yes |
+
+**The best firm in the village was killed.** 71% win rate, the largest realised
+profit of any desk, and six days earlier the council had raised it six times
+from $100,000 to $177,156 on scores of 67–83.
+
+Here are the six "consecutive losing trades" that killed it:
+
+```
+2026-08-22T03:08:24Z  JNJ sell  13.7980 @ 267.45  pnl= -40.97
+2026-08-22T03:07:23Z  JNJ sell   7.9325 @ 267.45  pnl= -23.55
+2026-08-22T03:06:23Z  JNJ sell  15.8650 @ 267.45  pnl= -47.10
+2026-08-22T03:05:23Z  JNJ sell  12.0663 @ 267.45  pnl= -35.82
+2026-08-22T03:04:22Z  JNJ sell   4.4690 @ 267.45  pnl= -13.27
+2026-08-22T03:03:22Z  JNJ sell   8.9380 @ 267.45  pnl= -26.54
+```
+
+One symbol. One price. Six consecutive minutes. **That is one exit, executed in
+six slices** — and the counter scored it as six failures of judgement.
+
+`store.settle` is where it happens, and it runs once per *fill*:
+
+```python
+consecutive = firm.consecutive_losses
+if realized < 0:
+    consecutive += 1
+elif realized > 0:
+    consecutive = 0
+```
+
+**A count of fills used as a count of trades** — the ninth appearance of the
+class in §5, and the first one that is not about time. Nothing resets the
+counter when a *position* closes; only a profitable fill clears it. So a firm
+that leaves one position at a loss, in more pieces than the limit, dies for it
+regardless of everything else it has ever done.
+
+Two aggravating details:
+
+- **Dust counts as evidence.** The fills immediately before were JNJ sells of
+  0.0008, 0.0015, 0.0030, 0.0060 and 0.0121 shares, booking one to nine cents
+  each. Sub-penny remainders both increment and reset this counter.
+- **Both profitable kills happened with the market shut.** `firm_b_stocks` died
+  on Saturday 2026-08-22 and `firm_i_memecoins` on Sunday the 23rd, and every
+  JNJ slice above filled at $267.45 — Friday's close, frozen. The village runs
+  an hourly loop against the last available bar seven days a week, so a
+  weekend exit books the same loss over and over against a price that cannot
+  move, and the counter climbs against a closed exchange.
+
+**Not fixed — it is a decision, not a bug fix.** This rule decides which firms
+live, and the repair has real choices in it: count round trips rather than
+fills, reset on a position close, debounce per bar, or ignore fills below a
+size floor. Whichever is chosen, the six kills above were not judgements about
+strategy and the firms that suffered them have a claim under `revive_firm`,
+which refuses anything that would fail again today.
 
 **Read this section before proposing anything.** Most of it is me being wrong.
 
@@ -377,6 +443,9 @@ the original outage on day one, and it would catch this too.
    180 asked for, on every symbol, for the life of the deployment (§4a).
 8. `_liberty` dividing by mean *bar* volume and calling it *daily* volume →
    an exit refused 1,053 times (§4a).
+
+9. `consecutive_losses` incremented once per **fill** rather than once per
+   **trade** (§4b) → the village's best firm killed by a single exit.
 
 Two of those eight were found on the same day, in the same organ, by running
 the thing on a machine that could reach the market. The container could not,
