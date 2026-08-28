@@ -31,6 +31,7 @@ There is no authentication. Bind it to localhost.
 from __future__ import annotations
 
 import html
+import threading
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -44,6 +45,7 @@ from ..money import D, ZERO, fmt_money, fmt_pct, money
 from ..notifications import build_notifier
 from . import promotion
 from .config import TradingConfig
+from .data.feeds import build_feed
 from .ecosystem import Ecosystem
 
 router = APIRouter()
@@ -60,11 +62,45 @@ LIVE_VENUE = "alpaca"
 DECIDED_BY = "the switch on Mission Control"
 
 
+#: One market feed for the whole process. See `ecosystem()`.
+_FEED = None
+_FEED_LOCK = threading.Lock()
+
+
+def _shared_feed(config: TradingConfig):
+    """The price feed, built once and kept.
+
+    **The database is per-request; the feed must not be.** A fresh `Ecosystem`
+    builds a fresh feed with an empty cache, and `/village` prices the entire
+    36-symbol universe before it renders a byte. Paginated, at the feed's 0.35s
+    politeness floor, that is twenty-five seconds of HTTP on a good run — and
+    on a bad one it meets Alpaca's rate limit, sleeps two seconds per retry,
+    and the page never returns at all. Mission Control was doing this on every
+    single load, while competing with the tick loop for the same 200 requests
+    a minute, so opening the page made the village's own prices worse.
+
+    A feed is a safe thing to share: an HTTP client and a dict of bars, with
+    its own one-bar TTL deciding when a symbol is refetched. Sharing it means
+    the first page load after a bar turns over pays for the fetch and every
+    other load is served from memory. The database connection stays per-request
+    for the reason it always was — sqlite connections are not thread-safe.
+    """
+    global _FEED
+    if _FEED is None:
+        with _FEED_LOCK:
+            if _FEED is None:       # re-check: another thread may have won
+                _FEED = build_feed(config.data)
+    return _FEED
+
+
 def ecosystem() -> Ecosystem:
     """A fresh config/DB per request — no connection shared across threads."""
     app_config = Config()
     db = Database.from_url(app_config.database_url)
-    return Ecosystem(db, TradingConfig(), app_config, build_notifier(app_config))
+    config = TradingConfig()
+    eco = Ecosystem(db, config, app_config, build_notifier(app_config))
+    eco._feed = _shared_feed(config)
+    return eco
 
 
 def e(value) -> str:
