@@ -154,7 +154,7 @@ class Conscience:
             self._care(proposal, firm, positions, market),
             self._fairness(proposal, recent_proposals),
             self._loyalty(proposal, firm),
-            self._authority(proposal, firm),
+            self._authority(proposal, firm, positions),
             self._sanctity(proposal),
             self._liberty(proposal, positions, market),
         ]
@@ -257,10 +257,36 @@ class Conscience:
             )
         return _ok("loyalty", "inside the firm's mandate")
 
-    def _authority(self, proposal: TradeProposal, firm: FirmRecord) -> FoundationFinding:
-        """The gates. A paused firm may exit and may not enter."""
+    def _authority(
+        self, proposal: TradeProposal, firm: FirmRecord,
+        positions: Sequence[Position] = (),
+    ) -> FoundationFinding:
+        """The gates. A dead or paused firm may exit and may not enter.
+
+        **The way out is never a gate.** This blocked every order from a killed
+        firm, including the orders that closed its positions, which is the same
+        mistake `_liberty` made about an exit it judged too illiquid: a check
+        written to stop a firm taking risk stopped it giving risk up.
+
+        The rule was already here, correctly, one line below — a paused firm
+        "may exit and may not enter". A killed firm is a paused firm with no
+        future; it has strictly less business opening a position and exactly as
+        much business closing one. Applying the rule to one and not the other
+        left six firms holding $155,859 they were forbidden to sell, while the
+        docstring of `brokerage.kill_firm` promised they were selling it.
+
+        So: a dead firm may reduce, and may do nothing else.
+        """
+        if firm.is_bankrupt:
+            return _block("authority", f"{firm.firm_key} is wound up and holds nothing")
         if firm.is_killed:
-            return _block("authority", f"{firm.firm_key} has been killed by a human")
+            if _reduces_a_position(proposal, positions):
+                return _ok("authority", f"{firm.firm_key} is killed; closing out is its only job")
+            return _block(
+                "authority",
+                f"{firm.firm_key} has been killed and may only close positions, "
+                f"and this order does not reduce {proposal.symbol}",
+            )
         if firm.status == "paused" and proposal.side_enum is Side.BUY:
             return _block("authority", f"{firm.firm_key} is paused; it may exit but not enter")
         if firm.venue != "paper" and proposal.side_enum is Side.BUY:

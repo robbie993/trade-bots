@@ -287,7 +287,14 @@ def test_a_paused_firm_may_exit_but_not_enter(market, trading_config):
         assert proposal.side == Side.SELL.value
 
 
-def test_a_killed_firm_proposes_nothing(market, trading_config):
+def test_a_killed_firm_with_no_book_proposes_nothing(market, trading_config):
+    """Nothing to sell, so nothing to say.
+
+    A killed firm that still *holds* something is a different case and proposes
+    exits — see tests/test_trading_bankruptcy.py. Naming this one "proposes
+    nothing" was accurate when a kill froze the book forever, and would now
+    read as an endorsement of the behaviour that stranded six estates.
+    """
     market.seek(150)
     record = make_firm(universe=["SPY"], status="killed")
     firm = Firm(record, build_analysts(["technical"]), trading_config.firm)

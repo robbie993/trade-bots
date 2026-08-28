@@ -44,6 +44,7 @@ from .data.market_data import MarketData
 from .data.feeds import build_feed
 from .execution import build_venue
 from .execution.live import LiveTradingNotApproved, VenueNotConfigured
+from .firms import bankruptcy
 from .firms.firm import Firm
 from .firms.spec import FirmSpec, load_firm_specs
 from .gateway.omniroute import OmniRoute
@@ -447,8 +448,28 @@ class Ecosystem:
         report.expiries = self._settle_expiries(market, flow)
 
         for record in self.store.firms():
-            if record.is_killed and not self.store.positions(record.id):
-                continue  # dead and flat: nothing left to do
+            if record.is_bankrupt:
+                continue  # wound up: flat, settled, postmortem written
+            if record.is_killed and not any(
+                p.is_open for p in self.store.positions(record.id)
+            ):
+                # Dead and flat, but not yet wound up. This is where the estate
+                # is closed: capital handed back, postmortem written, lesson
+                # published, heir filed. Quiet and idempotent — it returns None
+                # unless this is the tick that finishes the job.
+                closed = bankruptcy.wind_up(self, record)
+                if closed:
+                    report.village.append(
+                        f"{record.firm_key} wound up — returned "
+                        f"{fmt_money(D(closed['returned']))}"
+                        + (f", successor {closed['successor']} filed (paused, "
+                           "unfunded)" if closed["successor"] else "")
+                    )
+                    for note in closed["diagnosis"][:2]:
+                        report.village.append(f"  {record.firm_key} postmortem: {note}")
+                    flow.emit("brokerage", f"{record.firm_key} wound up",
+                              firm=record.firm_key, detail=closed["lesson"][:300])
+                continue
             held_blind = [
                 p.symbol for p in self.store.positions(record.id)
                 if p.is_open and p.symbol in getattr(market, "unpriceable", {})

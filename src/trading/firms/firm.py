@@ -109,8 +109,33 @@ class Firm:
         blocked: a blocked proposal is written to the database too, so the
         record shows what the firm wanted to do and why it did not.
         """
+        if self.record.status == FirmStatus.BANKRUPT.value:
+            return []           # wound up: flat, settled, nothing left to do
+
         if self.record.status == FirmStatus.KILLED.value:
-            return []
+            # **A dead firm sells, and does nothing else.**
+            #
+            # This used to `return []`, which read as "the dead do not trade"
+            # and was the opposite of what the rest of the system promised.
+            # `brokerage.kill_firm` says in as many words that open positions
+            # are not liquidated there because "a killed firm keeps exiting on
+            # the next tick and hands back cash as it does". It never could:
+            # this line stopped it before it proposed anything.
+            #
+            # So six firms died holding $155,859 of live market exposure, with
+            # no path to sell any of it, for as long as thirteen days. Killing
+            # a firm stopped it opening risk and froze the risk it already had.
+            # That is not stopping the bleeding; it is walking away from it.
+            #
+            # Selling to flat is the one action that is always allowed — the
+            # risk manager exempts it by construction ("reducing an open
+            # position") and the conscience was taught not to block the way
+            # out. So the estate proposes exits, every tick, until there is
+            # nothing left to sell, and then `bankruptcy.wind_up` closes it.
+            return self._review_all(
+                self._liquidation(market, positions, market.as_of()),
+                market, positions, self.equity(market, positions),
+            )
 
         equity = self.equity(market, positions)
         as_of = market.as_of()
@@ -134,13 +159,50 @@ class Firm:
         closing = {p.symbol for p in stopped}
         raw = list(stopped) + [p for p in raw[len(stopped):] if p.symbol not in closing]
 
+        return self._review_all(raw, market, positions, equity)
+
+    def _review_all(self, raw, market, positions, equity) -> list[TradeProposal]:
+        """Put every proposal past the risk manager, keeping what survives."""
+        out: list[TradeProposal] = []
         for proposal in raw:
             reference = proposal.reference_price or price(market.mark(proposal.symbol))
             reviewed = self._review(proposal, reference, positions, equity)
             if reviewed is not None:
-                proposals.append(reviewed)
+                out.append(reviewed)
+        return out
 
-        return proposals
+    def _liquidation(self, market, positions, as_of) -> list[TradeProposal]:
+        """Sell the whole book. The estate's only remaining opinion.
+
+        Whole positions, not fractions: a dead firm is not managing an exit, it
+        is ending one. A symbol the feed cannot price is skipped rather than
+        dumped at a guess — an unpriceable holding stays on the books and keeps
+        the firm in liquidation, which is the honest outcome. It is better to
+        stay unfinished and say so than to book a settlement at a made-up mark.
+        """
+        blind = getattr(market, "unpriceable", {})
+        out: list[TradeProposal] = []
+        for held in positions:
+            if not held.is_open or held.symbol in blind:
+                continue
+            mark = price(market.mark(held.symbol))
+            if mark <= 0 or market.bar(held.symbol) is None:
+                continue
+            out.append(TradeProposal(
+                firm_id=self.record.id,
+                symbol=held.symbol,
+                side=(Side.SELL if held.quantity > 0 else Side.BUY).value,
+                quantity=qty(abs(held.quantity)),
+                confidence=D(100),
+                reference_price=mark,
+                rationale=(
+                    f"BANKRUPTCY: {self.record.firm_key} was killed "
+                    f"({self.record.kill_reason or 'no reason recorded'}). "
+                    f"Closing {held.symbol} in full to return the capital."
+                ),
+                as_of=as_of,
+            ))
+        return out
 
     @staticmethod
     def _gene_value(genome, name, default):

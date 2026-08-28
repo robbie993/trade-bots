@@ -53,6 +53,10 @@ class FirmStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     KILLED = "killed"
+    #: Killed, wound up, and finished: flat, capital returned, postmortem
+    #: written. `KILLED` is the moment of death; this is the end of the estate.
+    #: A firm sits at KILLED only while it still has a book to sell.
+    BANKRUPT = "bankrupt"
 
 
 class ProposalStatus(str, Enum):
@@ -487,6 +491,22 @@ class FirmRecord:
 
     @property
     def is_killed(self) -> bool:
+        """Dead, by either route. Bankruptcy is a kind of death, not a recovery.
+
+        Every existing caller means "does not trade any more" by this, and a
+        wound-up firm does not, so bankruptcy has to answer yes or each of them
+        silently starts counting the estate as a living firm.
+        """
+        return self.status in (FirmStatus.KILLED.value, FirmStatus.BANKRUPT.value)
+
+    @property
+    def is_bankrupt(self) -> bool:
+        """Wound up: flat, capital handed back, nothing left to settle."""
+        return self.status == FirmStatus.BANKRUPT.value
+
+    @property
+    def is_liquidating(self) -> bool:
+        """Killed but still holding a book it has to sell before it can rest."""
         return self.status == FirmStatus.KILLED.value
 
     def to_row(self) -> dict:
