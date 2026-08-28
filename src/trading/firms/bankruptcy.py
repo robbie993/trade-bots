@@ -45,7 +45,7 @@ every pass and it must be safe to call a hundred times.
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Optional, Sequence
 
 from ...money import D, ZERO, fmt_money, money
 from ..models import FirmRecord, FirmStatus
@@ -79,7 +79,15 @@ def _successor_key(firm_key: str, existing: set) -> str:
     return ""
 
 
-def file_successor(store, firm: FirmRecord, pm, lesson: str) -> Optional[FirmRecord]:
+#: Every heir gets this seat on top of whatever it inherits. It is how a firm
+#: hears the scanners and the scribe — the only route by which one firm's
+#: failure can reach another firm's debate. An heir without it is deaf to the
+#: entire point of having been succeeded.
+INHERITED_SEAT = "signals"
+
+
+def file_successor(store, firm: FirmRecord, pm, lesson: str,
+                   seats: Optional[Sequence[str]] = None) -> Optional[FirmRecord]:
     """Register an unfunded heir carrying what killed its predecessor.
 
     **Paused, and broke.** Allocation zero, status paused, so it cannot trade.
@@ -101,6 +109,20 @@ def file_successor(store, firm: FirmRecord, pm, lesson: str) -> Optional[FirmRec
     genome["inherited_lesson"] = lesson
     genome["predecessor_realized"] = str(pm.realized)
     genome["predecessor_costs"] = str(pm.costs)
+    genome["predecessor_diagnosis"] = [str(n) for n in pm.notes]
+
+    # **The seats have to come with it, or the heir inherits nothing that can
+    # think.** Analyst seats live in `config/firm_config.yaml`, keyed by firm
+    # name, and an heir is not in that file. `Ecosystem.build_firm` therefore
+    # fell through to its default — a single `technical` analyst and no signal
+    # board — so the first six heirs were, without anyone intending it, deaf
+    # firms running one indicator. Carrying the seats in the genome is what
+    # makes a successor a continuation rather than a fresh stranger wearing
+    # its predecessor's name.
+    inherited = [str(s) for s in (seats or [])]
+    if INHERITED_SEAT not in inherited:
+        inherited.append(INHERITED_SEAT)
+    genome["analysts"] = inherited
 
     heir = FirmRecord(
         firm_key=key,
@@ -143,7 +165,13 @@ def wind_up(eco, firm: FirmRecord, card=None) -> Optional[dict]:
     if returned != 0:
         eco.brokerage.allocator.release(firm, f"bankruptcy: {firm.firm_key} wound up")
 
-    heir = file_successor(eco.store, firm, pm, lesson)
+    spec = eco.specs().get(firm.firm_key)
+    seats = list(getattr(spec, "analysts", []) or []) if spec is not None else []
+    if not seats:
+        # No YAML spec: the parent was itself an heir, so its seats are in its
+        # own genome. Inheritance has to survive more than one generation.
+        seats = [str(s) for s in (firm.genome or {}).get("analysts", []) or []]
+    heir = file_successor(eco.store, firm, pm, lesson, seats)
 
     # The lesson goes where the living firms already look. `firm_id` stays on
     # the dead firm: it is that firm's lesson, and attributing it to the heir

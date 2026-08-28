@@ -158,6 +158,42 @@ def test_wind_up_returns_the_cash_writes_a_lesson_and_files_an_heir(ecosystem):
     assert heir.genome.get("inherited_lesson")
 
 
+def test_an_heir_inherits_its_parents_seats_and_can_hear_the_board(ecosystem):
+    """Otherwise a successor is a stranger wearing its predecessor's name.
+
+    Seats live in the YAML, keyed by firm name, and an heir is not in the YAML.
+    Without carrying them in the genome, `build_firm` falls through to a single
+    `technical` analyst with no signal board — which is what the first six
+    heirs got: deaf firms running one indicator.
+    """
+    eco = ecosystem
+    firm = _kill_with_a_book(eco)
+    parent_seats = [str(s) for s in eco.specs()[firm.firm_key].analysts]
+    assert len(parent_seats) > 1, "fixture parent should have several seats"
+
+    closed = bankruptcy.wind_up(eco, firm)
+    heir = eco.store.get_firm(closed["successor"])
+
+    inherited = heir.genome.get("analysts") or []
+    for seat in parent_seats:
+        assert seat in inherited, f"heir lost its parent's {seat} seat"
+    assert bankruptcy.INHERITED_SEAT in inherited, "an heir must be able to hear"
+
+    built = eco.build_firm(heir)
+    assert len(built.analysts) == len(inherited)
+    assert any(getattr(a, "board", None) is not None for a in built.analysts), \
+        "the signals seat must be wired to the board, or the scanner is unheard"
+
+
+def test_an_heir_carries_the_diagnosis_not_just_the_verdict(ecosystem):
+    eco = ecosystem
+    firm = _kill_with_a_book(eco)
+    closed = bankruptcy.wind_up(eco, firm)
+    heir = eco.store.get_firm(closed["successor"])
+    assert heir.genome.get("inherited_lesson")
+    assert isinstance(heir.genome.get("predecessor_diagnosis"), list)
+
+
 def test_wind_up_is_idempotent(ecosystem):
     """The tick calls this on every dead firm on every pass."""
     eco = ecosystem

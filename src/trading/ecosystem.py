@@ -389,9 +389,33 @@ class Ecosystem:
         return self._specs
 
     def build_firm(self, record: FirmRecord) -> Firm:
+        """The firm, with the seats it is entitled to.
+
+        Three sources, in order of authority. The YAML is the operator's word
+        and wins. Failing that, the genome — which is how a bankruptcy heir
+        carries its predecessor's seats, since it is not in the YAML and never
+        will be. Only a firm with neither falls back to the default.
+
+        That fallback used to catch every heir: a single `technical` analyst
+        and no signal board, so a successor could not hear the scanners, could
+        not hear the scribe, and ran one indicator where its parent ran four.
+        It inherited the genome, the universe and the lesson and had nothing
+        left to think with.
+        """
+        from .firms.analysts import build_analysts
+
         spec = self.specs().get(record.firm_key)
         if spec is not None:
             return Firm.from_spec(spec, record, self.config, board=self.signals)
+
+        seats = [str(s) for s in (record.genome or {}).get("analysts", []) or []]
+        if seats:
+            return Firm(
+                record,
+                analysts=build_analysts(seats, board=self.signals),
+                limits=self.config.firm,
+                kill_config=self.config.kill,
+            )
         return Firm(record, limits=self.config.firm, kill_config=self.config.kill)
 
     # =====================================================================
