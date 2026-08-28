@@ -525,7 +525,8 @@ class AlpacaFeed:
     def __init__(self, days: int = 180, timeout_s: int = 20,
                  timeframe: str = "1Day", stock_feed: str = "",
                  min_interval_s: float = 0.35, keep_bars: Optional[int] = None,
-                 max_stale_days: Optional[float] = None, ttl_s: float = 0.0):
+                 max_stale_days: Optional[float] = None, ttl_s: float = 0.0,
+                 bar_seconds: float = 0.0):
         self.days = int(days)
         self.timeout_s = timeout_s
         self.timeframe = timeframe
@@ -539,6 +540,12 @@ class AlpacaFeed:
             float(max_stale_days) if max_stale_days is not None
             else _env_float("TRADE_MAX_STALE_DAYS", 4.0)
         )
+        # How wide one bar is, in seconds, so staleness can be judged in bars.
+        # Zero means "not told", and the check falls back to calendar days.
+        self.bar_seconds = float(bar_seconds or 0)
+        # How many bars old the newest bar may be on a market that never
+        # closes. See `_assert_fresh` for why crypto gets its own bound.
+        self.max_stale_bars = _env_float("TRADE_MAX_STALE_BARS", 3.0)
         # How long a symbol's bars stay cached. Zero means forever, which is
         # correct for a backtest and silently wrong for a loop: a village that
         # runs for a week on one process would answer every tick from the bars
@@ -714,17 +721,55 @@ class AlpacaFeed:
         stopped covering — only that it is, and that trading on it is not a
         decision anybody made.
 
-        Generous by default: four calendar days clears a long weekend on an
-        equity, and crypto never closes at all. `TRADE_MAX_STALE_DAYS` moves it,
-        and the refusal is a `FeedNotConfigured`, so the symbol is reported
+        **The limit is in bars, and the old one was in days.** Four calendar
+        days is a reasonable bound on a daily bar and ninety-six bars of licence
+        on an hourly one, which is the same unit error this codebase has now
+        made seven times: a threshold denominated in one measure of market time
+        compared against a quantity in another. `resolution.py` exists to stop
+        it and this check never asked.
+
+        What it cost: the village ran for a fortnight buying against bars up to
+        forty hours old while selling against current ones. Twenty-one per cent
+        of all proposals from 20 August on were priced off a bar older than the
+        bar they claimed to trade, entries and exits on the same symbol were set
+        by prices a day apart, and the losses that produced killed six firms.
+
+        **Crypto gets the tight bound, and the old note here had the reason
+        backwards.** It said crypto "never closes at all" as grounds for being
+        generous. A market that never closes is the one market where an old bar
+        has no innocent explanation — there is no weekend to sit through, so a
+        crypto bar three bars old is a broken feed and nothing else. An equity
+        genuinely does stop overnight and over a long weekend, so it keeps a
+        calendar-day allowance until this can ask a real exchange calendar.
+
+        `TRADE_MAX_STALE_BARS` and `TRADE_MAX_STALE_DAYS` move the two bounds.
+        The refusal is a `FeedNotConfigured`, so the symbol is reported
         unpriceable rather than taking the village down.
         """
-        if not bars or self.max_stale_days <= 0:
+        if not bars:
             return
         newest = bars[-1].as_of
         if newest is None:
             return
-        age_days = (datetime.now(timezone.utc) - newest).total_seconds() / 86_400
+        age_s = (datetime.now(timezone.utc) - newest).total_seconds()
+
+        # A market that never closes: judge in bars, because nothing else can
+        # explain the gap.
+        if self.is_crypto(symbol) and self.bar_seconds > 0 and self.max_stale_bars > 0:
+            limit_s = self.bar_seconds * self.max_stale_bars
+            if age_s > limit_s:
+                raise FeedNotConfigured(
+                    f"alpaca's newest bar for {symbol} is {newest.isoformat()}, "
+                    f"{age_s / self.bar_seconds:.1f} bars old (limit "
+                    f"{self.max_stale_bars:g}). Crypto does not close, so an old "
+                    "bar is a broken feed, not a quiet market. Refusing to price "
+                    "a book against it. TRADE_MAX_STALE_BARS moves this."
+                )
+            return
+
+        if self.max_stale_days <= 0:
+            return
+        age_days = age_s / 86_400
         if age_days > self.max_stale_days:
             raise FeedNotConfigured(
                 f"alpaca's newest bar for {symbol} is {newest.date().isoformat()}, "
@@ -889,7 +934,7 @@ def _one_feed(source: str, config: DataConfig) -> MarketFeed:
         # that was doing both jobs looked correct for so long.
         return AlpacaFeed(
             days=span, timeframe=bar.alpaca, keep_bars=config.history_days,
-            ttl_s=bar.seconds,
+            ttl_s=bar.seconds, bar_seconds=bar.seconds,
         )
     if source == "ccxt":
         return CcxtFeed(

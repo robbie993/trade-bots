@@ -144,6 +144,49 @@ def _one_unbroken_run(observations, resolution):
     return list(observations[start:])
 
 
+def _consecutive_losing_bars(fills, resolution) -> int:
+    """How many bars in a row the firm closed down. Bars, not fills.
+
+    **The same collapse the Sharpe series gets, for the same reason.** A
+    village ticking every sixty seconds against an hourly bar re-proposes the
+    same decision until it stops being true, so one exit arrives as four
+    identical sells a minute apart. The stored counter in `store.py` increments
+    once per *fill*, so that single decision reads as four consecutive losses,
+    and a firm is five sixths of the way to a kill on the strength of one.
+
+    That is what happened. Six firms were killed between 14 and 23 August with
+    a byte-identical reason, and the memecoin desk's last five minutes were one
+    decision — exit DOGE and WIF — executed four times over eight legs, counted
+    six deep. The losses were real money, but they were one loss, and the
+    threshold is written in decisions.
+
+    So a bar is the unit. Everything closed within one bar nets to one result,
+    and only bars that closed something count: a bar the firm sat out is not a
+    win, and must not reset the run.
+    """
+    by_bar: dict = {}
+    order: list = []
+    for fill in fills:
+        realized = D(getattr(fill, "realized_pnl", 0) or 0)
+        if realized == 0:
+            continue            # an opening fill has no result to judge
+        key = resolution.bar_key(getattr(fill, "as_of", None)) or str(
+            getattr(fill, "as_of", "")
+        )
+        if key not in by_bar:
+            order.append(key)
+            by_bar[key] = ZERO
+        by_bar[key] += realized
+
+    run = 0
+    for key in reversed(order):
+        if by_bar[key] < 0:
+            run += 1
+        else:
+            break               # the first bar that did not lose ends the run
+    return run
+
+
 class Evaluator:
     def __init__(
         self,
@@ -307,7 +350,7 @@ class Evaluator:
             sharpe=sharpe,
             trades=len(fills),
             closed_trades=len(closed),
-            consecutive_losses=firm.consecutive_losses,
+            consecutive_losses=_consecutive_losing_bars(fills, resolution),
             worst_trade_pct=worst_pct,
             as_of=market.as_of(),
             unpriceable=blind,

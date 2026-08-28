@@ -408,6 +408,19 @@ class Ecosystem:
         flow.start_run()
         flow.emit("market", f"bars up to {market.as_of()}", detail=f"source: {self.feed.name}")
 
+        # A symbol whose bar is far behind its peers' is treated exactly like a
+        # symbol with no bar at all, because that is what it is: a price nobody
+        # can stand behind. Folding it in here rather than giving it a separate
+        # path means the reporting below, the refusal to propose, and the
+        # scorecard's "this book cannot be valued" all apply unchanged.
+        resolution = self.config.data.resolution
+        for symbol, behind in market.lagging(float(resolution.seconds)).items():
+            market.unpriceable.setdefault(
+                symbol,
+                f"bar is {behind:.1f} bars behind the rest of the village — the "
+                "other symbols are current, so this one is stale, not quiet",
+            )
+
         # A symbol the feed cannot price is now a symbol with no bars rather
         # than an exception out of the whole tick — but it must not pass
         # unmentioned, and for a firm that *holds* the thing it is not a

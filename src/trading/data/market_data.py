@@ -114,6 +114,48 @@ class MarketData:
         stamps = [b.as_of for b in (self.bar(s) for s in self.symbols) if b is not None]
         return max(stamps) if stamps else None
 
+    def lagging(self, bar_seconds: float, max_bars_behind: float = 3.0) -> dict:
+        """Symbols left behind by their own peers. `{symbol: how far behind}`.
+
+        A per-symbol age limit cannot catch a stale equity, because it cannot
+        tell "this feed is broken" from "the exchange is shut" without a market
+        calendar nobody here has. This can, and needs no calendar: **the other
+        symbols are the calendar.** If forty names are on the 18:00 bar and GLD
+        is on yesterday's 03:00, the exchange is plainly open, and GLD is stale.
+
+        That is not hypothetical. On 27 August the commodities desk traded GLD
+        and SLV against a bar forty hours old for the whole session while the
+        value desk bought JNJ and KO on the current one, in the same ticks. The
+        village was reading three different bars at once and `as_of()` reported
+        the freshest of them, so every proposal looked current.
+
+        **Grouped by whether the market closes.** Crypto runs through the night
+        and an equity does not, so comparing the two at 3am flags every stock in
+        the village for the crime of the exchange being shut. Symbols are only
+        ever measured against others that keep the same hours.
+        """
+        if bar_seconds <= 0 or max_bars_behind <= 0:
+            return {}
+        is_crypto = getattr(self.feed, "is_crypto", None)
+        groups: dict = {}
+        for symbol in self.symbols:
+            bar = self.bar(symbol)
+            if bar is None or bar.as_of is None:
+                continue        # no bars at all is `unpriceable`, not lateness
+            key = bool(is_crypto(symbol)) if callable(is_crypto) else False
+            groups.setdefault(key, []).append((symbol, bar.as_of))
+
+        out: dict = {}
+        for members in groups.values():
+            if len(members) < 2:
+                continue        # one symbol cannot be out of step with itself
+            freshest = max(stamp for _, stamp in members)
+            for symbol, stamp in members:
+                behind = (freshest - stamp).total_seconds() / bar_seconds
+                if behind > max_bars_behind:
+                    out[symbol] = behind
+        return out
+
     def closes(self, symbol: str, lookback: Optional[int] = None) -> list[Decimal]:
         return [b.close for b in self.history(symbol, lookback)]
 
