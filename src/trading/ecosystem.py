@@ -471,6 +471,7 @@ class Ecosystem:
         # firm rather than being decided by one.
         report.expiries = self._settle_expiries(market, flow)
 
+        current_bar = resolution.bar_key(market.as_of())
         for record in self.store.firms():
             if record.is_bankrupt:
                 continue  # wound up: flat, settled, postmortem written
@@ -504,8 +505,13 @@ class Ecosystem:
                     "cannot price it — this firm's equity is not trustworthy "
                     "until that resolves"
                 )
+            # One deliberation per bar. The borrow charge stays outside this,
+            # because it has its own per-bar guard and is a cost that accrues
+            # whether or not the firm has an opinion.
             try:
                 self._charge_borrow(record, market, report)
+                if self._already_deliberated(record, current_bar, resolution):
+                    continue
                 self._run_firm(record, market, report)
             except TradingLedgerError as exc:
                 report.errors.append(f"{record.firm_key}: {exc}")
@@ -732,6 +738,48 @@ class Ecosystem:
         import dataclasses
 
         return dataclasses.replace(self.config, data=spec.costed(self.config.data))
+
+    def _already_deliberated(self, record: FirmRecord, bar: str, resolution) -> bool:
+        """Has this firm already had its say on this bar?
+
+        **A decision belongs to a bar, not to a tick.** The loop runs every
+        sixty seconds and the bar changes every hour, so without this a firm
+        re-derives the same conclusion from the same prices up to sixty times
+        and acts on it every time. It is not sixty decisions. It is one
+        decision, executed until the money runs out.
+
+        That is not hypothetical. 634 of the village's first 666 fills were
+        repeats of the same firm, symbol, side and bar. On 28 August the
+        commodities desk decided to buy USO once and bought it seven times in
+        nine minutes — a $2,101 position became $13,867, 80% of the firm's cash
+        went into one name, and the last fill was partial because there was
+        nothing left. The risk limit said 3% of allocation. It ended up at a
+        fifth of the book, and no limit was breached, because each of the seven
+        was individually within every rule.
+
+        It is also what made the costs real: three of the five bankruptcy
+        postmortems blame fees rather than direction, and one of them put
+        fees at 1144% of everything the winning trades made. Sixty times the
+        turnover is sixty times the cost of being right.
+
+        Read from the ledger rather than kept in memory, for the same reason
+        the borrow charge is: the loop gets restarted, and a guard that forgets
+        on restart is a guard that stops working exactly when someone is
+        watching. Proposals are written whatever the risk manager says, so a
+        firm that was blocked this bar has still had its say and does not get
+        to ask again — the blocked ones were most of the churn.
+        """
+        if not bar:
+            return False        # no bar: the blind-feed rule handles it
+        try:
+            rows = self.db.query(
+                "SELECT as_of FROM trade_proposals WHERE firm_id = ? "
+                "ORDER BY id DESC LIMIT 12",
+                (record.id,),
+            )
+        except Exception:  # noqa: BLE001 - never fail a tick over this check
+            return False
+        return any(resolution.bar_key(r.get("as_of")) == bar for r in rows)
 
     def _borrow_already_billed(self, record: FirmRecord, bar: str, resolution) -> bool:
         """Has this firm already paid borrow for this bar?
