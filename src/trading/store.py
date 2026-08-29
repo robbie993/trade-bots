@@ -83,6 +83,86 @@ class TradingStore:
     def active_firms(self) -> list[FirmRecord]:
         return self.firms(FirmStatus.ACTIVE.value)
 
+    # -- strikes and the gulag ---------------------------------------------
+    #
+    # Kept in `firm_strikes` rather than on `firms` because every migration in
+    # this repo re-runs on every init, and `CREATE TABLE IF NOT EXISTS` is the
+    # shape that survives that on both dialects. Same reasoning as the feed
+    # bar table in 021.
+    def strike_state(self, firm_id: int) -> dict:
+        """Strikes, sentence and breach flag. Zeroes for a firm with none."""
+        row = self.db.query_one(
+            "SELECT * FROM firm_strikes WHERE firm_id = ?", (firm_id,)
+        )
+        if row is None:
+            return {"firm_id": firm_id, "strikes": 0, "gulag_bars_left": 0,
+                    "gulag_last_bar": None, "breach_open": 0,
+                    "last_strike_reason": None}
+        return {
+            "firm_id": firm_id,
+            "strikes": int(row.get("strikes") or 0),
+            "gulag_bars_left": int(row.get("gulag_bars_left") or 0),
+            "gulag_last_bar": row.get("gulag_last_bar"),
+            "breach_open": int(row.get("breach_open") or 0),
+            "last_strike_reason": row.get("last_strike_reason"),
+        }
+
+    def _save_strike_state(self, state: dict) -> None:
+        firm_id = state["firm_id"]
+        exists = self.db.query_one(
+            "SELECT firm_id FROM firm_strikes WHERE firm_id = ?", (firm_id,)
+        )
+        row = {
+            "strikes": int(state.get("strikes") or 0),
+            "gulag_bars_left": int(state.get("gulag_bars_left") or 0),
+            "gulag_last_bar": state.get("gulag_last_bar"),
+            "breach_open": int(state.get("breach_open") or 0),
+            "last_strike_reason": state.get("last_strike_reason"),
+            "updated_at": utcnow_iso(),
+        }
+        if exists is None:
+            self.db.insert("firm_strikes", {"firm_id": firm_id, **row})
+        else:
+            self.db.execute(
+                "UPDATE firm_strikes SET strikes = ?, gulag_bars_left = ?, "
+                "gulag_last_bar = ?, breach_open = ?, last_strike_reason = ?, "
+                "updated_at = ? WHERE firm_id = ?",
+                (row["strikes"], row["gulag_bars_left"], row["gulag_last_bar"],
+                 row["breach_open"], row["last_strike_reason"],
+                 row["updated_at"], firm_id),
+            )
+
+    def set_strikes(self, firm_id: int, strikes: int, breach_open: int = 1,
+                    reason: str = "") -> None:
+        state = self.strike_state(firm_id)
+        state.update(strikes=strikes, breach_open=breach_open,
+                     last_strike_reason=reason)
+        self._save_strike_state(state)
+
+    def set_breach_open(self, firm_id: int, value: int) -> None:
+        state = self.strike_state(firm_id)
+        state["breach_open"] = int(value)
+        self._save_strike_state(state)
+
+    def set_gulag(self, firm_id: int, bars_left: int, last_bar) -> None:
+        """Bars still owed, and the last bar counted against the sentence.
+
+        `last_bar` is what stops a per-tick loop serving a twenty-bar sentence
+        in twenty minutes; None leaves it untouched, for the moment a sentence
+        is handed down and no bar has yet been counted against it.
+        """
+        state = self.strike_state(firm_id)
+        state["gulag_bars_left"] = int(bars_left)
+        if last_bar is not None:
+            state["gulag_last_bar"] = last_bar
+        self._save_strike_state(state)
+
+    def release_from_gulag(self, firm_id: int) -> None:
+        state = self.strike_state(firm_id)
+        state["gulag_bars_left"] = 0
+        state["gulag_last_bar"] = None
+        self._save_strike_state(state)
+
     def set_firm_status(self, firm_id: int, status: str, reason: str = "") -> None:
         values = {"status": status, "updated_at": utcnow_iso()}
         if status == FirmStatus.KILLED.value:

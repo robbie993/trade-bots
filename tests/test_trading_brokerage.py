@@ -456,18 +456,51 @@ def test_oversight_scores_persists_and_ranks(store, firm_record, market, trading
     assert report.leaderboard.rows[0].firm_key == "test_firm"
 
 
-def test_a_tripped_firm_is_paused_and_a_kill_is_requested(
+def test_a_tripped_firm_takes_a_strike_and_is_suspended_not_killed(
     store, firm_record, market, trading_config, gate
 ):
+    """First offence is a sentence, not an execution.
+
+    This used to request a kill on the first trip. It no longer does, and the
+    change is the point: six firms were destroyed in nine days on a kill
+    counter that was counting fills instead of bars, and every one of those
+    kills was wrong. A village whose only answer to a bad fortnight is death
+    gets quieter each time it is mistaken. See firms/strikes.py.
+    """
     # Force a drawdown big enough to trip the switch regardless of trade count.
     store.update_firm_fields(firm_record.id, high_water_mark=Decimal("500000.00"))
     report = Brokerage(store, trading_config, gate).oversee(market)
+
     assert report.paused and report.paused[0]["firm"] == "test_firm"
     assert store.require_firm_by_id(firm_record.id).status == FirmStatus.PAUSED.value
-    pending = gate.pending()
-    assert pending[0].action == ApprovalAction.KILL_FIRM.value
-    # Paused, not killed: the firm is still alive until a human says otherwise.
     assert not store.require_firm_by_id(firm_record.id).is_killed
+
+    state = store.strike_state(firm_record.id)
+    assert state["strikes"] == 1
+    assert state["gulag_bars_left"] > 0, "a strike must carry a sentence"
+    assert state["breach_open"] == 1, "the slump must be marked, or it strikes again"
+
+    # No kill on the first strike — that is what the third one is for.
+    assert not [p for p in gate.pending()
+                if p.action == ApprovalAction.KILL_FIRM.value]
+
+
+def test_the_third_strike_requests_the_kill(
+    store, firm_record, market, trading_config, gate
+):
+    store.update_firm_fields(firm_record.id, high_water_mark=Decimal("500000.00"))
+    brokerage = Brokerage(store, trading_config, gate)
+    for _ in range(3):
+        brokerage.oversee(market)
+        # Out of breach and back in: three separate slumps, not one long one.
+        store.set_breach_open(firm_record.id, 0)
+        store.release_from_gulag(firm_record.id)
+        store.set_firm_status(firm_record.id, FirmStatus.ACTIVE.value)
+
+    assert store.strike_state(firm_record.id)["strikes"] == 3
+    pending = [p for p in gate.pending()
+               if p.action == ApprovalAction.KILL_FIRM.value]
+    assert pending, "the third strike must ask for the kill"
 
 
 def test_an_approved_kill_closes_the_firm_and_returns_the_cash(

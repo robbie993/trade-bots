@@ -24,7 +24,9 @@ from typing import Optional, Sequence
 from ...money import D, fmt_money, money
 from ..config import TradingConfig
 from ..data.market_data import MarketData
+from ..firms import strikes
 from ..firms.kill_switch import INSUFFICIENT_DATA, should_kill_firm
+from ..firms.strikes import StrikeConfig
 from ..models import FirmRecord, FirmStatus
 from ..store import TradingStore
 from .allocator import Allocator
@@ -74,6 +76,7 @@ class Brokerage:
         self.gate = gate
         self.reconciler = Reconciler(store, self.config.brokerage)
         self.evaluator = Evaluator(store, self.config)
+        self.strike_config = StrikeConfig()
         self.allocator = Allocator(
             store, self.config.brokerage, gate, self.config.data.resolution
         )
@@ -136,21 +139,35 @@ class Brokerage:
                 continue
             should, reason = should_kill_firm(card.to_metrics(), self.config.kill)
             if not should or reason == INSUFFICIENT_DATA:
+                # Back above the line. The next slump is a new episode, and
+                # earns its own strike — see firms/strikes.py for why this
+                # matters more than it looks.
+                strikes.clear_breach(self.store, firm)
                 continue
+
+            outcome = strikes.record_breach(self.store, firm, reason, self.strike_config)
+            if outcome is None:
+                continue        # same slump, already answered for
 
             if firm.is_active:
                 self.store.set_firm_status(firm.id, FirmStatus.PAUSED.value)
-                self.store.record_event(
-                    "kill_triggered",
-                    f"{firm.firm_key}: {reason} — trading paused, kill needs approval",
-                    firm_id=firm.id,
-                    payload={"reason": reason, "score": str(card.score)},
-                )
-                paused.append({"firm": firm.firm_key, "reason": reason})
+            self.store.record_event(
+                "strike",
+                outcome.describe(),
+                firm_id=firm.id,
+                payload={"reason": reason, "strikes": outcome.strikes,
+                         "bars": outcome.bars_left, "score": str(card.score)},
+            )
+            paused.append({"firm": firm.firm_key, "reason": outcome.describe()})
 
-            approval = self.request_kill(firm, reason, card)
-            if approval is not None:
-                requested.append(approval.id)
+            # Only the last strike asks for a kill. The first two are sentences
+            # the firm serves and comes back from — a village that destroys a
+            # strategy the first time it has a bad fortnight gets quieter every
+            # time it is wrong, and it has already been wrong six times.
+            if outcome.terminated:
+                approval = self.request_kill(firm, reason, card)
+                if approval is not None:
+                    requested.append(approval.id)
         return paused, requested
 
     def request_kill(self, firm: FirmRecord, reason: str, card: Optional[Scorecard] = None):

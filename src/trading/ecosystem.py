@@ -472,6 +472,25 @@ class Ecosystem:
         report.expiries = self._settle_expiries(market, flow)
 
         current_bar = resolution.bar_key(market.as_of())
+
+        # Sentences are served in bars, and counted here because this is the
+        # one place that knows the bar turned over. A firm whose time is up is
+        # returned to active before it is asked for an opinion, so it can trade
+        # the very bar it is released on rather than losing another one.
+        from .firms import strikes as _strikes
+
+        for record in self.store.firms():
+            served = _strikes.serve_sentence(self.store, record, current_bar)
+            if served is not None and served.released:
+                self.store.set_firm_status(record.id, FirmStatus.ACTIVE.value)
+                report.village.append(
+                    f"{record.firm_key} released from the gulag "
+                    f"({served.strikes} strike(s) on record)"
+                )
+                flow.emit("brokerage", f"{record.firm_key} released",
+                          firm=record.firm_key)
+
+        current_bar = resolution.bar_key(market.as_of())
         for record in self.store.firms():
             if record.is_bankrupt:
                 continue  # wound up: flat, settled, postmortem written
