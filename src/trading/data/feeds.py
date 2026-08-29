@@ -141,6 +141,30 @@ def _get_json(url: str, params: dict, headers: Optional[dict] = None, timeout: i
         raise FeedNotConfigured(f"{url} did not return JSON: {exc}") from exc
 
 
+def _log_fetch(symbol: str, feed: str, count: int, newest) -> None:
+    """One line per real fetch, to `logs/feed_fetch.log`. Never raises.
+
+    Deliberately a plain file rather than the tick's logger: this has to
+    survive whatever the tick is doing, including the case where the tick is
+    happily proposing against stale prices and reporting nothing wrong.
+    """
+    try:
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        now = datetime.now(timezone.utc)
+        age_h = (now - newest).total_seconds() / 3600 if newest else -1
+        path = Path(__file__).resolve().parents[3] / "logs" / "feed_fetch.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as handle:
+            handle.write(
+                f"{now:%Y-%m-%dT%H:%M:%SZ} {symbol:<10} feed={feed:<6} "
+                f"bars={count:<5} newest={newest} age={age_h:.2f}h\n"
+            )
+    except Exception:  # noqa: BLE001 - telemetry must never break a fetch
+        pass
+
+
 class FeedHTTPError(Exception):
     """A non-200 from a feed, carrying the status so callers can explain it."""
 
@@ -818,6 +842,24 @@ class AlpacaFeed:
                 "indicators on a truncated history"
             )
         bars.sort(key=lambda b: b.as_of)
+        # **Say what the venue actually handed back.** Twice now the village
+        # has run for hours on a bar that stopped advancing — 15 hours on 27
+        # August, 9 hours 40 on the 28th, ticking the whole time and proposing
+        # against a price that never moved. Both were diagnosed from the
+        # outside, by reading proposal timestamps afterwards, and neither cause
+        # was ever found: from out there a cache that refuses to expire, a
+        # venue that returns a short series, and a window that ends early all
+        # look identical.
+        #
+        # This is the line that tells them apart. One entry per *actual fetch*
+        # — cache hits are silent, so this is at most one line per symbol per
+        # bar — recording what came back and how old its newest bar was. The
+        # next freeze will either show refetches returning a stale newest bar
+        # (the venue, or the request window) or show no refetch at all (the
+        # cache), and that is the whole question.
+        if bars:
+            _log_fetch(symbol, self.stock_feed if not crypto else "crypto",
+                       len(bars), bars[-1].as_of)
         self._assert_fresh(bars, symbol)
         # Bars, not days. `self.days` is calendar days — it is what `_start`
         # reaches back by — and using it as a bar count kept 43 hourly bars out

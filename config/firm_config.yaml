@@ -93,7 +93,7 @@ firms:
     risk_limit: 0.02
     capital_allocation: 80000
     universe: [JNJ, KO, XOM, PG, VZ]
-    analysts: [fundamental, technical]
+    analysts: [fundamental, technical, signals]
     genome:
       fast_window: 20
       slow_window: 90
@@ -127,7 +127,7 @@ firms:
     risk_limit: 0.01          # the quiet one
     capital_allocation: 60000
     universe: [TLT, IEF, SHY, LQD]
-    analysts: [fundamental, macro]
+    analysts: [fundamental, macro, signals]
     genome:
       fast_window: 25
       slow_window: 110
@@ -144,7 +144,7 @@ firms:
     risk_limit: 0.03
     capital_allocation: 70000
     universe: [GLD, SLV, USO, DBA]
-    analysts: [technical, macro]
+    analysts: [technical, macro, signals]
     genome:
       fast_window: 9
       slow_window: 45
