@@ -156,10 +156,15 @@ def _log_fetch(symbol: str, feed: str, count: int, newest) -> None:
         age_h = (now - newest).total_seconds() / 3600 if newest else -1
         path = Path(__file__).resolve().parents[3] / "logs" / "feed_fetch.log"
         path.parent.mkdir(parents=True, exist_ok=True)
+        # pid and the feed object's identity: the loop and the console are
+        # separate processes writing to one file, and a single process can
+        # still hold more than one feed. Without both, "why was this fetched
+        # again" is unanswerable.
         with path.open("a") as handle:
             handle.write(
-                f"{now:%Y-%m-%dT%H:%M:%SZ} {symbol:<10} feed={feed:<6} "
-                f"bars={count:<5} newest={newest} age={age_h:.2f}h\n"
+                f"{now:%Y-%m-%dT%H:%M:%SZ} pid={os.getpid():<7} "
+                f"{symbol:<10} feed={feed:<6} bars={count:<5} "
+                f"newest={newest} age={age_h:.2f}h\n"
             )
     except Exception:  # noqa: BLE001 - telemetry must never break a fetch
         pass
