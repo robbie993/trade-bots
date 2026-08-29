@@ -138,6 +138,7 @@ class Ecosystem:
         self._sandbox = None
         self._signals = None
         self._scanners = None
+        self._scribe = None
 
     # =====================================================================
     # the layers above the ledger
@@ -188,6 +189,15 @@ class Ecosystem:
 
             self._signals = SignalBoard(self.db)
         return self._signals
+
+    @property
+    def scribe(self):
+        """Reads the bankruptcy postmortems nothing else has ever read."""
+        if self._scribe is None:
+            from .scribe import Scribe
+
+            self._scribe = Scribe(self.store, self.signals)
+        return self._scribe
 
     @property
     def scanners(self):
@@ -461,6 +471,11 @@ class Ecosystem:
         # to an order, so this is the one place in the tick where running a
         # stranger's file cannot even be refused, only ignored.
         report.signals = self.scanners.run(market)
+        # The scribe reads the village's own dead and publishes to the same
+        # board. It needs the ledger, so it cannot be a sandboxed scanner file
+        # — see scribe.py. It refuses to speak on one firm's word, which today
+        # means it says nothing, and says why.
+        report.signals.extend(self.scribe.run(market))
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 
