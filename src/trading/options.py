@@ -92,8 +92,31 @@ class Contract:
 
     @property
     def symbol(self) -> str:
-        """Back to OCC, so a round trip through this module changes nothing."""
+        """Back to OCC, so a round trip through this module changes nothing.
+
+        **Refuses a strike that will not fit the eight-digit field.** `:08d`
+        pads to a *minimum* of eight digits and will happily emit nine, so a
+        strike at or above $100,000 produces a symbol this module's own regex
+        cannot read back — the round trip this docstring promises, broken
+        silently, on a string that still looks like a valid contract.
+
+        It is latent while the universe is large-cap ETFs and mega-caps, and
+        stops being latent the moment anything scans the whole market: BRK.A
+        trades near $600k and is a five-character NYSE symbol, which is
+        exactly what a tradeable-universe filter keeps.
+
+        The sibling repo hit the parse half of this on 2026-08-06 and got the
+        literal expiry string '2040-80-2P' out of an offset-based parser. This
+        raises instead of returning a corrupt symbol, on the same principle as
+        everywhere else here: refuse rather than degrade.
+        """
         thousandths = int((self.strike * D(1000)).to_integral_value())
+        if not 0 < thousandths < 100_000_000:
+            raise ValueError(
+                f"strike {self.strike} does not fit the OCC eight-digit field "
+                f"({thousandths} thousandths). An option on this underlying "
+                "cannot be named in OCC and must be skipped, not approximated."
+            )
         return (f"{self.underlying}{self.expiry:%y%m%d}"
                 f"{self.right}{thousandths:08d}")
 
