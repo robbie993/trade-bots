@@ -74,16 +74,37 @@ USER_AGENT = os.environ.get(
 # analysis and does not pretend to be — it is a reproducible way to turn a
 # headline into a number so that the question "did this help?" can be asked at
 # all. Weights are small because headlines are weak evidence.
+# **Paired, deliberately.** The first version had `outperform` and no
+# `underperform` — the exact opposite word, absent — and the very first live
+# fetch returned two headlines using it ("Is XOM Underperforming the Energy
+# Sector?", "Is Procter & Gamble Stock Underperforming the Nasdaq?"), both
+# scoring zero. An asymmetric lexicon does not merely miss stories, it reads
+# the market as more bullish than it is, because the words it happens to know
+# lean one way.
+#
+# So every entry below has its opposite, and adding one without the other is
+# a bug even when it looks harmless. The pairs are also the reason to distrust
+# this whole approach: it is keyword counting, it cannot read "1 Step Behind
+# in AI. In Chipmaking, It's Now 1 Step Ahead", and no amount of vocabulary
+# will fix that. A language model behind this same interface is the real
+# answer; the scorecard is what will say whether either is worth having.
 BULLISH = {
     "beats": 3, "surge": 3, "soars": 3, "rally": 2, "upgrade": 3, "raises": 2,
     "record": 2, "profit": 2, "growth": 2, "wins": 2, "approval": 3,
     "breakthrough": 3, "outperform": 3, "acquisition": 2, "buyback": 3,
+    "rise": 2, "rising": 2, "climbs": 2, "gains": 2, "jumps": 3, "soar": 3,
+    "higher": 2, "rebound": 2, "boost": 2, "strong": 2, "expands": 2,
+    "bullish": 3, "optimis": 2, "beat": 3, "top": 1, "tops": 2,
 }
 BEARISH = {
     "misses": -3, "plunge": -3, "slump": -3, "crash": -4, "downgrade": -3,
     "cuts": -2, "loss": -2, "lawsuit": -3, "probe": -3, "recall": -3,
     "bankruptcy": -4, "fraud": -4, "layoffs": -2, "halts": -3, "warns": -2,
     "sinks": -3, "tumbles": -3,
+    "underperform": -3, "fall": -2, "falling": -2, "falls": -2, "drops": -2,
+    "declines": -2, "lower": -2, "slides": -2, "weak": -2, "shrinks": -2,
+    "bearish": -3, "pessimis": -2, "miss": -3, "sell-off": -3, "selloff": -3,
+    "worst": -2, "risk": -1, "concerns": -2, "delay": -2,
 }
 
 _WORD = re.compile(r"[a-z']+")

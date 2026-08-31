@@ -53,6 +53,37 @@ def test_the_lexicon_reads_participles_not_just_infinitives():
         assert hits == 1 and score < 0
 
 
+def test_the_lexicon_is_symmetric():
+    """A one-sided vocabulary is a systematic bias, not a gap.
+
+    The first version had `outperform` and no `underperform`, and the very
+    first live fetch returned two headlines using it — "Is XOM Underperforming
+    the Energy Sector?" and "Is Procter & Gamble Stock Underperforming the
+    Nasdaq?" — both scoring zero. A lexicon that knows more bullish words than
+    bearish ones does not merely miss stories: it reads the market as more
+    bullish than it is, and the village sizes positions off that number.
+    """
+    from src.trading.news import BEARISH, BULLISH
+
+    for up, down in [
+        ("outperform", "underperform"), ("rise", "fall"),
+        ("gains", "declines"), ("higher", "lower"),
+        ("strong", "weak"), ("bullish", "bearish"),
+        ("beat", "miss"), ("optimis", "pessimis"),
+    ]:
+        assert up in BULLISH, f"{up!r} missing from the bullish lexicon"
+        assert down in BEARISH, (
+            f"{down!r} missing from the bearish lexicon while {up!r} is "
+            "present — that asymmetry is a long bias"
+        )
+
+
+def test_opposite_headlines_score_opposite_ways():
+    up, _ = score_text("Is XOM Outperforming the Energy Sector?")
+    down, _ = score_text("Is XOM Underperforming the Energy Sector?")
+    assert up > 0 and down < 0
+
+
 def test_a_headline_with_no_loaded_words_scores_nothing():
     score, hits = score_text("Company schedules its annual meeting for Tuesday")
     assert hits == 0 and score == 0
