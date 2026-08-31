@@ -430,6 +430,20 @@ class SignalBoard:
             note=f"{len(heard)} scanner(s): {who}{more}",
         )
 
+    def publishers(self) -> list:
+        """Everything that has ever published, so each can be shown separately.
+
+        Ordered by name rather than by volume, so a source does not move around
+        the page depending on how talkative it was that hour.
+        """
+        try:
+            rows = self.db.query(
+                "SELECT DISTINCT publisher FROM signals ORDER BY publisher"
+            ) or []
+        except Exception:  # noqa: BLE001
+            return []
+        return [str(r["publisher"]) for r in rows if r.get("publisher")]
+
     def recent(self, limit: int = 30, publisher: str = "") -> list:
         """Whatever was published lately, for a page or the CLI."""
         try:

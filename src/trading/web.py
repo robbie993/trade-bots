@@ -456,27 +456,57 @@ def _signals_panel(eco, market) -> str:
         return ""                            # a village with no scanners: no panel
 
     now = stamp(market.as_of())
-    rows = []
-    for row in eco.signals.recent(limit=12):
-        fresh = str(row["as_of"]) == now
-        rows.append({
-            "publisher": e(str(row["publisher"])),
-            "symbol": e(str(row["symbol"])),
-            "score": f"<span class={'good' if D(row['score'] or 0) > 0 else 'warn'}>"
-                     f"{D(row['score'] or 0):+.2f}</span>",
-            "confidence": f"{D(row['confidence'] or 0):.2f}",
-            "heard": ("<span class=good>this bar</span>" if fresh
-                      else "<span class=muted>stale — nobody hears it</span>"),
-            "why": e(str(row["note"] or "")[:60]),
-        })
 
-    listening = sorted(
-        firm.firm_key for firm in eco.store.firms()
-        if "signals" in {
-            str(a).strip().lower()
-            for a in (getattr(eco.specs().get(firm.firm_key), "analysts", ()) or ())
-        }
-    )
+    # **One table per publisher, and the whole day in each.** This was a single
+    # twelve-row list with every source mixed together and no clock on it, so a
+    # headline, a moving average and a warning from a dead firm arrived
+    # indistinguishable and most of the day's readings were simply off the
+    # bottom. Each source now gets its own scrolling table, newest first, with
+    # the time it was published — which is the only way to look at a day's
+    # picks and see what a source actually said and when.
+    blocks = []
+    for pub in eco.signals.publishers():
+        rows = []
+        for row in eco.signals.recent(limit=400, publisher=pub):
+            symbol = str(row["symbol"] or "")
+            if not symbol:
+                continue                 # the silence marker; see mark_silent
+            fresh = str(row["as_of"]) == now
+            score = D(row["score"] or 0)
+            rows.append({
+                "at": e(str(row["as_of"] or "")[11:16]),
+                "symbol": e(symbol),
+                "score": f"<span class={'good' if score > 0 else 'warn'}>"
+                         f"{score:+.2f}</span>",
+                "conf": f"{D(row['confidence'] or 0):.2f}",
+                # "this bar", not "now": a reading is fresh for the bar it was
+                # stamped with, and the whole staleness rule is stated in bars.
+                "heard": ("<span class=good>this bar</span>" if fresh
+                          else "<span class=muted>stale</span>"),
+                "why": e(str(row["note"] or "")[:70]),
+            })
+        if not rows:
+            continue
+        blocks.append(
+            f"<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>{e(pub)} "
+            f"<span class=muted>— {len(rows)} reading(s)</span></h3>"
+            "<div style='max-height:16rem;overflow-y:auto;border:1px solid var(--line);"
+            "border-radius:6px'>" + _table(rows) + "</div>"
+        )
+
+    # Who is listening, counting seats wherever they live. Heirs carry theirs in
+    # the genome rather than the YAML, so reading only the spec reported six
+    # firms as deaf while they were in fact hearing every word.
+    heard_by = {"signals", "news", "scribe"}
+    listening = []
+    for firm in eco.store.firms():
+        spec = eco.specs().get(firm.firm_key)
+        seats = {str(a).strip().lower()
+                 for a in (getattr(spec, "analysts", None)
+                           or (firm.genome or {}).get("analysts", ()) or ())}
+        if seats & heard_by and not firm.is_killed:
+            listening.append(firm.firm_key)
+    listening = sorted(listening)
     configured = ", ".join(
         f"<strong>{e(s.name)}</strong>" + ("" if s.enabled else " (off)") for s in specs
     ) or "none"
@@ -492,7 +522,8 @@ def _signals_panel(eco, market) -> str:
     )
     if eco.scanners.error:
         note = f"<p class=bad>{e(eco.scanners.error)}</p>" + note
-    return _panel("What the scanners see", _table(rows) + note)
+    body = "".join(blocks) or "<p class=muted>(nothing published yet)</p>"
+    return _panel("What the scanners see", body + note)
 
 
 def _council_panel(eco) -> str:
