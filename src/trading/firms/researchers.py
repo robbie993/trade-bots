@@ -101,6 +101,35 @@ class DebateRoom:
         # is not a conviction trade and must not size like one.
         share = (max(bull_weight, bear_weight) / total) * D(100)
         confidence = percent(max(ZERO, min(D(100), (share - D(50)) * D(2))))
+
+        # **A lone voice is not unanimous.** The share above measures agreement
+        # among whoever spoke, and one analyst agrees with itself completely —
+        # so an unopposed seat scored 100 and took the firm's whole per-trade
+        # risk budget, because `trader.propose` sizes on exactly this number.
+        # Silence and unanimity came out identical: one weak seat and three
+        # strong seats in accord both sized at 100%, while three seats agreeing
+        # over one dissenter sized at 50%. More evidence produced a smaller
+        # position than no evidence at all.
+        #
+        # The rule is the one the comment above already states, applied to the
+        # other axis: when the winning case rests on a single analyst, the room
+        # cannot be more certain than that analyst is. A seat that is 20% sure
+        # yields a 20% confidence, whichever way it is pointing and however
+        # loud it is. Nothing is blocked — a strong lone signal still acts, at
+        # the size of one strong signal rather than the size of a chorus.
+        #
+        # This is not about any one seat. It became visible when the news desk
+        # arrived, because a headline exists whether or not price is doing
+        # anything, which makes `signals` the seat most likely to be talking
+        # while the rest of the room is quiet — and `firm_f_bonds`, whose two
+        # analysts are both effectively mute on its own universe, would have
+        # become a news-only trader on its first strong headline.
+        winner_side = self.bull if margin > 0 else self.bear
+        speakers = [s for s in signals
+                    if not s.is_silent
+                    and (s.weighted * D(winner_side.sign)) > 0]
+        if len(speakers) == 1:
+            confidence = percent(min(confidence, D(speakers[0].confidence)))
         return DebateResult(
             symbol=symbol,
             winner="bull" if margin > 0 else "bear",
