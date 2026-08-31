@@ -598,7 +598,29 @@ class AlpacaFeed:
             return self._cache[symbol]
         import time
 
-        if time.monotonic() - self._fetched_at.get(symbol, 0.0) > self.ttl_s:
+        # **Wall clock, not `time.monotonic()`.** This is the bug that froze
+        # the village twice for hours and was diagnosed three times before it
+        # was found.
+        #
+        # `monotonic()` is the right clock for measuring how long something
+        # took, and the wrong one for asking whether a market bar has turned
+        # over, because on macOS it **stops while the machine is asleep**. The
+        # tick log shows this village losing 4.4h, 2.8h and 1.6h to sleep in a
+        # single morning: nine hours of wall time in which the process
+        # accumulated perhaps thirty monotonic minutes. Against a 3600-second
+        # TTL the cache simply never expired, so every firm traded all day
+        # against prices fetched at breakfast.
+        #
+        # The symptom was a whole village frozen on one bar — 15 hours on 27
+        # August, 9h40m on the 28th — while the loop ticked, reconciled and
+        # reported nothing wrong. Correct on a server that never sleeps, wrong
+        # on the laptop it actually runs on, and invisible to any test short
+        # enough to finish inside one TTL. That is why two earlier
+        # investigations cleared the cache: both watched for minutes.
+        #
+        # The market keeps wall-clock time. A jump from NTP costs one extra
+        # fetch, which is the cheap direction to be wrong in.
+        if time.time() - self._fetched_at.get(symbol, 0.0) > self.ttl_s:
             return None
         return self._cache[symbol]
 
@@ -875,7 +897,9 @@ class AlpacaFeed:
         import time
 
         self._cache[symbol] = bars
-        self._fetched_at[symbol] = time.monotonic()
+        # Wall clock, to match `_cached`. See the note there: monotonic time
+        # stops when the laptop sleeps and the market does not.
+        self._fetched_at[symbol] = time.time()
         return bars
 
 

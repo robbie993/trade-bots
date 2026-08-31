@@ -441,9 +441,13 @@ class NewsDesk:
             return []
         digest = read_the_news(self.sources, symbols)
 
-        # Publish even when empty, so `published()` is true and the sources are
-        # not re-fetched sixty times inside one bar.
-        self.board.publish(self.name, digest.readings, as_of)
+        # An empty publish writes no row and leaves `published()` False, which
+        # would re-fetch every source sixty times a bar. Silence is recorded
+        # explicitly instead.
+        if digest.readings:
+            self.board.publish(self.name, digest.readings, as_of)
+        else:
+            self.board.mark_silent(self.name, as_of)
 
         notes = []
         if digest.readings:

@@ -304,6 +304,32 @@ class SignalBoard:
                 return written
         return written
 
+    def mark_silent(self, publisher: str, as_of) -> None:
+        """Record that a publisher ran on this bar and had nothing to say.
+
+        `published()` asks whether a row exists, so publishing an empty list
+        wrote nothing and left it False — and a publisher with nothing to say
+        re-derived its own silence on every tick, sixty times an hour, logging
+        the same three lines each time. The scribe did exactly that from the
+        moment it shipped.
+
+        Silence is a real answer and needs somewhere to live. It goes in the
+        same table under the empty symbol, which no lookup can collide with:
+        `latest()` matches on an upper-cased ticker, and nothing upper-cases to
+        the empty string.
+        """
+        try:
+            self.db.insert("signals", {
+                "publisher": str(publisher)[:60],
+                "symbol": "",
+                "score": "0",
+                "confidence": "0",
+                "note": "ran, nothing to report",
+                "as_of": stamp(as_of),
+            })
+        except Exception:  # noqa: BLE001 - a missed marker costs a repeat, not a tick
+            pass
+
     def published(self, publisher: str, as_of) -> bool:
         """Has this scanner already spoken for this bar?
 
@@ -338,17 +364,43 @@ class SignalBoard:
             newest[str(row["publisher"])] = row
         return list(newest.values())
 
-    def reading(self, symbol: str, as_of) -> Optional[Signal]:
-        """The scanners' combined view, or None if none of them spoke.
+    def reading(self, symbol: str, as_of, publishers=None,
+                exclude=None) -> Optional[Signal]:
+        """The combined view of the publishers asked for, or None.
 
-        Confidence-weighted average of the scores, so a scanner that says "80,
-        but I am only 10% sure" moves the number about as much as it deserves
-        to. When the publishers disagree about *direction* the confidence is
-        halved rather than the score flipped — the same asymmetry the technical
-        analyst uses, and for the same reason: contradiction is a reason to size
-        down, not a reason to be certain of the opposite.
+        **`publishers` and `exclude` are what keep the tool belt a belt.** Every
+        publisher used to be averaged into one number, so a firm could not tell
+        a headline from a moving average from a bankruptcy postmortem — and
+        because `signal_trust` is a single gene, it could not trust one and
+        distrust another. It had to take all of them at the same weight or none
+        of them at all.
+
+        That is wrong in both directions. A news feed may be worth hearing on
+        memecoins and worthless on Treasuries; a price scanner is the reverse of
+        that on nothing in particular. Which of them a desk believes is exactly
+        the sort of question the evolver settles on held-out bars, and it cannot
+        settle it while they arrive pre-mixed.
+
+        So each seat names the publishers it listens to, and each seat carries
+        its own trust gene. Passing neither argument keeps the old behaviour —
+        everything, averaged — which is what a firm listing plain `signals`
+        with no news desk running still gets.
+
+        Within a seat the scores are still a confidence-weighted average, so a
+        publisher that says "80, but I am only 10% sure" moves the number about
+        as much as it deserves to. When publishers inside one seat disagree
+        about *direction* the confidence is halved rather than the score
+        flipped — the same asymmetry the technical analyst uses, and for the
+        same reason: contradiction is a reason to size down, not a reason to be
+        certain of the opposite.
         """
         rows = self.latest(symbol, as_of)
+        if publishers is not None:
+            wanted = {str(p) for p in publishers}
+            rows = [r for r in rows if str(r["publisher"]) in wanted]
+        if exclude:
+            unwanted = {str(p) for p in exclude}
+            rows = [r for r in rows if str(r["publisher"]) not in unwanted]
         heard = []
         for row in rows:
             try:

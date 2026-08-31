@@ -296,21 +296,33 @@ class SignalAnalyst:
     minimum_bars = 0
     needs_board = True
 
+    #: Publishers this seat listens to. `None` means "everything not claimed by
+    #: another seat" — see EXCLUSIVE below.
+    publishers = None
+    #: The gene that scales this seat's confidence. One per seat, so a desk can
+    #: believe its price scanner and ignore its news feed, or the reverse.
+    trust_gene = "signal_trust"
+    quiet_note = "no scanner spoke on this bar"
+
     def __init__(self, board=None):
         self.board = board
 
     def analyse(self, symbol: str, market: MarketData, genome: dict) -> Signal:
         if self.board is None:
             return Signal(self.name, symbol, ZERO, ZERO, "no signal board wired up")
-        reading = self.board.reading(symbol, market.as_of())
+        reading = self.board.reading(
+            symbol, market.as_of(),
+            publishers=self.publishers,
+            exclude=None if self.publishers else EXCLUSIVE,
+        )
         if reading is None:
-            return Signal(self.name, symbol, ZERO, ZERO, "no scanner spoke on this bar")
+            return Signal(self.name, symbol, ZERO, ZERO, self.quiet_note)
 
         # How much of a stranger's opinion this firm wants. A gene rather than
         # a constant because trusting an imported screener is a choice the
         # evolver is allowed to turn down, and turning it to 0 mutes the seat
         # without editing the firm's analyst list.
-        trust = _genome(genome, "signal_trust", 100) / D(100)
+        trust = _genome(genome, self.trust_gene, 100) / D(100)
         return Signal(
             self.name,
             symbol,
@@ -320,6 +332,51 @@ class SignalAnalyst:
         )
 
 
+class NewsAnalyst(SignalAnalyst):
+    """The news desk's seat, kept separate from the scanners' on purpose.
+
+    Every publisher used to be averaged into a single number before any firm
+    saw it, so a headline, a moving average and a bankruptcy postmortem
+    arrived as one opinion — and `signal_trust` being one gene meant a desk
+    had to weight all three identically or mute all three together.
+
+    They are not the same kind of evidence and they are not equally useful to
+    the same desk. A news feed may be worth hearing on memecoins and worthless
+    on Treasuries; a price screener has the opposite problem. Which of them a
+    firm believes is exactly what the evolver is for, and it cannot answer the
+    question while they arrive pre-mixed.
+
+    So this seat hears `news` and nothing else, and scales on its own gene.
+    """
+
+    name = "news"
+    publishers = ("news",)
+    trust_gene = "news_trust"
+    quiet_note = "no news on this bar"
+
+
+class ScribeAnalyst(SignalAnalyst):
+    """The dead firms' seat. Hears only the scribe.
+
+    Separate for the same reason as the news, and for one more: what the
+    scribe publishes is survivorship-shaped evidence about strategies that
+    already failed, which is a different claim from "this name is going up".
+    A desk should be able to weigh a warning from a corpse differently from a
+    headline, and now it can.
+    """
+
+    name = "scribe"
+    publishers = ("scribe",)
+    trust_gene = "scribe_trust"
+    quiet_note = "the scribe said nothing on this bar"
+
+
+#: Publishers that have a seat of their own. The general `signals` seat
+#: excludes them so nothing is heard twice — once in its own right and again
+#: inside an average — which would let one source vote in two places.
+EXCLUSIVE: tuple = ("news", "scribe")
+
+
 ANALYSTS: dict = {
     "technical": TechnicalAnalyst,
     "fundamental": FundamentalAnalyst,
@@ -327,11 +384,14 @@ ANALYSTS: dict = {
     "macro": MacroAnalyst,
     "onchain": OnChainAnalyst,
     "signals": SignalAnalyst,
+    "news": NewsAnalyst,
+    "scribe": ScribeAnalyst,
 }
 
 # What people write when they mean `signals`. Aliases rather than extra entries
 # in ANALYSTS so the error message still lists each seat once.
-ALIASES: dict = {"signal": "signals", "scanner": "signals", "scanners": "signals"}
+ALIASES: dict = {"signal": "signals", "scanner": "signals", "scanners": "signals",
+                 "headlines": "news", "newsdesk": "news"}
 
 
 def build_analysts(names, board=None) -> list:

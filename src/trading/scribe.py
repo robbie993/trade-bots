@@ -177,9 +177,10 @@ class Scribe:
                 + ", ".join(f"{r.symbol} {r.score}" for r in verdict.readings[:5])
             ))
         elif verdict.lessons_read:
-            # Publish an empty bar so `published()` is true and this does not
-            # re-derive the same silence sixty times an hour.
-            self.board.publish(PUBLISHER, [], as_of)
+            # Record the silence, so this does not re-derive it sixty times
+            # an hour. `publish` with an empty list writes no row and so
+            # leaves `published()` False — which is exactly what happened.
+            self.board.mark_silent(PUBLISHER, as_of)
             notes.insert(0, f"scribe: silent — {notes[-1] if notes else 'no evidence'}")
         return notes
 

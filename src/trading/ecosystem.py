@@ -140,6 +140,10 @@ class Ecosystem:
         self._scanners = None
         self._scribe = None
         self._news = None
+        #: Which unpriceable symbols have already been reported on this bar.
+        #: Presentation state, deliberately in memory — see the tick.
+        self._reported_bar = ""
+        self._reported_blind: set = set()
 
     # =====================================================================
     # the layers above the ledger
@@ -479,7 +483,24 @@ class Ecosystem:
         # than an exception out of the whole tick — but it must not pass
         # unmentioned, and for a firm that *holds* the thing it is not a
         # detail: a position you cannot value is a book you cannot trust.
+        # **Once per bar, not once per tick.** A symbol that cannot be priced
+        # is worth saying — and saying it every sixty seconds buries everything
+        # else. One cold start with a rate-limited feed wrote 795 identical
+        # events in three minutes and pushed every real line off the page,
+        # which is how a log stops being read at all.
+        #
+        # The state is in memory on purpose. It is presentation, not a
+        # decision: losing it on restart costs one repeated line, and keeping
+        # it in the ledger would mean writing to the database to decide whether
+        # to write to the database.
+        bar_now = resolution.bar_key(market.as_of()) or ""
+        if bar_now != self._reported_bar:
+            self._reported_bar = bar_now
+            self._reported_blind = set()
         for symbol, why in sorted(getattr(market, "unpriceable", {}).items()):
+            if symbol in self._reported_blind:
+                continue
+            self._reported_blind.add(symbol)
             report.bot_notes.append(f"no price for {symbol}: {why[:160]}")
             flow.emit("market", f"no price for {symbol}", kind="blocked",
                       detail=why[:300])

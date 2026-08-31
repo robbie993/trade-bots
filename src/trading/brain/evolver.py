@@ -62,6 +62,15 @@ GENES: dict = {
     # it on held-out bars. 100 remains the starting point, so nothing changes
     # until evolution has evidence to change it with.
     "signal_trust": (ZERO, D(150), False),
+    # One trust gene per source seat. They were a single gene until the news
+    # desk arrived and made the problem obvious: a headline, a moving average
+    # and a bankruptcy postmortem are not the same kind of evidence, and a
+    # desk forced to weight them identically cannot express what it has
+    # learned. Separate genes let the bonds desk mute news while keeping its
+    # screener, and let the memecoin desk do the opposite, without either
+    # decision being made by hand.
+    "news_trust": (ZERO, D(150), False),
+    "scribe_trust": (ZERO, D(150), False),
 }
 
 BASE_GENOME: dict = {
@@ -89,6 +98,8 @@ BASE_GENOME: dict = {
     # changing what firms currently do and letting them evolve away from it
     # are two different experiments, and only the second one is this one.
     "signal_trust": 100,
+    "news_trust": 100,
+    "scribe_trust": 100,
 }
 
 
