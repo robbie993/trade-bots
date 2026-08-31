@@ -83,6 +83,24 @@ class TradingStore:
     def active_firms(self) -> list[FirmRecord]:
         return self.firms(FirmStatus.ACTIVE.value)
 
+    def bars_observed(self) -> int:
+        """How many distinct market bars the village has actually seen.
+
+        A real bar count, for the things whose cadence is quoted in bars. The
+        alternative on hand was a calendar day number, and using it is how
+        evolution came to run every twenty *days* while its own docstring
+        promised every twenty *bars* — on an hourly feed a factor of about
+        six and a half, and the reason no firm had ever evolved once in the
+        village's first eighteen days of life.
+        """
+        try:
+            row = self.db.query_one(
+                "SELECT COUNT(DISTINCT bar_date) AS n FROM firm_feed_bars"
+            )
+        except Exception:  # noqa: BLE001 - never fail a tick over a counter
+            return 0
+        return int((row or {}).get("n") or 0)
+
     # -- strikes and the gulag ---------------------------------------------
     #
     # Kept in `firm_strikes` rather than on `firms` because every migration in

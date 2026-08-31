@@ -1222,11 +1222,32 @@ class Ecosystem:
         every = int(self.config.brain.evolve_every or 0)
         if every <= 0:
             return []
+        resolution = self.config.data.resolution
 
-        from .living import _clock
-
-        day = _clock(market)
-        if day is None or day % every != 0:
+        # **Bars observed, not calendar days.** This asked `living._clock`,
+        # which returns `stamp.date().toordinal()` — a day number, as its own
+        # docstring says. So a cadence documented three lines above as "every
+        # TRADE_EVOLVE_EVERY *market bars* — bars, never ticks" was in fact
+        # every twenty calendar *days*: a factor of six and a half out on an
+        # hourly feed, and the eighth outing for the unit confusion this file
+        # keeps promising is the last one.
+        #
+        # What it cost is the whole point of the module. Every firm in the
+        # village had zero generations on record after eighteen days alive —
+        # the brain, the court and the jury were built so firms would not run
+        # the genome they were born with forever, and every firm had run
+        # exactly that, because the next qualifying day never arrived.
+        stamp = market.as_of()
+        if stamp is None:
+            return []
+        # The bar's own number: how many bar-lengths it sits from the epoch.
+        # Derived from the bar rather than counted in a table, which keeps the
+        # property the old code was right about — replay the same window twice
+        # and the same generations happen on the same bars — while fixing the
+        # unit it was wrong about. On a daily resolution this is the day
+        # number the original returned, so a daily village is unaffected.
+        seen = int(stamp.timestamp() // int(resolution.seconds))
+        if seen % every != 0:
             return []
 
         # Once per bar, not once per tick inside a qualifying bar. `day % every`
