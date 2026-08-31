@@ -47,6 +47,21 @@ GENES: dict = {
     # regardless of what the analysts think. Zero switches it off, which is
     # what every firm did before this gene existed.
     "stop_loss_pct": (ZERO, D(25), False),
+    # How much of a stranger's opinion this firm wants, as a percentage of the
+    # published confidence. `SignalAnalyst` has always read this and its
+    # docstring has always called it "a gene rather than a constant, because
+    # trusting an imported screener is a choice the evolver is allowed to turn
+    # down" — but it was never in this table, so the evolver could not turn it
+    # down, or up, or anything. Every firm sat on the default of 100 and took
+    # every scanner entirely at its word, permanently.
+    #
+    # It belongs here because a source's reliability is not knowable in
+    # advance and is not the same for every firm: a Reddit sentiment feed may
+    # be worth listening to on memecoins and worthless on Treasuries, and no
+    # amount of arguing settles that as cheaply as letting each firm discover
+    # it on held-out bars. 100 remains the starting point, so nothing changes
+    # until evolution has evidence to change it with.
+    "signal_trust": (ZERO, D(150), False),
 }
 
 BASE_GENOME: dict = {
@@ -69,6 +84,11 @@ BASE_GENOME: dict = {
     # a gene and not a constant — and one number picked by hand for nine very
     # different desks was never going to be right for any of them.
     "stop_loss_pct": 0,
+    # Full trust to start, which is what every firm has been running on since
+    # the signals seat existed. Not because full trust is right — because
+    # changing what firms currently do and letting them evolve away from it
+    # are two different experiments, and only the second one is this one.
+    "signal_trust": 100,
 }
 
 
