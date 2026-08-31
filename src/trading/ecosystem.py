@@ -139,6 +139,7 @@ class Ecosystem:
         self._signals = None
         self._scanners = None
         self._scribe = None
+        self._news = None
 
     # =====================================================================
     # the layers above the ledger
@@ -189,6 +190,24 @@ class Ecosystem:
 
             self._signals = SignalBoard(self.db)
         return self._signals
+
+    @property
+    def news(self):
+        """The news desk, or None when it has not been switched on.
+
+        Opt-in by environment rather than by config file, because this is the
+        first thing in the village that reaches out to the open internet on
+        its own, and that should be a decision somebody made on purpose.
+        """
+        if self._news is None:
+            import os
+
+            if not os.environ.get("TRADE_NEWS_ENABLED", "").strip():
+                return None
+            from .news import NewsDesk
+
+            self._news = NewsDesk(self.signals)
+        return self._news
 
     @property
     def scribe(self):
@@ -476,6 +495,12 @@ class Ecosystem:
         # — see scribe.py. It refuses to speak on one firm's word, which today
         # means it says nothing, and says why.
         report.signals.extend(self.scribe.run(market))
+        # The news desk fetches from the open internet, so it is trusted code
+        # rather than a sandboxed scanner file — see news.py. Off unless
+        # TRADE_NEWS_ENABLED is set, because a village that silently starts
+        # making outbound requests is not one anybody asked for.
+        if self.news is not None:
+            report.signals.extend(self.news.run(market))
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 
