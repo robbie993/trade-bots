@@ -286,7 +286,31 @@ class Evolver:
             )
 
         if not gen.refused:
-            self.store.update_firm_fields(firm.id, genome=json.dumps(best.genome, sort_keys=True))
+            # **Genes are the evolver's. Everything else in the genome is the
+            # firm's, and must survive being improved.**
+            #
+            # `normalise` rebuilds from BASE_GENOME and keeps only keys in
+            # GENES, which is right for tuning and catastrophic as a write:
+            # promoting a genome used to replace the whole dict, so a firm came
+            # out of its first generation having lost every non-gene key it
+            # carried.
+            #
+            # For a bankruptcy heir that is most of what it is. `analysts` is
+            # where an heir's inherited seats live — it is not in the YAML and
+            # never will be — so a promotion silently took firm_a_etf_ii from
+            # four seats back to the default one and cut it off from the
+            # scanners and the scribe. `inherited_from`, `inherited_lesson` and
+            # `predecessor_diagnosis` went with it: the firm would have been
+            # improved into an orphan with no memory of what killed its parent.
+            #
+            # Measured before this line existed: analysts ['fundamental',
+            # 'technical', 'sentiment', 'signals'] -> None, at generation 1.
+            carried = {k: v for k, v in (firm.genome or {}).items()
+                       if k not in GENES}
+            promoted = {**carried, **best.genome}
+            self.store.update_firm_fields(
+                firm.id, genome=json.dumps(promoted, sort_keys=True)
+            )
             self.store.record_event(
                 "evolution",
                 f"{firm.firm_key}: genome promoted at generation {generation} "
