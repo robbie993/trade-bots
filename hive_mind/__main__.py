@@ -14,6 +14,8 @@ import argparse
 import sys
 from dataclasses import replace
 
+from src.money import D, fmt_money
+
 from .engine import GodBrokerEngine, backtest
 from .evolver import BASE_GENOME
 from .lock import LockConfig, WalkForwardLock
@@ -77,8 +79,8 @@ def narrated(days: int, seed: int) -> int:
 
     print("\n" + "=" * 74)
     print(result.summary())
-    print(f"\nthe venue took ${result.slippage:,.2f} in spread and impact and "
-          f"${result.fees:,.2f} in fees across {result.fills} fills.")
+    print(f"\nthe venue took {fmt_money(result.slippage)} in spread and impact and "
+          f"{fmt_money(result.fees)} in fees across {result.fills} fills.")
     print("\nscouts:")
     print(engine.council.standings())
     print(
@@ -104,7 +106,7 @@ def hallucination(seed: int) -> int:
     print(f"  {honest.summary()}")
     gap = perfect.return_pct - honest.return_pct
     print(
-        f"\n  The gap is {gap:+.2f} percentage points, on {honest.fills} fills. That is "
+        f"\n  The gap is {gap:+} percentage points, on {honest.fills} fills. That is "
         f"money\n  the simulator was inventing — and it is the smaller half of the problem."
     )
     print(
@@ -144,7 +146,12 @@ def locked(seed: int, stress_runs: int, overfit: bool, lenient: bool) -> int:
     plan = MIXED_HISTORY
     if overfit:
         # A trend-follower, trained on a history that is almost all trend.
-        genome = replace(BASE_GENOME, trend_bias=0.95, position_pct=0.25, momentum_window=15)
+        genome = replace(
+            BASE_GENOME,
+            trend_bias=D("0.95"),
+            position_pct=D("0.25"),
+            momentum_window=D(15),
+        )
         plan = ONE_SIDED_HISTORY
 
     history = MarketFeed(seed=seed, plan=plan)
@@ -157,14 +164,14 @@ def locked(seed: int, stress_runs: int, overfit: bool, lenient: bool) -> int:
         # a strategy. Nothing that runs under --lenient has proved anything.
         config = LockConfig(
             stress_runs=stress_runs,
-            gauntlet_min_return_pct=-100.0,
-            gauntlet_max_drawdown_pct=100.0,
+            gauntlet_min_return_pct=D(-100),
+            gauntlet_max_drawdown_pct=D(100),
             gauntlet_min_trades=1,
-            stress_min_pass_rate=0.0,
-            stress_max_drawdown_pct=100.0,
-            stress_worst_case_pct=-100.0,
-            paper_min_return_pct=-100.0,
-            paper_min_sharpe=-99.0,
+            stress_min_pass_rate=D(0),
+            stress_max_drawdown_pct=D(100),
+            stress_worst_case_pct=D(-100),
+            paper_min_return_pct=D(-100),
+            paper_min_sharpe=D(-99),
         )
 
     print("=" * 74)

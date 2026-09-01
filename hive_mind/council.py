@@ -24,7 +24,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Sequence
+
+from src.money import D, ZERO
 
 from .evolver import Genome
 from .market import Bar
@@ -35,8 +38,8 @@ from .scouts import ScoutAI
 @dataclass
 class Decision:
     action: str = "hold"
-    leverage: float = 0.0
-    confidence: float = 0.0
+    leverage: Decimal = ZERO
+    confidence: Decimal = ZERO
     votes: dict = field(default_factory=dict)
     proposals: list = field(default_factory=list)
     reason: str = ""
@@ -49,12 +52,12 @@ class Decision:
     @property
     def backers(self) -> list:
         """The scouts who voted for what won — the ones an outcome settles."""
-        return [p for p in self.proposals if p.key == (self.action, round(self.leverage, 2))]
+        return [p for p in self.proposals if p.key == (self.action, self.leverage)]
 
     def __str__(self) -> str:
         return (
-            f"{{'action': '{self.action}', 'leverage': {self.leverage:.2f}, "
-            f"'confidence': {self.confidence:.2f}}}"
+            f"{{'action': '{self.action}', 'leverage': {self.leverage}, "
+            f"'confidence': {self.confidence}}}"
         )
 
 
@@ -84,13 +87,13 @@ class VillageCouncil:
         if not proposals:
             return Decision(reason="no scout had a proposal that survived its own fact-check")
 
-        votes: dict = defaultdict(float)
+        votes: dict = defaultdict(Decimal)
         for proposal in proposals:
-            votes[proposal.key] += proposal.confidence
+            votes[proposal.key] += D(str(proposal.confidence))
 
         winner = max(votes, key=lambda k: (votes[k], k[1]))
-        total = sum(votes.values())
-        share = votes[winner] / total if total else 0.0
+        total = sum(votes.values(), ZERO)
+        share = (votes[winner] / total).quantize(D("0.0001")) if total else ZERO
 
         action, leverage = winner
         leverage = min(leverage, genome.leverage_cap)

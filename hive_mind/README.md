@@ -16,7 +16,23 @@ python -m hive_mind --lock              # the four-phase pipeline, and its verdi
 python -m hive_mind --lock --overfit-demo # the training-data trap, caught live
 ```
 
-Pure standard library. No dependencies, no network, no keys.
+No third-party dependencies, no network, no keys.
+
+It is **not** part of the village. It has no database, no ledger, no firms, no
+brokerage and no human gate, and nothing in `src/` imports anything from here.
+What it does do is reuse the village's arithmetic rather than growing a second
+copy of it:
+
+| Borrowed | Used for |
+|---|---|
+| `src/money.py` | `D`, `money`, `percent`, `fmt_money` — every cash value is a Decimal, quantised where the ledger quantises |
+| `src/trading/indicators.py` | Sharpe, max drawdown, win rate, momentum, stdev — the same statistics the village scores its firms with |
+| `src/trading/models.py` | `Bar` (this one subclasses it), `Fill`, `Side`, and the `price()`/`qty()` quantisers |
+| `src/trading/execution/paper.py` | `PaperVenue` — what a fill costs in slippage and fees, with impact layered on top |
+
+A second implementation of "what a fill costs" or "how did this do" is a
+second answer to those questions, and the first symptom is two parts of one
+repository quietly disagreeing about the same run.
 
 ---
 
@@ -58,19 +74,24 @@ slippage does not exist, and the slippage eats exactly the edge it was built
 to have. Perfect fills do not merely flatter a backtest; they teach a habit
 that only costs money later.
 
-So `Venue` charges a half-spread that widens with VIX, square-root impact on
-size, and a fee, on every share in both directions. There is no size at which
-trading becomes free and no direction in which the venue is on your side.
+So `Venue` is two layers. The village's `PaperVenue` prices the fill —
+slippage that always works against the trader, a fee on the gross — and this
+package adds the two terms that model does not have: a half-spread that widens
+with VIX, and square-root impact on size. Both are charged on every share in
+both directions. There is no size at which trading becomes free and no
+direction in which the venue is on your side.
 
 `PerfectVenue` exists only so `--show-hallucination` can print the same genome
 scored both ways. Nothing in this package uses it to decide anything:
 
 ```
-perfect fills: $100,000 -> $99,793 (-0.21%), sharpe -0.17, 121 closed trades
-real fills:    $100,000 -> $98,761 (-1.24%), sharpe -1.09, 120 closed trades
+perfect fills: $100,000.00 -> $99,762.46 (-0.24%), sharpe -0.1966, 121 trades
+real fills:    $100,000.00 -> $97,840.51 (-2.16%), sharpe -1.9805, 120 trades
 ```
 
-A point of return and a whole point of Sharpe, on one seed, from fills alone.
+Two points of return and nearly two points of Sharpe, on one seed, from fills
+alone — and the trade count is almost identical, so this is not a different
+strategy. It is the same strategy, priced honestly.
 
 ### 2. The training-data trap
 
@@ -86,20 +107,20 @@ also a rally — and then:
 
 ```
 [PASSED] phase 2 — the gauntlet
-         holdout: +22.25%, sharpe 3.88, 44 closed trades, win rate 82%
-         in-sample +79.96% vs holdout +22.25% — a gap of +57.71 points
+         holdout: +14.40%, sharpe 3.2578, 52 closed trades, win rate 69.23%
+         in-sample +64.63% vs holdout +14.40% — a gap of +50.23 points
 [FAILED] phase 2b — the stress tests
-         chop_2015      3/17 survived, mean  -8.62%
-         covid_2020     5/17 survived, mean -10.96%
+         chop_2015      2/17 survived, mean  -8.93%
+         covid_2020     4/17 survived, mean -13.84%
          survived 36/100 regimes (36%), under the 60% required;
-         worst regime (gfc_2008) lost -68.46%
+         worst regime (gfc_2008) lost -65.56%
 ```
 
-An 82% win rate and a Sharpe of 3.88 on data it had never seen — and it still
-dies, because a single holdout that resembles the training data is not evidence
-of anything. That is what phase 2b is for, and it is the whole difference
-between "it passed out-of-sample" and "it survives markets unlike the one it
-grew up in".
+A Sharpe of 3.26 on data it had never seen — and it still dies, because a
+single holdout that resembles the training data is not evidence of anything.
+That is the whole difference between "it passed out-of-sample" and "it
+survives markets unlike the one it grew up in", and phase 2b is where the
+difference gets measured.
 
 ### 3. The echo chamber
 
@@ -217,6 +238,13 @@ money moves: that the numbers came from data which could not have shaped them.
 
 **Latency does not exist here.** Decisions are made on a close and filled on
 that close. A live system makes decisions while the price moves underneath it.
+
+**The genes are Decimal; the tape is not.** Prices, cash, quantities and every
+threshold are `Decimal`, because the fingerprint of a genome is what licenses
+it and a gene that hashes differently depending on how it was constructed
+would make that licence meaningless. The random walk inside `MarketFeed` is
+computed in float — it is a random process, not a ledger — and every value
+that leaves it has been through `price()` first.
 
 ### To point this at reality
 

@@ -4,8 +4,20 @@ One asset, one book, one decision a day. The engine holds the cash, marks the
 position at every close, charges the venue for every share it moves, and files
 what happened in the Obsidian brain.
 
-Three things it insists on, all of them for the same reason — that the number
-at the end is worth reading:
+Cash, prices and quantities are ``Decimal`` end to end, through the same
+``money()``, ``price()`` and ``qty()`` quantisers the village's ledger uses.
+That is not ceremony: a book that drifts by fractions of a cent is a book
+whose reconciliation is an opinion, and the performance statistics below are
+the numbers a walk-forward verdict is made on.
+
+The statistics themselves come from ``src/trading/indicators.py`` — the same
+Sharpe, the same drawdown, the same win rate the village scores its firms
+with. A second implementation of "how did this do" is a second answer to that
+question, and the first symptom would be two parts of this repository quietly
+disagreeing about the same run.
+
+Three things it insists on, all for the same reason — that the number at the
+end is worth reading:
 
 * **The decision reads only bars that have printed.** The council is handed
   history up to and including today's close and nothing after it. That is the
@@ -27,17 +39,21 @@ what the brain filed, one day at a time.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from statistics import mean, pstdev
+from decimal import Decimal
 from typing import Optional
+
+from src.money import D, ZERO, fmt_money, money, percent
+from src.trading.indicators import max_drawdown_pct, sharpe as sharpe_ratio, win_rate_pct
+from src.trading.models import price, qty
 
 from .council import Decision, VillageCouncil
 from .evolver import ALL_GENES, Evolver, Genome
 from .market import Bar, Venue
 from .memory import ObsidianMemory
 
-TRADING_DAYS = 252
+# Below this many daily returns, a Sharpe is a number with no meaning attached.
+MIN_RETURNS_FOR_SHARPE = 20
 
 
 class MutationRefused(RuntimeError):
@@ -57,12 +73,12 @@ class Trade:
     opened: int
     closed: int
     side: str
-    shares: float
-    entry: float
-    exit: float
-    pnl: float
-    return_pct: float
-    vix: float
+    shares: Decimal
+    entry: Decimal
+    exit: Decimal
+    pnl: Decimal
+    return_pct: Decimal
+    vix: Decimal
     regime: str
 
 
@@ -71,22 +87,22 @@ class Result:
     """What a run was worth, after everything it cost."""
 
     label: str = ""
-    start_capital: float = 0.0
-    final_equity: float = 0.0
+    start_capital: Decimal = ZERO
+    final_equity: Decimal = ZERO
     equity_curve: list = field(default_factory=list)
     trades: list = field(default_factory=list)
     fills: int = 0
-    fees: float = 0.0
-    slippage: float = 0.0
+    fees: Decimal = ZERO
+    slippage: Decimal = ZERO
     bars: int = 0
     genome: Optional[Genome] = None
     stopped_out: int = 0
 
     @property
-    def return_pct(self) -> float:
+    def return_pct(self) -> Decimal:
         if not self.start_capital:
-            return 0.0
-        return 100.0 * (self.final_equity - self.start_capital) / self.start_capital
+            return ZERO
+        return percent((self.final_equity - self.start_capital) / self.start_capital * D(100))
 
     @property
     def daily_returns(self) -> list:
@@ -94,50 +110,41 @@ class Result:
         return [(b - a) / a for a, b in zip(curve, curve[1:]) if a]
 
     @property
-    def max_drawdown_pct(self) -> float:
-        peak, worst = None, 0.0
-        for value in self.equity_curve:
-            peak = value if peak is None else max(peak, value)
-            if peak:
-                worst = max(worst, 100.0 * (peak - value) / peak)
-        return worst
+    def max_drawdown_pct(self) -> Decimal:
+        return max_drawdown_pct(self.equity_curve)
 
     @property
-    def sharpe(self) -> Optional[float]:
+    def sharpe(self) -> Optional[Decimal]:
         """Annualised, zero risk-free. None below a sample worth quoting."""
         returns = self.daily_returns
-        if len(returns) < 20:
+        if len(returns) < MIN_RETURNS_FOR_SHARPE:
             return None
-        deviation = pstdev(returns)
-        if deviation == 0:
-            return None
-        return mean(returns) / deviation * math.sqrt(TRADING_DAYS)
+        return sharpe_ratio(returns)
 
     @property
     def closed_trades(self) -> int:
         return len(self.trades)
 
     @property
-    def win_rate_pct(self) -> Optional[float]:
-        if not self.trades:
-            return None
-        return 100.0 * sum(1 for t in self.trades if t.pnl > 0) / len(self.trades)
+    def win_rate_pct(self) -> Optional[Decimal]:
+        return win_rate_pct([t.pnl for t in self.trades])
 
     @property
-    def cost_drag_pct(self) -> float:
+    def cost_drag_pct(self) -> Decimal:
         """What the spread, the impact and the fees took, as a share of capital."""
         if not self.start_capital:
-            return 0.0
-        return 100.0 * (self.slippage + self.fees) / self.start_capital
+            return ZERO
+        return percent((self.slippage + self.fees) / self.start_capital * D(100))
 
     def summary(self) -> str:
-        sharpe = f"{self.sharpe:.2f}" if self.sharpe is not None else "—"
-        wins = f"{self.win_rate_pct:.0f}%" if self.win_rate_pct is not None else "—"
+        sharpe = f"{self.sharpe}" if self.sharpe is not None else "—"
+        wins = f"{self.win_rate_pct}%" if self.win_rate_pct is not None else "—"
         return (
-            f"{self.label or 'run'}: ${self.start_capital:,.0f} -> ${self.final_equity:,.0f} "
-            f"({self.return_pct:+.2f}%), max drawdown {self.max_drawdown_pct:.2f}%, "
-            f"sharpe {sharpe}, {self.closed_trades} closed trades, win rate {wins}, "
-            f"costs {self.cost_drag_pct:.2f}% of capital over {self.bars} bars"
+            f"{self.label or 'run'}: {fmt_money(self.start_capital)} -> "
+            f"{fmt_money(self.final_equity)} ({self.return_pct:+}%), "
+            f"max drawdown {self.max_drawdown_pct}%, sharpe {sharpe}, "
+            f"{self.closed_trades} closed trades, win rate {wins}, "
+            f"costs {self.cost_drag_pct}% of capital over {self.bars} bars"
         )
 
 
@@ -149,7 +156,7 @@ class GodBrokerEngine:
         genome: Genome,
         memory: Optional[ObsidianMemory] = None,
         venue: Optional[Venue] = None,
-        capital: float = 100_000.0,
+        capital=D(100_000),
         asset: str = "SPY",
         scouts: int = 5,
         seed: int = 0,
@@ -171,10 +178,10 @@ class GodBrokerEngine:
         self.evolver = evolver or Evolver(seed=seed or 20260901)
         self.verbose = verbose
 
-        self.start_capital = float(capital)
-        self.cash = float(capital)
-        self.shares = 0.0
-        self.entry_price = 0.0
+        self.start_capital = money(capital)
+        self.cash = money(capital)
+        self.shares = ZERO
+        self.entry_price = ZERO
         self.entry_index = 0
 
         self.history: list = []
@@ -186,28 +193,30 @@ class GodBrokerEngine:
 
     # -- the book ---------------------------------------------------------
     @property
-    def position_value(self) -> float:
-        return self.shares * (self.history[-1].close if self.history else 0.0)
+    def position_value(self) -> Decimal:
+        return money(self.shares * (self.history[-1].close if self.history else ZERO))
 
-    def equity(self, bar: Optional[Bar] = None) -> float:
-        mark = bar.close if bar is not None else (self.history[-1].close if self.history else 0.0)
-        return self.cash + self.shares * mark
+    def equity(self, bar: Optional[Bar] = None) -> Decimal:
+        mark = bar.close if bar is not None else (self.history[-1].close if self.history else ZERO)
+        return money(self.cash + self.shares * mark)
 
-    def _target_shares(self, decision: Decision, bar: Bar) -> float:
+    def _target_shares(self, decision: Decision, bar: Bar) -> Decimal:
         """What the book should hold if the council gets its way."""
         if decision.action == "hold":
             return self.shares
         if decision.action == "sell":
-            return 0.0  # flat, not short: `hedge` is how this engine goes short
-        exposure = self.genome.position_pct * decision.leverage * self.equity(bar)
-        exposure = min(exposure, self.equity(bar) * self.genome.leverage_cap)
-        target = exposure / max(bar.close, 0.01)
+            return ZERO  # flat, not short: `hedge` is how this engine goes short
+        equity = self.equity(bar)
+        exposure = self.genome.position_pct * decision.leverage * equity
+        exposure = min(exposure, equity * self.genome.leverage_cap)
+        target = qty(exposure / max(bar.close, D("0.01")))
         return target if decision.action == "buy" else -target
 
-    def _trade_to(self, target: float, bar: Bar, note: str) -> Optional[float]:
+    def _trade_to(self, target: Decimal, bar: Bar, note: str) -> Optional[Decimal]:
         """Move the book to ``target`` shares. Returns realised P&L, if any."""
+        target = qty(target)
         delta = target - self.shares
-        if abs(delta) * bar.close < self.equity(bar) * 0.002:
+        if abs(delta) * bar.close < self.equity(bar) * D("0.002"):
             return None  # too small to be worth the spread
 
         side = "buy" if delta > 0 else "sell"
@@ -222,9 +231,12 @@ class GodBrokerEngine:
         reducing = abs(target) < abs(self.shares) and self.shares != 0
         if reducing or closing:
             closed_shares = min(abs(self.shares), abs(delta))
-            direction = 1.0 if self.shares > 0 else -1.0
-            realised = closed_shares * (fill.price - self.entry_price) * direction
-            entry_notional = closed_shares * self.entry_price
+            direction = D(1) if self.shares > 0 else D(-1)
+            realised = money(closed_shares * (fill.price - self.entry_price) * direction)
+            entry_notional = money(closed_shares * self.entry_price)
+            return_pct = (
+                percent(realised / entry_notional * D(100)) if entry_notional else ZERO
+            )
             self.trades.append(
                 Trade(
                     opened=self.entry_index,
@@ -234,7 +246,7 @@ class GodBrokerEngine:
                     entry=self.entry_price,
                     exit=fill.price,
                     pnl=realised,
-                    return_pct=100.0 * realised / entry_notional if entry_notional else 0.0,
+                    return_pct=return_pct,
                     vix=bar.vix,
                     regime=bar.regime,
                 )
@@ -244,7 +256,7 @@ class GodBrokerEngine:
                 bar.vix,
                 "long" if direction > 0 else "short",
                 realised,
-                100.0 * realised / entry_notional if entry_notional else 0.0,
+                return_pct,
                 note=note,
             )
 
@@ -253,27 +265,26 @@ class GodBrokerEngine:
             # weighted one, so a scale-in cannot flatter the exit.
             if self.shares != 0 and (self.shares > 0) == (target > 0):
                 total = abs(self.shares) + abs(delta)
-                self.entry_price = (
-                    abs(self.shares) * self.entry_price + abs(delta) * fill.price
-                ) / total
+                self.entry_price = price(
+                    (abs(self.shares) * self.entry_price + abs(delta) * fill.price) / total
+                )
             else:
                 self.entry_price = fill.price
                 self.entry_index = bar.index
 
-        self.cash += fill.cash_delta
+        self.cash = money(self.cash + fill.cash_delta)
         self.shares = target
-        if abs(self.shares) < 1e-9:
-            self.shares = 0.0
-            self.entry_price = 0.0
+        if self.shares == 0:
+            self.entry_price = ZERO
         return realised
 
     # -- the stop ---------------------------------------------------------
     def _stop_hit(self, bar: Bar) -> bool:
         if self.shares == 0 or self.entry_price <= 0:
             return False
-        direction = 1.0 if self.shares > 0 else -1.0
+        direction = D(1) if self.shares > 0 else D(-1)
         move = direction * (bar.close - self.entry_price) / self.entry_price
-        return move * 100.0 <= -self.genome.stop_loss_pct
+        return move * D(100) <= -self.genome.stop_loss_pct
 
     # -- one day ----------------------------------------------------------
     def step(self, bar: Bar) -> Decision:
@@ -281,17 +292,17 @@ class GodBrokerEngine:
 
         if self.verbose:
             print(
-                f"\n--- {bar.day} | close ${bar.close:,.2f} | VIX {bar.vix:.1f} "
-                f"| sentiment {bar.sentiment:+.2f} | {bar.regime} ---"
+                f"\n--- {bar.day} | close {fmt_money(bar.close)} | VIX {bar.vix} "
+                f"| sentiment {bar.sentiment:+} | {bar.regime} ---"
             )
 
         # The stop comes before the debate. A book that argues about a new
         # trade while an old one is past its stop is a book with no stop.
         if self._stop_hit(bar):
-            self._trade_to(0.0, bar, note="stop loss")
+            self._trade_to(ZERO, bar, note="stop loss")
             self.stopped_out += 1
             if self.verbose:
-                print(f"🛑 Stop loss at {self.genome.stop_loss_pct:.1f}% — flat.")
+                print(f"🛑 Stop loss at {self.genome.stop_loss_pct}% — flat.")
 
         decision = self.council.debate(bar, self.history, self.genome, self.asset)
         if self.verbose:
@@ -304,12 +315,12 @@ class GodBrokerEngine:
             target = self._target_shares(decision, bar)
             realised = self._trade_to(target, bar, note=decision.reason)
             if self.verbose and realised is not None:
-                print(f"💰 Closed for {realised:+,.2f}")
+                print(f"💰 Closed for {fmt_money(realised)}")
 
         if self.verbose and self.shares:
             print(
-                f"📈 Position: {self.shares:+,.1f} shares "
-                f"(${abs(self.position_value):,.0f}, entry ${self.entry_price:,.2f})"
+                f"📈 Position: {self.shares:+f} shares "
+                f"({fmt_money(abs(self.position_value))}, entry {fmt_money(self.entry_price)})"
             )
 
         equity = self.equity(bar)
@@ -318,7 +329,8 @@ class GodBrokerEngine:
         # Settle the scouts who backed this call, on tomorrow's terms: a call
         # is judged by the next bar, so this happens one day late, on purpose.
         if len(self.history) >= 2 and decision.is_trade:
-            moved = (bar.close - self.history[-2].close) / self.history[-2].close
+            previous = self.history[-2].close
+            moved = (bar.close - previous) / previous if previous else ZERO
             wanted_up = decision.action == "buy"
             self.council.settle(decision, was_right=(moved > 0) == wanted_up)
 
@@ -326,10 +338,11 @@ class GodBrokerEngine:
             self._maybe_evolve(bar)
 
         if self.verbose:
+            change = percent((equity - before) / before * D(100)) if before else ZERO
             print(
                 f"📝 Memory: {self.memory.nodes()} node(s), "
-                f"{self.memory.total_trades()} trade(s) | equity ${equity:,.2f} "
-                f"({100 * (equity - before) / before:+.2f}% today)"
+                f"{self.memory.total_trades()} trade(s) | equity {fmt_money(equity)} "
+                f"({change:+}% today)"
             )
         return decision
 
@@ -380,7 +393,7 @@ class GodBrokerEngine:
         for bar in bars:
             self.step(bar)
         if self.shares and bars:
-            self._trade_to(0.0, bars[-1], note="end of run")
+            self._trade_to(ZERO, bars[-1], note="end of run")
             self.equity_curve[-1] = self.equity(bars[-1])
 
         return Result(
@@ -401,7 +414,7 @@ class GodBrokerEngine:
 def backtest(
     genome: Genome,
     feed,
-    capital: float = 100_000.0,
+    capital=D(100_000),
     seed: int = 0,
     venue: Optional[Venue] = None,
     memory: Optional[ObsidianMemory] = None,

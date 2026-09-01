@@ -10,10 +10,19 @@ this possible. A genome can be fingerprinted, stored, compared, killed and
 refused. A strategy spread across five files of branching cannot be any of
 those things, and "which version lost the money?" becomes unanswerable.
 
+The numbers are ``Decimal``, quantised to two places, for the same reason the
+rest of the repository is: several of these genes multiply cash. A gene that
+arrives as 0.1 and hashes as 0.10000000000000000555 is a gene whose
+fingerprint depends on how it was constructed, and the fingerprint is the
+whole licensing mechanism in ``lock.py``.
+
 The mutation rules:
 
 * **Seeded.** Same seed, same generation, same mutants, on any machine. An
-  evolutionary system you cannot replay is a system you cannot audit.
+  evolutionary system you cannot replay is a system you cannot audit. The
+  float that ``random.uniform`` returns is rounded and turned into a Decimal
+  before it touches a gene — the same move ``src/trading/brain/evolver.py``
+  makes, for the same reason.
 * **Clamped.** Every gene has a range, and a mutant outside it is repaired,
   not rejected — a genome that drifts to 40x leverage is not a bold strategy,
   it is a bug with a P&L.
@@ -29,21 +38,26 @@ import hashlib
 import json
 import random
 from dataclasses import dataclass, fields, replace
+from decimal import Decimal
 from typing import Iterable, Optional
+
+from src.money import D
+
+STEP = D("0.01")
 
 # name -> (low, high)
 BOUNDS: dict = {
-    "vix_spike": (18.0, 45.0),
-    "vix_calm": (10.0, 22.0),
-    "fear_threshold": (-1.6, -0.2),
-    "greed_threshold": (0.2, 1.6),
-    "trend_bias": (0.0, 1.0),
-    "momentum_window": (3.0, 40.0),
-    "conviction_floor": (0.15, 0.85),
-    "risk_tolerance": (0.05, 1.0),
-    "leverage_cap": (0.25, 3.0),
-    "position_pct": (0.02, 0.50),
-    "stop_loss_pct": (2.0, 25.0),
+    "vix_spike": (D(18), D(45)),
+    "vix_calm": (D(10), D(22)),
+    "fear_threshold": (D("-1.6"), D("-0.2")),
+    "greed_threshold": (D("0.2"), D("1.6")),
+    "trend_bias": (D(0), D(1)),
+    "momentum_window": (D(3), D(40)),
+    "conviction_floor": (D("0.15"), D("0.85")),
+    "risk_tolerance": (D("0.05"), D(1)),
+    "leverage_cap": (D("0.25"), D(3)),
+    "position_pct": (D("0.02"), D("0.50")),
+    "stop_loss_pct": (D(2), D(25)),
 }
 
 # The two halves of the genome, and the reason the split exists at all.
@@ -77,46 +91,55 @@ INTEGER_GENES = frozenset({"momentum_window"})
 class Genome:
     """The whole strategy, as eleven numbers."""
 
-    vix_spike: float = 30.0
-    vix_calm: float = 16.0
-    fear_threshold: float = -0.5
-    greed_threshold: float = 0.8
-    trend_bias: float = 0.5  # 0 = always fade, 1 = always follow
-    momentum_window: float = 10.0
-    conviction_floor: float = 0.45  # below this the council does nothing
-    risk_tolerance: float = 0.7
-    leverage_cap: float = 1.5
-    position_pct: float = 0.10
-    stop_loss_pct: float = 12.0
+    vix_spike: Decimal = D(30)
+    vix_calm: Decimal = D(16)
+    fear_threshold: Decimal = D("-0.5")
+    greed_threshold: Decimal = D("0.8")
+    trend_bias: Decimal = D("0.5")  # 0 = always fade, 1 = always follow
+    momentum_window: Decimal = D(10)
+    conviction_floor: Decimal = D("0.45")  # below this the council does nothing
+    risk_tolerance: Decimal = D("0.7")
+    leverage_cap: Decimal = D("1.5")
+    position_pct: Decimal = D("0.10")
+    stop_loss_pct: Decimal = D(12)
+
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            object.__setattr__(self, f.name, D(getattr(self, f.name)))
 
     # -- identity ---------------------------------------------------------
+    @property
+    def window(self) -> int:
+        """The momentum lookback, as the integer number of bars it is."""
+        return int(self.momentum_window)
+
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
     def fingerprint(self) -> str:
         """A stable name for one exact parameter set.
 
-        Rounded before hashing so a float that came back from JSON one ULP
-        different is still the same strategy — and so that a fingerprint means
-        "these numbers", not "this object".
+        The genes are already quantised, so the canonical form is just their
+        strings — no rounding, no float round-trip, and a fingerprint that
+        means "these numbers" rather than "this object".
         """
-        canonical = {k: round(float(v), 6) for k, v in sorted(self.to_dict().items())}
+        canonical = {k: str(v) for k, v in sorted(self.to_dict().items())}
         blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
     def describe(self) -> str:
         return (
-            f"vix_spike={self.vix_spike:.1f} trend_bias={self.trend_bias:.2f} "
-            f"window={int(self.momentum_window)} risk={self.risk_tolerance:.2f} "
-            f"lev={self.leverage_cap:.2f} size={self.position_pct:.3f} "
-            f"stop={self.stop_loss_pct:.1f}%"
+            f"vix_spike={self.vix_spike} trend_bias={self.trend_bias} "
+            f"window={self.window} risk={self.risk_tolerance} "
+            f"lev={self.leverage_cap} size={self.position_pct} "
+            f"stop={self.stop_loss_pct}%"
         )
 
     def diff(self, other: "Genome") -> str:
         changes = [
-            f"{name} {getattr(self, name):.3f}->{getattr(other, name):.3f}"
+            f"{name} {getattr(self, name)}->{getattr(other, name)}"
             for name in sorted(ALL_GENES)
-            if abs(getattr(self, name) - getattr(other, name)) > 1e-9
+            if getattr(self, name) != getattr(other, name)
         ]
         return ", ".join(changes) if changes else "(identical)"
 
@@ -125,12 +148,12 @@ def clamp(genome: Genome) -> Genome:
     """Repair a genome into its ranges, and into internal sense."""
     values = {}
     for name, (low, high) in BOUNDS.items():
-        value = max(low, min(high, float(getattr(genome, name))))
-        values[name] = float(int(round(value))) if name in INTEGER_GENES else value
+        value = max(low, min(high, D(getattr(genome, name))))
+        values[name] = D(int(value)) if name in INTEGER_GENES else value.quantize(STEP)
     # A "calm" threshold above the "spike" threshold is not a cautious
     # strategy, it is a strategy whose two states are unreachable.
     if values["vix_calm"] >= values["vix_spike"]:
-        values["vix_calm"] = max(BOUNDS["vix_calm"][0], values["vix_spike"] - 4.0)
+        values["vix_calm"] = max(BOUNDS["vix_calm"][0], values["vix_spike"] - D(4))
     if values["fear_threshold"] >= values["greed_threshold"]:
         values["fear_threshold"] = -abs(values["greed_threshold"])
     return replace(genome, **values)
@@ -142,10 +165,10 @@ BASE_GENOME = clamp(Genome())
 class Evolver:
     """Mutation and selection over genomes. Holds no opinion about money."""
 
-    def __init__(self, seed: int = 20260901, mutation_rate: float = 0.35, scale: float = 0.18):
+    def __init__(self, seed: int = 20260901, mutation_rate: float = 0.35, scale: str = "0.18"):
         self.seed = int(seed)
         self.mutation_rate = float(mutation_rate)
-        self.scale = float(scale)
+        self.scale = D(scale)
         self.generation = 0
         self.lineage: list = []  # (generation, parent fingerprint, child fingerprint)
 
@@ -167,15 +190,15 @@ class Evolver:
         values = {}
         # sorted(), not the set's own order. Python randomises string hashing
         # per process, so iterating a set of gene names hands the same RNG
-        # draws to different genes on every run — and the whole reproducibility
+        # draws to different genes on every run — and the reproducibility
         # claim quietly stops being true, in a way that only shows up when two
         # runs of the same command print different numbers.
         for name in sorted(allowed):
             if rng.random() > self.mutation_rate:
                 continue
             low, high = BOUNDS[name]
-            step = rng.uniform(-1.0, 1.0) * (high - low) * self.scale
-            values[name] = float(getattr(genome, name)) + step
+            draw = D(str(round(rng.uniform(-1.0, 1.0), 6)))
+            values[name] = D(getattr(genome, name)) + draw * (high - low) * self.scale
         return clamp(replace(genome, **values)) if values else genome
 
     def population(
@@ -195,7 +218,7 @@ class Evolver:
         generation = self.generation if generation is None else generation
         rng = self.rng(generation)
         out = [incumbent]
-        for i in range(max(0, size - 1)):
+        for _ in range(max(0, size - 1)):
             out.append(self.mutate(incumbent, rng, genes=genes))
         return out
 

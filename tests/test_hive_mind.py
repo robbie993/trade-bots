@@ -11,8 +11,11 @@ genes, and that a killed genome stays killed.
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import Decimal
 
 import pytest
+
+from src.money import D, money
 
 from hive_mind.council import VillageCouncil
 from hive_mind.engine import GodBrokerEngine, MutationRefused, Result, backtest
@@ -141,7 +144,7 @@ def test_a_scout_refuses_its_own_over_leveraged_idea(bar):
     scout = ScoutAI(id=1, memory=ObsidianMemory())
     from hive_mind.scouts import Proposal
 
-    too_big = Proposal(1, "buy", BASE_GENOME.leverage_cap + 0.5, "greed", 0.5)
+    too_big = Proposal(1, "buy", BASE_GENOME.leverage_cap + D("0.5"), "greed", 0.5)
     assert not scout.fact_check(too_big, bar, BASE_GENOME)
     fine = Proposal(1, "buy", BASE_GENOME.leverage_cap, "sized", 0.5)
     assert scout.fact_check(fine, bar, BASE_GENOME)
@@ -170,10 +173,10 @@ def test_a_vote_key_survives_an_action_with_an_underscore_in_it():
     """The bug in the obvious implementation: keys built by string join."""
     from hive_mind.scouts import Proposal
 
-    a = Proposal(1, "buy_the_dip", 1.5, "", 0.5)
-    b = Proposal(2, "buy", 1.5, "", 0.5)
+    a = Proposal(1, "buy_the_dip", D("1.5"), "", 0.5)
+    b = Proposal(2, "buy", D("1.5"), "", 0.5)
     assert a.key != b.key
-    assert a.key == ("buy_the_dip", 1.5)
+    assert a.key == ("buy_the_dip", D("1.50"))
 
 
 def test_confidence_moves_with_outcomes_and_stays_inside_its_bounds():
@@ -210,43 +213,45 @@ def test_an_empty_debate_is_a_hold_not_a_guess(feed):
 def test_the_council_cannot_exceed_the_genomes_leverage_cap(feed):
     council = VillageCouncil(ObsidianMemory(), scouts=5, seed=2)
     bars = feed.bars()
-    genome = replace(BASE_GENOME, leverage_cap=0.3, conviction_floor=0.15)
+    genome = replace(BASE_GENOME, leverage_cap=D("0.3"), conviction_floor=D("0.15"))
     for i in range(30, 200):
         decision = council.debate(bars[i], bars[: i + 1], genome)
-        assert decision.leverage <= genome.leverage_cap + 1e-9
+        # Decimal, so this is an exact comparison rather than one with an
+        # epsilon bolted on to survive binary floating point.
+        assert decision.leverage <= genome.leverage_cap
 
 
 # =========================================================================
 # the genome
 # =========================================================================
 def test_every_gene_is_clamped_into_its_range():
-    wild = Genome(leverage_cap=99.0, position_pct=5.0, risk_tolerance=-3.0, vix_spike=1.0)
+    wild = Genome(leverage_cap=D(99), position_pct=D(5), risk_tolerance=D(-3), vix_spike=D(1))
     fixed = clamp(wild)
     for name, (low, high) in BOUNDS.items():
         assert low <= getattr(fixed, name) <= high
 
 
 def test_a_calm_threshold_above_the_spike_threshold_is_repaired():
-    fixed = clamp(Genome(vix_spike=20.0, vix_calm=21.0))
+    fixed = clamp(Genome(vix_spike=D(20), vix_calm=D(21)))
     assert fixed.vix_calm < fixed.vix_spike
 
 
 def test_the_fingerprint_names_the_numbers_not_the_object():
     assert BASE_GENOME.fingerprint() == replace(BASE_GENOME).fingerprint()
-    assert BASE_GENOME.fingerprint() != replace(BASE_GENOME, trend_bias=0.51).fingerprint()
+    assert BASE_GENOME.fingerprint() != replace(BASE_GENOME, trend_bias=D("0.51")).fingerprint()
 
 
 def test_the_strategy_fingerprint_ignores_sizing_and_only_sizing():
-    resized = replace(BASE_GENOME, position_pct=0.4, leverage_cap=2.5, risk_tolerance=0.3)
+    resized = replace(BASE_GENOME, position_pct=D("0.4"), leverage_cap=D("2.5"), risk_tolerance=D("0.3"))
     assert strategy_fingerprint(resized) == strategy_fingerprint(BASE_GENOME)
     assert resized.fingerprint() != BASE_GENOME.fingerprint()
 
-    rethought = replace(BASE_GENOME, trend_bias=0.9)
+    rethought = replace(BASE_GENOME, trend_bias=D("0.9"))
     assert strategy_fingerprint(rethought) != strategy_fingerprint(BASE_GENOME)
 
 
 def test_mutation_touches_only_the_genes_it_was_given():
-    evolver = Evolver(seed=5, mutation_rate=1.0, scale=0.4)
+    evolver = Evolver(seed=5, mutation_rate=1.0, scale="0.4")
     rng = evolver.rng(1)
     mutant = evolver.mutate(BASE_GENOME, rng, genes=SIZING_GENES)
     for name in STRATEGY_GENES:
@@ -256,7 +261,7 @@ def test_mutation_touches_only_the_genes_it_was_given():
 
 def test_mutation_does_not_depend_on_the_order_the_genes_arrive_in():
     """Set iteration order is per-process, so iterating one is not reproducible."""
-    evolver = Evolver(seed=5, mutation_rate=0.5, scale=0.3)
+    evolver = Evolver(seed=5, mutation_rate=0.5, scale="0.3")
     as_set = evolver.mutate(BASE_GENOME, evolver.rng(1), genes=SIZING_GENES)
     as_list = evolver.mutate(BASE_GENOME, evolver.rng(1), genes=list(SIZING_GENES)[::-1])
     assert as_set.fingerprint() == as_list.fingerprint()
@@ -269,7 +274,7 @@ def test_the_same_command_gives_the_same_answer_in_a_different_process():
 
     script = (
         "from hive_mind.evolver import BASE_GENOME, Evolver, ALL_GENES;"
-        "e = Evolver(seed=5, mutation_rate=0.6, scale=0.3);"
+        "e = Evolver(seed=5, mutation_rate=0.6, scale='0.3');"
         "print(e.mutate(BASE_GENOME, e.rng(1), genes=ALL_GENES).fingerprint())"
     )
     outputs = set()
@@ -312,7 +317,7 @@ def test_the_book_ends_flat_and_the_curve_ends_with_it(feed):
     engine = GodBrokerEngine(BASE_GENOME, capital=100_000.0, seed=3)
     result = engine.run(feed)
     assert engine.shares == 0
-    assert result.equity_curve[-1] == pytest.approx(engine.cash)
+    assert result.equity_curve[-1] == engine.cash
 
 
 def test_costs_are_charged_and_reported(feed):
@@ -324,13 +329,13 @@ def test_costs_are_charged_and_reported(feed):
 
 
 def test_sharpe_is_none_below_a_sample_worth_quoting():
-    thin = Result(start_capital=100.0, final_equity=110.0, equity_curve=[100.0, 110.0])
+    thin = Result(start_capital=D(100), final_equity=D(110), equity_curve=[D(100), D(110)])
     assert thin.sharpe is None
 
 
 def test_max_drawdown_is_measured_from_the_peak():
-    result = Result(equity_curve=[100.0, 120.0, 60.0, 90.0], start_capital=100.0)
-    assert result.max_drawdown_pct == pytest.approx(50.0)
+    result = Result(equity_curve=[D(100), D(120), D(60), D(90)], start_capital=D(100))
+    assert result.max_drawdown_pct == D("50.00")
 
 
 # =========================================================================
@@ -368,10 +373,10 @@ def test_a_certificate_covers_a_resize_and_not_a_rethink():
     lock.phase = Phase.SUICIDE_FUND
     lock.certificate = strategy_fingerprint(BASE_GENOME)
 
-    resized = replace(BASE_GENOME, position_pct=0.33)
+    resized = replace(BASE_GENOME, position_pct=D("0.33"))
     assert lock.permit(resized), "sizing may move under the certificate"
 
-    rethought = replace(BASE_GENOME, trend_bias=0.05)
+    rethought = replace(BASE_GENOME, trend_bias=D("0.05"))
     refusal = lock.permit(rethought)
     assert not refusal
     assert "licence is void" in refusal.reason
@@ -384,7 +389,7 @@ def test_a_killed_genome_stays_killed_and_cannot_be_resized_back_to_life():
 
     assert not lock.permit(BASE_GENOME)
     lock.phase = Phase.CRUCIBLE  # even if something puts it back in training
-    resized = replace(BASE_GENOME, position_pct=0.45, leverage_cap=0.5)
+    resized = replace(BASE_GENOME, position_pct=D("0.45"), leverage_cap=D("0.5"))
     refusal = lock.permit(resized)
     assert not refusal
     assert "graveyard" in refusal.reason
@@ -516,9 +521,76 @@ def test_the_stress_plan_is_deterministic_and_covers_every_scenario():
 
 def test_the_paper_phase_checks_that_nothing_moved(monkeypatch):
     """Phase 3 asserts the freeze about the run that just happened."""
-    lock = WalkForwardLock(LockConfig(paper_min_return_pct=-100.0, paper_min_sharpe=-99.0))
+    lock = WalkForwardLock(LockConfig(paper_min_return_pct=D(-100), paper_min_sharpe=D(-99)))
     lock.phase = Phase.PAPER
     forward = MarketFeed(seed=12, plan=[("calm_bull", 120)])
     phase = lock._paper(BASE_GENOME, forward, lambda *a, **k: None)
     assert phase.passed
     assert "frozen" in phase.detail
+
+
+# =========================================================================
+# what this borrows from the village
+# =========================================================================
+def test_a_hive_mind_bar_is_a_village_bar(feed):
+    """Same OHLCV, same quantisers — VIX and sentiment are the only additions."""
+    from src.trading.models import Bar as TradingBar
+
+    bar = feed.bars()[10]
+    assert isinstance(bar, TradingBar)
+    assert bar.symbol == "SPY"
+    assert bar.typical_price > 0  # the base class's own arithmetic still works
+
+
+def test_the_fill_arithmetic_is_the_villages_plus_impact(bar):
+    """The venue adds impact to PaperVenue; it does not replace it."""
+    from src.trading.execution.paper import PaperVenue
+    from src.trading.models import Side, qty
+
+    venue = Venue()
+    assert isinstance(venue.paper, PaperVenue)
+
+    shares = qty(100)
+    per_share = venue.impact(shares, bar)
+    expected = venue.paper.quote(Side.BUY, bar.close + per_share, shares)
+
+    fill = venue.execute("buy", shares, bar)
+    assert fill.price == expected.fill_price
+    assert fill.fee == expected.fee
+    # The reported slippage is both layers, not one of them.
+    assert fill.slippage > expected.slippage
+    assert fill.slippage > money(per_share * shares) - D("0.01")
+
+
+def test_the_statistics_are_the_villages_own(feed):
+    """Not 'close to' — the same function, so the two can never disagree."""
+    from src.trading.indicators import max_drawdown_pct, sharpe, win_rate_pct
+
+    result = backtest(BASE_GENOME, feed, seed=3)
+    assert result.max_drawdown_pct == max_drawdown_pct(result.equity_curve)
+    assert result.sharpe == sharpe(result.daily_returns)
+    assert result.win_rate_pct == win_rate_pct([t.pnl for t in result.trades])
+
+
+def test_no_float_ever_touches_the_money(feed):
+    """The repository's one non-negotiable rule, checked on a finished run."""
+    engine = GodBrokerEngine(BASE_GENOME, capital=D(100_000), seed=3)
+    result = engine.run(feed)
+
+    for value in (engine.cash, engine.shares, engine.entry_price, result.final_equity,
+                  result.fees, result.slippage, result.return_pct, result.max_drawdown_pct):
+        assert isinstance(value, Decimal), f"{value!r} is a {type(value).__name__}"
+    assert all(isinstance(v, Decimal) for v in result.equity_curve)
+    for trade in result.trades:
+        assert isinstance(trade.pnl, Decimal) and isinstance(trade.entry, Decimal)
+
+
+def test_every_gene_is_a_decimal_so_a_fingerprint_means_the_numbers():
+    """A gene built from 0.1 and one built from "0.1" must hash the same."""
+    from dataclasses import fields as dataclass_fields
+
+    from_float = Genome(position_pct=0.1)
+    from_string = Genome(position_pct=D("0.1"))
+    assert from_float.fingerprint() == from_string.fingerprint()
+    for f in dataclass_fields(BASE_GENOME):
+        assert isinstance(getattr(BASE_GENOME, f.name), Decimal)

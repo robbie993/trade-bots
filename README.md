@@ -173,9 +173,11 @@ And there is a third thing in here, standalone and much smaller: the
 **[Evolving Hive-Mind Trader](hive_mind/README.md)** in `hive_mind/`. Five
 scouts, a council that votes, and a genome that evolves — wrapped in a
 walk-forward lock that will not let it near real money until it has survived
-data it was structurally prevented from reading. It shares nothing with the
-rest of the repository, not even the database, and depends on nothing outside
-the standard library.
+data it was structurally prevented from reading. It is **not** part of the
+village — no database, no ledger, no firms, no gate, and nothing under `src/`
+imports it — but it reuses the village's arithmetic rather than growing a
+second copy: `src/money.py`, `src/trading/indicators.py`, the `Bar` and `Fill`
+models, and the paper venue's fill costs.
 
 ```bash
 python -m hive_mind                        # watch it think, one day at a time

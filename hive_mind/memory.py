@@ -19,17 +19,25 @@ Two properties this insists on:
   does. Recall informs a scout's confidence; the genome and the council decide.
   A memory that could silently move the book would be a second strategy nobody
   audits.
+
+Everything stored is ``Decimal``, and the statistics are the village's own
+``stdev`` and ``percent`` rather than ``statistics.pstdev`` over floats — the
+numbers in here get quoted in a report about money.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import mean, pstdev
+from decimal import Decimal
+
+from src.money import D, ZERO, percent
+from src.trading.indicators import stdev
 
 
-def regime_key(asset: str, vix: float) -> str:
+def regime_key(asset: str, vix) -> str:
     """``SPY_VIX35`` — the drawer a trade gets filed in."""
-    return f"{asset.upper()}_VIX{int(round(vix / 5.0) * 5)}"
+    bucket = int((D(vix) / D(5)).quantize(D(1))) * 5
+    return f"{asset.upper()}_VIX{bucket}"
 
 
 @dataclass
@@ -39,16 +47,16 @@ class Recall:
     key: str
     known: bool = False
     trades: int = 0
-    avg_return: float = 0.0
-    win_rate: float = 0.0
-    risk: float = 1.0  # dispersion of outcomes; 1.0 when nothing is known
+    avg_return: Decimal = ZERO
+    win_rate: Decimal = ZERO
+    risk: Decimal = D(1)  # dispersion of outcomes; 1 when nothing is known
 
     def __str__(self) -> str:
         if not self.known:
             return f"{self.key}: nothing comparable on file"
         return (
-            f"{self.key}: {self.trades} trades, avg {self.avg_return:+.2f}%, "
-            f"{self.win_rate:.0f}% wins, dispersion {self.risk:.2f}"
+            f"{self.key}: {self.trades} trades, avg {self.avg_return:+}%, "
+            f"{self.win_rate}% wins, dispersion {self.risk}"
         )
 
 
@@ -61,10 +69,10 @@ class ObsidianMemory:
     def store(
         self,
         asset: str,
-        vix: float,
+        vix,
         action: str,
-        pnl: float,
-        return_pct: float = 0.0,
+        pnl,
+        return_pct=ZERO,
         note: str = "",
     ) -> str:
         key = regime_key(asset, vix)
@@ -72,15 +80,15 @@ class ObsidianMemory:
         drawer["trades"].append(
             {
                 "action": action,
-                "pnl": round(float(pnl), 2),
-                "return_pct": round(float(return_pct), 4),
+                "pnl": D(pnl),
+                "return_pct": percent(return_pct),
                 "note": note,
             }
         )
         return key
 
     # -- reading ----------------------------------------------------------
-    def recall(self, asset: str, vix: float, sentiment: float = 0.0) -> Recall:
+    def recall(self, asset: str, vix, sentiment=ZERO) -> Recall:
         key = regime_key(asset, vix)
         trades = self.knowledge_graph.get(key, {}).get("trades", [])
         if len(trades) < self.minimum_sample:
@@ -90,13 +98,14 @@ class ObsidianMemory:
 
         returns = [t["return_pct"] for t in trades]
         wins = sum(1 for t in trades if t["pnl"] > 0)
+        dispersion = stdev(returns)
         return Recall(
             key=key,
             known=True,
             trades=len(trades),
-            avg_return=mean(returns),
-            win_rate=100.0 * wins / len(trades),
-            risk=pstdev(returns) if len(returns) > 1 else 1.0,
+            avg_return=percent(sum(returns, ZERO) / D(len(returns))),
+            win_rate=percent(D(wins) / D(len(trades)) * D(100)),
+            risk=percent(dispersion) if dispersion is not None else D(1),
         )
 
     def nodes(self) -> int:

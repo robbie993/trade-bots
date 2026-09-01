@@ -4,6 +4,12 @@ A scout reads one bar plus the recent past, consults the Obsidian brain about
 how this regime has gone before, and proposes one action. Five of them run
 each day and the council weighs their votes.
 
+The momentum reading comes from ``src/trading/indicators.py`` rather than from
+arithmetic written here. That module already returns ``None`` below its window
+instead of a zero, which is the behaviour this file needs and the behaviour
+that is easiest to get subtly wrong: reading an absent indicator as neutral is
+how a system talks itself into a trade it has no evidence for.
+
 The two rules that make a scout more than a random number:
 
 **It fact-checks itself before it speaks.** A proposal that would exceed the
@@ -28,7 +34,11 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional, Sequence
+
+from src.money import D, ZERO
+from src.trading.indicators import momentum_pct
 
 from .evolver import Genome
 from .market import Bar
@@ -45,9 +55,12 @@ ACTIONS = ("buy", "sell", "hedge", "hold")
 class Proposal:
     scout_id: int
     action: str
-    leverage: float
+    leverage: Decimal
     reason: str
     confidence: float
+
+    def __post_init__(self) -> None:
+        self.leverage = D(self.leverage).quantize(D("0.01"))
 
     @property
     def key(self) -> tuple:
@@ -57,11 +70,11 @@ class Proposal:
         on the underscore, and the first action with an underscore in its name
         silently becomes a different action.
         """
-        return (self.action, round(self.leverage, 2))
+        return (self.action, self.leverage)
 
     def __str__(self) -> str:
         return (
-            f"scout {self.scout_id}: {self.action} @ {self.leverage:.2f}x "
+            f"scout {self.scout_id}: {self.action} @ {self.leverage}x "
             f"(conf {self.confidence:.2f}) — {self.reason}"
         )
 
@@ -89,14 +102,13 @@ class ScoutAI:
         genome: Genome,
         asset: str = "SPY",
     ) -> Optional[Proposal]:
-        window = int(genome.momentum_window)
-        if len(history) < window + 1:
+        window = genome.window
+        closes = [b.close for b in history]
+        momentum = momentum_pct(closes, window)
+        if momentum is None:
             return None  # no reading off half an indicator
 
-        closes = [b.close for b in history[-(window + 1) :]]
-        momentum = (closes[-1] - closes[0]) / closes[0]
         recall = self.memory.recall(asset, bar.vix)
-
         action, leverage, reason = self._read(bar, momentum, genome, recall)
         if action == "hold":
             return None
@@ -110,45 +122,45 @@ class ScoutAI:
         )
         return proposal if self.fact_check(proposal, bar, genome) else None
 
-    def _read(self, bar: Bar, momentum: float, genome: Genome, recall: Recall) -> tuple:
+    def _read(self, bar: Bar, momentum: Decimal, genome: Genome, recall: Recall) -> tuple:
         """One scout's opinion. ``trend_bias`` decides fade or follow."""
-        follows = self._rng.random() < genome.trend_bias
+        follows = D(str(self._rng.random())) < genome.trend_bias
         base = genome.leverage_cap * genome.risk_tolerance
 
         # Fear: a VIX spike with capitulating sentiment.
         if bar.vix >= genome.vix_spike and bar.sentiment <= genome.fear_threshold:
             if follows:
-                return "hedge", base, f"VIX {bar.vix:.1f} spiking, sentiment breaking down"
-            return "buy", base, f"VIX {bar.vix:.1f} with capitulation — fading the fear"
+                return "hedge", base, f"VIX {bar.vix} spiking, sentiment breaking down"
+            return "buy", base, f"VIX {bar.vix} with capitulation — fading the fear"
 
         # Greed: a calm tape that everyone already loves.
         if bar.vix <= genome.vix_calm and bar.sentiment >= genome.greed_threshold:
             if follows:
-                return "buy", base * 0.8, f"calm tape, sentiment {bar.sentiment:+.2f}"
-            return "sell", base * 0.6, f"everyone is long at VIX {bar.vix:.1f}"
+                return "buy", base * D("0.8"), f"calm tape, sentiment {bar.sentiment}"
+            return "sell", base * D("0.6"), f"everyone is long at VIX {bar.vix}"
 
         # Otherwise: trade the momentum reading, in whichever direction the
         # genome believes in.
-        if abs(momentum) < 0.004:
-            return "hold", 0.0, "nothing to say"
+        if abs(momentum) < D("0.4"):
+            return "hold", ZERO, "nothing to say"
 
         rising = momentum > 0
         wants_long = rising if follows else not rising
-        strength = min(1.0, abs(momentum) / 0.05)
-        leverage = base * (0.4 + 0.6 * strength)
+        strength = min(D(1), abs(momentum) / D(5))
+        leverage = base * (D("0.4") + D("0.6") * strength)
 
         # Memory does not decide; it sizes. A regime this scout has lost money
         # in before gets a smaller bet, never a reversed one.
         if recall.known and recall.avg_return < 0:
-            leverage *= 0.6
-            note = f" (memory: {recall.trades} trades here averaged {recall.avg_return:+.2f}%)"
+            leverage *= D("0.6")
+            note = f" (memory: {recall.trades} trades here averaged {recall.avg_return:+}%)"
         elif recall.known:
-            note = f" (memory: {recall.win_rate:.0f}% wins here)"
+            note = f" (memory: {recall.win_rate}% wins here)"
         else:
             note = ""
 
         direction = "following" if follows else "fading"
-        reason = f"{direction} {momentum * 100:+.2f}% over {int(genome.momentum_window)}d{note}"
+        reason = f"{direction} {momentum:+}% over {genome.window}d{note}"
         if wants_long:
             return "buy", leverage, reason
         return ("sell", leverage, reason) if not rising else ("hedge", leverage, reason)
@@ -160,7 +172,7 @@ class ScoutAI:
             return False
         if proposal.leverage <= 0:
             return False
-        if proposal.leverage > genome.leverage_cap + 1e-9:
+        if proposal.leverage > genome.leverage_cap:
             return False  # the cap is a cap, not a suggestion
         if bar.close <= 0 or bar.volume <= 0:
             return False  # a bar with no trading in it is not a market

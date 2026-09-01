@@ -45,8 +45,11 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from typing import Optional
+
+from src.money import D, ZERO, percent
 
 from .engine import GodBrokerEngine, Result, backtest
 from .evolver import ALL_GENES, SIZING_GENES, STRATEGY_GENES, Evolver, Genome
@@ -83,9 +86,7 @@ def strategy_fingerprint(genome: Genome) -> str:
     Sizing is allowed to move on real money and the thesis is not, so the
     licence has to be issued against the half that must hold still.
     """
-    canonical = {
-        name: round(float(getattr(genome, name)), 6) for name in sorted(STRATEGY_GENES)
-    }
+    canonical = {name: str(getattr(genome, name)) for name in sorted(STRATEGY_GENES)}
     blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
@@ -157,33 +158,52 @@ class LockReport:
 class LockConfig:
     """Every threshold, in one place, so the whole bar is readable at once."""
 
+    # Decimal, like every other threshold in this repository that decides
+    # whether money moves — and these decide the largest one there is.
+
     # Phase 1
-    train_fraction: float = 0.80
+    train_fraction: Decimal = D("0.80")
     generations: int = 6
     population: int = 8
 
     # Phase 2 — the gauntlet
-    gauntlet_min_return_pct: float = 0.0
-    gauntlet_max_drawdown_pct: float = 25.0
+    gauntlet_min_return_pct: Decimal = D("0.0")
+    gauntlet_max_drawdown_pct: Decimal = D("25.0")
     gauntlet_min_trades: int = 10
 
     # Phase 2b — the stress tests
     stress_runs: int = 100
-    stress_min_pass_rate: float = 0.60
-    stress_max_drawdown_pct: float = 35.0
+    stress_min_pass_rate: Decimal = D("0.60")
+    stress_max_drawdown_pct: Decimal = D("35.0")
     # No single regime may be a disaster, however good the average is. An
     # average across 100 runs hides the one that ends the account.
-    stress_worst_case_pct: float = -25.0
+    stress_worst_case_pct: Decimal = D("-25.0")
 
     # Phase 3 — paper forward
-    paper_min_return_pct: float = 0.0
-    paper_min_sharpe: float = 0.5
+    paper_min_return_pct: Decimal = D("0.0")
+    paper_min_sharpe: Decimal = D("0.5")
 
     # Phase 4 — the suicide fund
-    suicide_capital: float = 100.0
+    suicide_capital: Decimal = D("100.00")
     suicide_days: int = 21
-    suicide_min_return_pct: float = 20.0
-    suicide_min_sharpe: float = 1.5
+    suicide_min_return_pct: Decimal = D("20.0")
+    suicide_min_sharpe: Decimal = D("1.5")
+
+    def __post_init__(self) -> None:
+        for name in (
+            "train_fraction",
+            "gauntlet_min_return_pct",
+            "gauntlet_max_drawdown_pct",
+            "stress_min_pass_rate",
+            "stress_max_drawdown_pct",
+            "stress_worst_case_pct",
+            "paper_min_return_pct",
+            "paper_min_sharpe",
+            "suicide_capital",
+            "suicide_min_return_pct",
+            "suicide_min_sharpe",
+        ):
+            setattr(self, name, D(getattr(self, name)))
 
 
 class WalkForwardLock:
@@ -384,17 +404,17 @@ class WalkForwardLock:
             {"split": split, "fitness": incumbent_score, "in_sample": in_sample},
         )
 
-    def _score(self, result: Result) -> float:
+    def _score(self, result: Result) -> Decimal:
         """Fitness: return, penalised by drawdown and by too small a sample.
 
         Drawdown at half weight, because a return earned through a 30% hole is
         not the same return. The small-sample term is not a penalty for being
         new — it is a refusal to reward a number built from four trades.
         """
-        base = result.return_pct - result.max_drawdown_pct / 2.0
+        base = result.return_pct - result.max_drawdown_pct / D(2)
         if result.closed_trades < 10:
-            base *= result.closed_trades / 10.0
-        return base
+            base = base * D(result.closed_trades) / D(10)
+        return percent(base)
 
     # -- phase 2 ----------------------------------------------------------
     def _gauntlet(
@@ -464,11 +484,11 @@ class WalkForwardLock:
             runs.append((scenario, result, passed))
 
         survived = sum(1 for _, _, ok in runs if ok)
-        rate = survived / len(runs)
+        rate = D(survived) / D(len(runs))
         worst = min(runs, key=lambda row: row[1].return_pct)
         by_scenario: dict = {}
         for scenario, result, ok in runs:
-            entry = by_scenario.setdefault(scenario, [0, 0, 0.0])
+            entry = by_scenario.setdefault(scenario, [0, 0, ZERO])
             entry[0] += 1
             entry[1] += 1 if ok else 0
             entry[2] += result.return_pct
@@ -477,7 +497,7 @@ class WalkForwardLock:
             count, ok, total = by_scenario[scenario]
             say(
                 f"         {scenario:<14} {ok:>3}/{count:<3} survived, "
-                f"mean {total / count:+7.2f}%"
+                f"mean {percent(total / D(count)):+7}%"
             )
 
         failures = []

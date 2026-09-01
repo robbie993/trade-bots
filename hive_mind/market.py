@@ -11,9 +11,16 @@ genome tuned on chop and dropped into a straight-line rally does not get
 unlucky, it gets steamrolled, and that has to be reproducible here or the
 crucible in ``lock.py`` has nothing to catch.
 
-**The fills.** ``Venue`` is deliberately hostile. A market order crosses the
-spread, eats the book, and pays a fee. Size hurts: taking more than the
-displayed depth walks the price away from you.
+The bar itself is the repository's own ``trading.models.Bar`` with three
+fields added — VIX, sentiment, and the regime label. Same OHLCV, same Decimal
+prices, same quantisers, so a real feed from ``src/trading/data/feeds.py``
+already produces the base half of what this reads.
+
+**The fills.** ``Venue`` is deliberately hostile. It defers to the village's
+``PaperVenue`` for the arithmetic that is already right there — slippage that
+always works against the trader, a fee on the gross — and adds the two things
+that model does not have: a spread that widens with fear, and impact that
+grows with size.
 
 That second part is not a detail. A paper engine that fills the whole order at
 the last printed close reports an edge that does not exist, and — this is the
@@ -26,10 +33,16 @@ they teach a bad habit. So there are no perfect fills in here at all.
 
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Iterator, Optional, Sequence
+
+from src.money import D, ZERO, money
+from src.trading.config import DataConfig
+from src.trading.execution.paper import PaperVenue
+from src.trading.models import Bar as TradingBar, Fill, Side, price, qty
 
 # =========================================================================
 # bars
@@ -37,30 +50,32 @@ from typing import Iterator, Optional, Sequence
 
 
 @dataclass(frozen=True)
-class Bar:
-    """One day. ``regime`` is the label, and nothing that trades may read it."""
+class Bar(TradingBar):
+    """The village's OHLCV bar, plus what the scouts actually read.
 
-    index: int
-    day: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-    vix: float
-    sentiment: float
+    VIX and sentiment are not decoration: they are the two inputs the genome
+    holds thresholds for, so they belong on the bar rather than in a side
+    table that could fall out of step with it. ``regime`` is a label for the
+    report and the tests — **nothing that trades may read it**, or the whole
+    exercise becomes a system that is told what kind of market it is in.
+    """
+
+    index: int = 0
+    day: str = ""
+    vix: Decimal = ZERO
+    sentiment: Decimal = ZERO
     regime: str = ""
 
     @property
-    def depth(self) -> float:
+    def depth(self) -> Decimal:
         """Shares available at the touch. Scales with volume, as it does live."""
-        return max(200.0, self.volume * 0.004)
+        return max(D(200), self.volume * D("0.004"))
 
     @property
-    def spread(self) -> float:
+    def spread(self) -> Decimal:
         """Quoted spread. Widens with fear — the moment you most want to trade."""
-        base = self.close * 0.0002
-        return base * (1.0 + max(0.0, self.vix - 15.0) / 12.0)
+        base = self.close * D("0.0002")
+        return base * (D(1) + max(ZERO, self.vix - D(15)) / D(12))
 
 
 @dataclass(frozen=True)
@@ -103,17 +118,29 @@ SCENARIOS: dict = {
 
 
 class MarketFeed:
-    """A seeded tape. Same seed, same bars, on any machine."""
+    """A seeded tape. Same seed, same bars, on any machine.
+
+    The walk itself is computed in float — it is a random process, not a
+    ledger, and ``random.gauss`` returns floats whatever you do about it. But
+    every value that leaves this class has been through the village's
+    ``price()`` quantiser, so nothing downstream ever sees a binary float.
+    """
+
+    name = "generated"
 
     def __init__(
         self,
         seed: int = 7,
         start_price: float = 500.0,
         plan: Optional[Sequence[tuple]] = None,
+        symbol: str = "SPY",
+        start: Optional[datetime] = None,
     ):
         self.seed = int(seed)
         self.start_price = float(start_price)
         self.plan = list(plan or [("calm_bull", 250)])
+        self.symbol = symbol.upper()
+        self.start = start or datetime(2026, 1, 1, tzinfo=timezone.utc)
         self._bars: Optional[list] = None
 
     @classmethod
@@ -167,15 +194,17 @@ class MarketFeed:
 
                 bars.append(
                     Bar(
+                        symbol=self.symbol,
+                        as_of=self.start + timedelta(days=index),
+                        open=price(open_),
+                        high=price(high),
+                        low=price(low),
+                        close=price(close),
+                        volume=D(round(volume)),
                         index=index,
                         day=f"Day {index + 1}",
-                        open=round(open_, 2),
-                        high=round(high, 2),
-                        low=round(low, 2),
-                        close=round(close, 2),
-                        volume=round(volume),
-                        vix=round(vix, 2),
-                        sentiment=round(sentiment, 3),
+                        vix=D(str(round(vix, 2))),
+                        sentiment=D(str(round(sentiment, 3))),
                         regime=regime_name,
                     )
                 )
@@ -223,72 +252,78 @@ class WindowFeed:
 # =========================================================================
 # fills
 # =========================================================================
-
-
-@dataclass
-class Fill:
-    side: str
-    shares: float
-    price: float  # what you actually paid, per share
-    reference: float  # the close you saw when you decided
-    fee: float
-    slippage: float  # total dollars lost to spread and impact
-
-    @property
-    def notional(self) -> float:
-        return self.shares * self.price
-
-    @property
-    def cash_delta(self) -> float:
-        gross = self.shares * self.price
-        return -gross - self.fee if self.side == "buy" else gross - self.fee
-
-
 @dataclass
 class Venue:
     """Fills that cost what fills cost.
 
-    ``half_spread`` is unavoidable: you buy at the offer and sell at the bid.
-    ``impact`` is the part every simulator forgets — an order larger than the
-    displayed depth does not fill at the touch, it walks the book. Both are
-    charged on every share, in both directions, so there is no size at which
-    trading becomes free and no direction in which the venue is on your side.
+    Two layers, and only the second is new here:
+
+    ``PaperVenue``  the village's own fill arithmetic — slippage that always
+                    works against the trader, a fee on the gross, everything
+                    quantised the way the ledger quantises it. Reused rather
+                    than re-derived: a second implementation of "what a fill
+                    costs" is a second set of numbers to reconcile, and the
+                    first thing to go wrong would be that the two disagree.
+    *impact*        what that model does not have — a spread that widens with
+                    VIX, and square-root impact on size. An order larger than
+                    the displayed depth does not fill at the touch, it walks
+                    the book, and a simulator without that term is one that
+                    tells an evolver size is free.
+
+    Both are charged on every share in both directions, so there is no size at
+    which trading becomes free and no direction in which the venue is on your
+    side.
     """
 
-    fee_bps: float = 1.0
-    impact_coefficient: float = 0.55
+    config: Optional[DataConfig] = None
+    impact_coefficient: Decimal = D("0.55")
     fills: int = 0
-    total_slippage: float = 0.0
-    total_fees: float = 0.0
+    total_slippage: Decimal = ZERO
+    total_fees: Decimal = ZERO
 
-    def execute(self, side: str, shares: float, bar: Bar) -> Optional[Fill]:
-        shares = abs(float(shares))
-        if shares < 1e-9:
+    def __post_init__(self) -> None:
+        self.paper = PaperVenue(self.config or DataConfig())
+        self.impact_coefficient = D(self.impact_coefficient)
+
+    def impact(self, shares: Decimal, bar: Bar) -> Decimal:
+        """Cost per share of taking ``shares`` out of this bar's book."""
+        half_spread = bar.spread / D(2)
+        participation = D(shares) / max(bar.depth, D(1))
+        # Square-root impact: the standard shape. The direction of the error
+        # is what matters — bigger always hurts more.
+        walk = bar.close * self.impact_coefficient * participation.sqrt() * D("0.01")
+        return half_spread + walk
+
+    def execute(self, side: str, shares, bar: Bar) -> Optional[Fill]:
+        shares = qty(abs(D(shares)))
+        if shares <= 0:
             return None
 
-        half_spread = bar.spread / 2.0
-        # Square-root impact: the standard shape, and the direction of the
-        # error is the one that matters — bigger hurts more, always.
-        participation = shares / max(bar.depth, 1.0)
-        impact = bar.close * self.impact_coefficient * math.sqrt(participation) * 0.01
+        side_enum = Side(side)
+        per_share = self.impact(shares, bar)
+        adjusted = bar.close + per_share if side_enum is Side.BUY else bar.close - per_share
+        adjusted = max(D("0.01"), adjusted)
 
-        cost_per_share = half_spread + impact
-        price = bar.close + cost_per_share if side == "buy" else bar.close - cost_per_share
-        price = max(0.01, price)
-
-        fee = shares * price * self.fee_bps / 10_000.0
-        slippage = cost_per_share * shares
+        # The village prices the fill from there: its slippage, its fee.
+        quote = self.paper.quote(side_enum, adjusted, shares)
+        impact_cost = money(per_share * shares)
 
         self.fills += 1
-        self.total_slippage += slippage
-        self.total_fees += fee
+        self.total_slippage += quote.slippage + impact_cost
+        self.total_fees += quote.fee
         return Fill(
-            side=side,
-            shares=shares,
-            price=price,
-            reference=bar.close,
-            fee=fee,
-            slippage=slippage,
+            firm_id=None,
+            symbol=bar.symbol,
+            side=side_enum.value,
+            quantity=shares,
+            price=quote.fill_price,
+            fee=quote.fee,
+            slippage=money(quote.slippage + impact_cost),
+            cash_delta=money(
+                -quote.gross - quote.fee if side_enum is Side.BUY else quote.gross - quote.fee
+            ),
+            venue="hostile-paper",
+            as_of=bar.as_of,
         )
 
 
@@ -302,12 +337,25 @@ class PerfectVenue(Venue):
     worth more than any warning in a README.
     """
 
-    def execute(self, side: str, shares: float, bar: Bar) -> Optional[Fill]:
-        shares = abs(float(shares))
-        if shares < 1e-9:
+    def execute(self, side: str, shares, bar: Bar) -> Optional[Fill]:
+        shares = qty(abs(D(shares)))
+        if shares <= 0:
             return None
+        side_enum = Side(side)
+        gross = money(shares * bar.close)
         self.fills += 1
-        return Fill(side, shares, bar.close, bar.close, 0.0, 0.0)
+        return Fill(
+            firm_id=None,
+            symbol=bar.symbol,
+            side=side_enum.value,
+            quantity=shares,
+            price=bar.close,
+            fee=ZERO,
+            slippage=ZERO,
+            cash_delta=-gross if side_enum is Side.BUY else gross,
+            venue="perfect",
+            as_of=bar.as_of,
+        )
 
 
 __all__ = [
@@ -318,6 +366,7 @@ __all__ = [
     "REGIMES",
     "Regime",
     "SCENARIOS",
+    "Side",
     "Venue",
     "WindowFeed",
 ]
