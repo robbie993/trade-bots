@@ -49,6 +49,7 @@ from .brokerage.reconciliation import LedgerNotReconciled
 from .competition.arena import METRICS
 from .config import TradingConfig
 from .ecosystem import Ecosystem
+from . import heartbeat
 from .firms.kill_switch import kill_check_table
 from .firms.spec import FirmSpecError
 
@@ -222,6 +223,10 @@ def cmd_run(args) -> int:  # pragma: no cover - long-running
             # Read every pass, not at startup: the switch is flipped from a
             # different process, and a pause you have to restart to apply is
             # not a pause.
+            # Stamped every pass, including a paused one: a paused loop is
+            # still the process that owns this village, and the console must
+            # not start ticking underneath it just because it went quiet.
+            heartbeat.beat()
             if eco.settings.get("paused"):
                 print("paused — nothing ticked", flush=True)
             else:

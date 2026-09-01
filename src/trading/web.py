@@ -957,6 +957,30 @@ def _money_signed(value) -> str:
 # =========================================================================
 @router.post("/village/actions/tick")
 def action_tick() -> RedirectResponse:
+    """One tick, unless the background loop is already running this village.
+
+    **Two processes must never tick the same village.** On 2026-09-01 a `serve`
+    process eighteen hours old and a browser tab left on "Let it run" drove
+    35,637 ticks through this endpoint at one every 2.5 seconds, while the
+    background loop ticked every 60. Because the web process was running the
+    code it had been started with, every fix deployed that day was undone on
+    the next web tick — a Sharpe sample gate worked perfectly in the loop while
+    this endpoint kept writing the artifact it existed to stop, and wound up
+    the best firm in the village on it. It is also the only good explanation
+    for two torn ledgers, because a torn write needs a second writer.
+
+    The auto-tick already refused to overlap *itself*, on exactly this
+    reasoning. It simply had no way to see the other process. Now it does.
+    """
+    from .heartbeat import running_elsewhere
+
+    other = running_elsewhere()
+    if other is not None:
+        return _back(
+            f"not ticked — the background loop (pid {other['pid']}) is running "
+            f"this village and last ticked {other['age_s']}s ago. Two processes "
+            "ticking one ledger is how the books stop adding up."
+        )
     eco = ecosystem()
     try:
         report = eco.tick()
