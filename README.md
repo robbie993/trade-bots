@@ -169,6 +169,19 @@ python -m src.main trade dashboard  # or freeze it into one shareable file
 TRADE_AUTONOMY=council python -m src.main trade run   # and let it run itself
 ```
 
+And there is a third thing in here, standalone and much smaller: the
+**[Evolving Hive-Mind Trader](hive_mind/README.md)** in `hive_mind/`. Five
+scouts, a council that votes, and a genome that evolves — wrapped in a
+walk-forward lock that will not let it near real money until it has survived
+data it was structurally prevented from reading. It shares nothing with the
+rest of the repository, not even the database, and depends on nothing outside
+the standard library.
+
+```bash
+python -m hive_mind                        # watch it think, one day at a time
+python -m hive_mind --lock --overfit-demo  # watch it be refused, and see why
+```
+
 ---
 
 ## The loop

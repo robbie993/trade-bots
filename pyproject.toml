@@ -46,7 +46,7 @@ dev = ["pytest>=7.4", "httpx>=0.24.0"]
 mvv = "src.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "hive_mind*"]
 
 # Vercel could not work out which of several FastAPI apps to serve — there is
 # one in src/agents/web.py and one in the tests. This names one.
