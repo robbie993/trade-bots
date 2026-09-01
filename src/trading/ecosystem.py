@@ -556,6 +556,17 @@ class Ecosystem:
                 report.village.append(f"shadow: {line}")
             for line in shadow.refused[:2]:
                 report.bot_notes.append(f"shadow refused — {line}")
+            # `notes` is where the desk explains why it could not act at all —
+            # no chain, no spot, no volatility. Nothing read it, so when the
+            # desk spent an hour being handed a call-only chain and refusing
+            # every bar of it, the log was silent and the desk looked idle
+            # rather than blocked. A desk that writes nothing has to say why.
+            for line in shadow.notes[:2]:
+                report.bot_notes.append(f"shadow — {line}")
+            if not (shadow.opened or shadow.closed
+                    or shadow.refused or shadow.notes):
+                report.bot_notes.append(
+                    "shadow — no reading cleared confidence on any underlying")
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 
@@ -782,7 +793,11 @@ class Ecosystem:
             return          # no bar, no charge: see the blind-feed rule
         if self._borrow_already_billed(record, bar, resolution):
             return
-        per_bar = resolution.calendar_days
+        # Ask the data how long a bar is; fall back to the configured
+        # resolution only when it cannot say. The config describes the live
+        # loop and the backtest feed does not have to agree with it — when it
+        # didn't, borrow came out 96x too small and rounded away to nothing.
+        per_bar = market.bar_span_days() or resolution.calendar_days
 
         from .models import Fill, Side
 

@@ -15,6 +15,39 @@ from src.models import Experiment
 from src.notifications import NullNotifier
 
 
+#: Switches that make the village reach the open internet, or that change what
+#: a default config means. `src/config.py` loads `.env` at import, so the
+#: operator's own file is in the environment before the first test runs — the
+#: suite silently inherits whatever the live village is configured to do.
+#:
+#: That is not a tidiness point. With `TRADE_NEWS_ENABLED=1` and
+#: `TRADE_SHADOW_ENABLED=1` set, every test that builds an ecosystem fetched
+#: RSS, Reddit and Alpaca option chains for real: the suite held live HTTPS
+#: connections, ran for over forty minutes, gave different answers depending on
+#: what the internet said, and spent the same rate limit the running bot needs.
+#: `TRADE_BAR` did the quieter version of the same thing — two tests asserting
+#: the built-in daily default passed on CI and failed on this machine.
+#:
+#: A test that depends on the developer's `.env` is testing the machine.
+AMBIENT_SWITCHES = (
+    "TRADE_NEWS_ENABLED",
+    "TRADE_SHADOW_ENABLED",
+    "TRADE_BAR",
+    "TRADE_BARS_PER_DAY",
+    "TRADE_ALLOW_SHORT",
+    "TRADE_DATA_SOURCE",
+    "TRADE_SHADOW_ARMS",
+    "TRADE_EVOLVE_EVERY",
+)
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_env(monkeypatch):
+    """Every test starts from the shipped defaults, not from this machine."""
+    for name in AMBIENT_SWITCHES:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def db(tmp_path) -> Database:
     database = Database.from_url(f"sqlite:///{tmp_path / 'test.db'}")

@@ -424,3 +424,54 @@ def test_an_hourly_village_pays_a_twenty_fourth_of_a_daily_one(
     from src.trading.resolution import parse
 
     assert parse("1h").calendar_days * 24 == parse("1d").calendar_days
+
+
+def test_borrow_is_prorated_by_the_bars_the_data_actually_steps(
+        db, tmp_path, firms_yaml, notifier):
+    """The charge must match the calendar time held, whatever the config says.
+
+    The test above proves an hour costs a twenty-fourth of a day *according to
+    the resolution constant*. It cannot catch the constant describing the wrong
+    data, and that is exactly what happened: `config.data.resolution` defaults
+    to 15m, the synthetic feed steps one day per bar, and borrow was billed at
+    1/96th of what was borrowed — $0.004 on a $4,900 short, which `money()`
+    rounds to zero and `if fee <= 0` silently drops. Every short in every
+    backtest ran free, and no test noticed, because every test asserted the
+    charge against the same constant that was wrong.
+
+    So this one asserts against the *clock* instead. Back out an annual rate
+    from what was actually charged over the span the position was actually
+    held; it has to come back near `borrow_rate_annual`. That check has no
+    opinion about bar length, so it fails on any future mismatch between what
+    the config claims and what the feed delivers.
+    """
+    eco = _bear_firm(db, tmp_path, firms_yaml, notifier)
+    eco.simulate(15)
+
+    firm = eco.store.firms()[0]
+    fills = eco.store.fills(firm.id)
+    charges = [f for f in fills if f.quantity == 0 and f.fee > 0]
+    assert charges, "no borrow was ever charged"
+
+    stamps = sorted(f.as_of for f in charges)
+    days = Decimal(str((stamps[-1] - stamps[0]).total_seconds() / 86400))
+    assert days > 0
+
+    paid = sum((f.fee for f in charges), ZERO)
+    # Average short notional over the window, valued at the last mark.
+    market = eco.market_data() if hasattr(eco, "market_data") else None
+    notional = sum(
+        (abs(p.quantity) * eco.store.last_mark(p.symbol)
+         if hasattr(eco.store, "last_mark") else ZERO)
+        for p in eco.store.positions(firm.id) if p.quantity < 0
+    )
+    if notional <= 0:                     # no mark to hand: fall back to cost
+        notional = sum((abs(f.quantity * f.price) for f in fills
+                        if f.quantity != 0), ZERO)
+    implied_annual = (paid / notional) * (Decimal(365) / days)
+
+    rate = Decimal(eco.config.firm.borrow_rate_annual)
+    assert rate / 3 < implied_annual < rate * 3, (
+        f"charged an implied {implied_annual:.4f}/yr against a stated "
+        f"{rate}/yr — the proration does not match the calendar"
+    )

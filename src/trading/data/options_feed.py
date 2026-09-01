@@ -128,7 +128,8 @@ class AlpacaOptionFeed:
         return key, secret
 
     def chain(self, underlying: str, expiry_gte: str = "",
-              expiry_lte: str = "") -> list:
+              expiry_lte: str = "", right: str = "",
+              strike_gte=None, strike_lte=None) -> list:
         """Every quoted contract on this underlying. `[]` when it cannot say.
 
         Never raises: an underlying with no chain is a normal thing — most
@@ -142,7 +143,20 @@ class AlpacaOptionFeed:
             self.last_error[underlying] = "no alpaca credentials"
             return []
 
+        # **Ask for the side you want.** The API returns contracts in symbol
+        # order and "C" sorts before "P", so any limit short of the whole chain
+        # comes back calls-only. Measured on SPY: limit=100 returned 100 calls
+        # and zero puts, which meant a desk asking for a put could never be
+        # offered one — silently, and on the side that had made $2,469 of the
+        # account's $2,931. A truncation that changes what a strategy is
+        # allowed to do is not a performance detail.
         params = {"limit": self.limit}
+        if right:
+            params["type"] = "call" if right.upper().startswith("C") else "put"
+        if strike_gte is not None:
+            params["strike_price_gte"] = float(strike_gte)
+        if strike_lte is not None:
+            params["strike_price_lte"] = float(strike_lte)
         if expiry_gte:
             params["expiration_date_gte"] = expiry_gte
         if expiry_lte:

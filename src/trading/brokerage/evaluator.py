@@ -30,6 +30,7 @@ from ...money import D, ZERO, money, percent
 from ..config import TradingConfig
 from ..data.market_data import MarketData
 from ..firms.kill_switch import FirmMetrics
+from ..resolution import nearest as resolution_nearest
 from ...db.connection import to_datetime
 from ..indicators import drawdown_pct, sharpe as sharpe_ratio, win_rate_pct
 from ..models import FirmRecord
@@ -111,6 +112,38 @@ class Scorecard:
 MAX_GAP_IN_BARS = 3
 
 
+#: How many of the most recent steps define the current cadence.
+RECENT_STEPS = 5
+
+
+def _observed_step_seconds(observations) -> float:
+    """How far apart the *recent* observations are. `0.0` if it cannot tell.
+
+    The median of the last `RECENT_STEPS` forward gaps. Median because a
+    weekend is a real gap in calendar time and not a change of sampling rate,
+    so one long hole should not redefine the series.
+
+    **Recent, and not the whole history, is the entire subtlety here.** A
+    village switched from daily to hourly bars holds both eras at once, and the
+    older era is usually the longer one — so a median over everything reports
+    the cadence the village has *stopped* using, licences gaps that size, and
+    happily splices the two eras into one series. That is precisely the bug
+    `_one_unbroken_run` exists to prevent, and taking the median over the full
+    set reintroduced it through the fix for a different units bug. The most
+    recent spacing is what "one bar" currently means; anything inconsistent
+    with it is the boundary being looked for.
+    """
+    steps = [
+        (b[0] - a[0]).total_seconds()
+        for a, b in zip(observations, observations[1:])
+        if a[0] is not None and b[0] is not None and (b[0] - a[0]).total_seconds() > 0
+    ]
+    if len(steps) < 3:
+        return 0.0
+    recent = sorted(steps[-RECENT_STEPS:])
+    return recent[len(recent) // 2]
+
+
 def _one_unbroken_run(observations, resolution):
     """The most recent stretch of observations spaced like one bar.
 
@@ -124,7 +157,16 @@ def _one_unbroken_run(observations, resolution):
     """
     if len(observations) < 2:
         return list(observations)
-    limit = resolution.seconds * MAX_GAP_IN_BARS
+    # **Measure the spacing before judging a gap against it.** `resolution`
+    # describes the live loop and does not have to describe these observations.
+    # When it didn't, the effect was silent and total: a 15m resolution licences
+    # a 45-minute gap, daily bars step 86,400 seconds, so *every* step read as
+    # a break, the run collapsed to its last point, and `sharpe` came back None
+    # for every firm in the village — not a wrong number, no number at all, and
+    # nothing said why. Same mistake as the borrow proration, found the same
+    # afternoon. Trust the config only when the data will not say.
+    step = _observed_step_seconds(observations) or resolution.seconds
+    limit = step * MAX_GAP_IN_BARS
     start = 0
     for i in range(1, len(observations)):
         before, now = observations[i - 1][0], observations[i][0]
@@ -322,16 +364,28 @@ class Evaluator:
         # -0.0644 and filed a kill request against a firm that had won 69% of
         # its trades, drawn down 0.42% and made money.
         observations = sorted(by_bar.values(), key=lambda pair: (pair[0] is None, pair[0]))
-        pnl_curve = [value for _, value in _one_unbroken_run(observations, resolution)]
+        # Keep the timestamps: the annualisation below has to be measured on
+        # *this* run and not on `observations`. They are routinely different —
+        # the run is the unbroken tail, and the history behind it is full of
+        # restarts and downtime, so the full set's median spacing can be an
+        # hour while the tail is every fifteen minutes. Annualising the tail's
+        # returns at the whole history's cadence is the same units error one
+        # more level in.
+        run = _one_unbroken_run(observations, resolution)
+        pnl_curve = [value for _, value in run]
         returns = (
             [(b - a) / capital_base for a, b in zip(pnl_curve, pnl_curve[1:])]
             if capital_base > 0
             else []
         )
-        # Annualised against the bar the returns were actually sampled on.
-        # Passing the wrong figure here is the Sharpe kill, and it is the kill
-        # switch that reads the answer.
-        per_year = self.config.data.resolution.bars_per_year
+        # Annualise on the bar the returns were actually sampled on — a fact
+        # about `run`, not about the config, and it is the kill switch that
+        # reads the answer. Taking it from the config is the Sharpe kill in its
+        # original form; taking it from a config that describes different data
+        # is the same error one step removed, and worth about sqrt(26): daily
+        # returns annualised as 15m bars come out five times too confident.
+        sampled = resolution_nearest(_observed_step_seconds(run))
+        per_year = (sampled or self.config.data.resolution).bars_per_year
         sharpe = sharpe_ratio(returns, periods_per_year=per_year) if len(returns) >= 2 else None
 
         card = Scorecard(

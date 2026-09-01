@@ -150,11 +150,34 @@ def parse(name: Optional[str]) -> Resolution:
     return RESOLUTIONS.get(key, DAILY)
 
 
+def nearest(seconds: float) -> Optional[Resolution]:
+    """The known resolution closest to an observed bar spacing.
+
+    For telling what the data in front of you actually is, rather than what a
+    config file says it should be. Those two disagreed twice in one afternoon —
+    borrow billed at 1/96th of what was borrowed, and every Sharpe in the
+    village silently `None` — because both readers took the constant on faith.
+
+    Matched on log distance so "closest" means closest by ratio: 20 minutes is
+    nearer 15m than 1h, and an hour of drift should not make daily bars look
+    intraday. Returns `None` for a spacing no known resolution is within 2x of,
+    which is the honest answer for data nobody configured.
+    """
+    if not seconds or seconds <= 0:
+        return None
+    best, best_ratio = None, None
+    for resolution in RESOLUTIONS.values():
+        ratio = max(seconds / resolution.seconds, resolution.seconds / seconds)
+        if best_ratio is None or ratio < best_ratio:
+            best, best_ratio = resolution, ratio
+    return best if best_ratio is not None and best_ratio <= 2 else None
+
+
 def from_env() -> Resolution:
     return parse(os.environ.get("TRADE_BAR", "1d"))
 
 
 __all__ = [
     "ALIASES", "DAILY", "RESOLUTIONS", "Resolution", "SESSION_MINUTES",
-    "TRADING_DAYS", "from_env", "parse",
+    "TRADING_DAYS", "from_env", "nearest", "parse",
 ]

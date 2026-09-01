@@ -102,6 +102,38 @@ class MarketData:
         visible = self._visible(symbol)
         return visible[-1] if visible else None
 
+    def bar_span_days(self) -> Optional[Decimal]:
+        """Calendar days one bar of *this data* actually covers. `None` if unsure.
+
+        **Measured, not configured.** Anything charged per unit of market time
+        — borrow, financing, carry — has to be prorated by how much time a bar
+        covers, and every previous version of that calculation read the number
+        off `config.data.resolution`. That constant describes the live loop. It
+        does not have to describe the data in front of it, and in the backtests
+        it did not: the synthetic feed steps one day per bar while the config
+        said fifteen minutes, so borrow was billed at **1/96th** of what was
+        actually borrowed. On a $4,900 short that is $0.004 a bar, `money()`
+        rounds it to zero, `if fee <= 0` drops it, and a short book runs for
+        free — with no error, because nothing ever compared the two numbers.
+
+        This is the same unit confusion as the Sharpe kill, the staleness
+        licence and the bar count. The lesson those taught is that a config
+        constant is a claim about the data and the data is right there to ask,
+        so ask it: take the median gap between the visible bars. Median rather
+        than mean because a weekend or a halt is a real gap in calendar time
+        but not a change of resolution, and one three-day hole should not
+        triple the charge on every bar around it.
+        """
+        stamps = sorted({
+            bar.as_of for symbol in self.symbols
+            for bar in self.history(symbol, 40) if bar.as_of is not None
+        })
+        gaps = sorted((b - a).total_seconds() for a, b in zip(stamps, stamps[1:]))
+        gaps = [g for g in gaps if g > 0]
+        if len(gaps) < 3:
+            return None
+        return D(str(gaps[len(gaps) // 2])) / D(86400)
+
     def mark(self, symbol: str) -> Decimal:
         """The price a position is valued at. Zero when nothing is known."""
         bar = self.bar(symbol)

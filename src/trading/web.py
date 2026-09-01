@@ -213,6 +213,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
         _signals_panel(eco, market),
+        _shadow_panel(eco),
         _council_panel(eco),
         _court_panel(eco),
         _arena_panel(eco),
@@ -525,6 +526,92 @@ def _signals_panel(eco, market) -> str:
     body = "".join(blocks) or "<p class=muted>(nothing published yet)</p>"
     return _panel("What the scanners see", body + note)
 
+
+
+def _shadow_panel(eco) -> str:
+    """The options desk: what the account really did, and what the desk imagines.
+
+    Kept visibly separate. The real rows are executed Alpaca fills; the shadow
+    rows are a research desk that has never risked anything. Presenting them in
+    one number would be part evidence and part invention, and the whole reason
+    this desk exists is that the village had no executed option trades to learn
+    from at all.
+    """
+    try:
+        rows = eco.db.query(
+            "SELECT source, arm, contract, underlying, side, entry_price, "
+            "exit_price, realized, spread_pct, closed_at, opened_bar "
+            "FROM shadow_trades ORDER BY id DESC LIMIT 400") or []
+    except Exception:  # noqa: BLE001 - no table yet is not an error
+        return ""
+    if not rows:
+        return ""
+
+    def _score(source):
+        done = [r for r in rows if r["source"] == source and r["closed_at"]]
+        if not done:
+            return 0, ZERO, 0.0
+        vals = [D(str(r["realized"] or 0)) for r in done]
+        wins = sum(1 for v in vals if v > 0)
+        return len(vals), money(sum(vals, ZERO)), round(100.0 * wins / len(vals), 1)
+
+    cards = []
+    for source, label, note in (
+        ("real", "Real — Alpaca", "executed, in the account"),
+        ("shadow", "Shadow — village", "never risked a cent"),
+    ):
+        n, net, win = _score(source)
+        colour = "good" if net > 0 else ("bad" if net < 0 else "muted")
+        cards.append(
+            f"<div class=card><strong>{label}</strong><br>"
+            f"<span class={colour} style='font-size:1.4rem'>{fmt_money(net)}</span>"
+            f"<br><span class=muted>{n} closed · {win}% won · {e(note)}</span></div>")
+
+    # Which genome is winning. `n` is beside the money on purpose: this village
+    # has already been fooled by a 100% win rate over 13 short-premium trades,
+    # which is the expected shape rather than an edge.
+    arms: dict = {}
+    for r in rows:
+        if r["source"] != "shadow" or not r["closed_at"]:
+            continue
+        arms.setdefault(str(r["arm"]), []).append(D(str(r["realized"] or 0)))
+    arm_rows = []
+    for arm, vals in sorted(arms.items(), key=lambda kv: -sum(kv[1], ZERO)):
+        wins = sum(1 for v in vals if v > 0)
+        arm_rows.append({
+            "arm": e(arm), "trades": len(vals),
+            "net": fmt_money(money(sum(vals, ZERO))),
+            "mean": fmt_money(money(sum(vals, ZERO) / D(len(vals)))),
+            "won": f"{round(100.0*wins/len(vals),1)}%",
+            "verdict": ("<span class=muted>too few to rank</span>"
+                        if len(vals) < 20 else "<span class=good>ranked</span>"),
+        })
+
+    open_rows = [{
+        "source": e(str(r["source"])), "arm": e(str(r["arm"])),
+        "contract": e(str(r["contract"])), "side": e(str(r["side"])),
+        "at": e(str(r["entry_price"])),
+        "spread": f"{D(str(r['spread_pct'] or 0)):.1f}%",
+        "since": e(str(r["opened_bar"] or "")[:16]),
+    } for r in rows if not r["closed_at"]][:12]
+
+    body = "".join(cards)
+    if arm_rows:
+        body += ("<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>Genomes, "
+                 "graded against each other</h3>" + _table(arm_rows))
+    if open_rows:
+        body += ("<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>Open</h3>"
+                 + _table(open_rows))
+    body += (
+        "<p class=muted>The desk writes puts on paper and cannot reach the "
+        "ledger — it has its own table and never touches cash, fills or "
+        "positions. It fills at the <strong>bid</strong> and buys back at the "
+        "<strong>ask</strong>, because a seller who books the mid invents the "
+        "edge he is testing. Several genomes are graded on the same chain every "
+        "bar, and none is promoted under 20 trades: short premium wins most of "
+        "the time by construction, so a young win rate is a shape and not a "
+        "result.</p>")
+    return _panel("Options desk — real against imagined", body)
 
 def _council_panel(eco) -> str:
     """What the village decided for itself — and what it handed back to you."""

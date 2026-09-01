@@ -181,6 +181,12 @@ def test_a_bad_override_is_ignored_rather_than_obeyed(monkeypatch):
 def test_the_config_reads_it_from_the_environment(monkeypatch):
     from src.trading.config import DataConfig
 
+    # `src/config.py` loads `.env` at import, so the developer's own
+    # `TRADE_BAR=15m` is in this process before the first test runs. Asserting
+    # the built-in default without clearing it tests the machine rather than
+    # the code: green on CI, red locally, for a reason that looks like a
+    # regression in whatever was edited most recently.
+    monkeypatch.delenv("TRADE_BAR", raising=False)
     assert DataConfig().resolution is DAILY
     assert DataConfig(bar="1h").resolution.name == "1h"
     monkeypatch.setenv("TRADE_BAR", "15m")
@@ -208,11 +214,13 @@ def test_an_intraday_feed_does_not_ask_for_six_months_of_minutes():
 
 
 def test_the_scorecard_annualises_against_the_configured_bar(store, firm_record,
-                                                            market_data):
+                                                            market_data,
+                                                            monkeypatch):
     """The whole point of the wiring: the evaluator must not assume."""
     from src.trading.brokerage.evaluator import Evaluator
     from src.trading.config import DataConfig, TradingConfig
 
+    monkeypatch.delenv("TRADE_BAR", raising=False)   # see the note above
     hourly = TradingConfig(data=DataConfig(bar="1h"))
     assert Evaluator(store, hourly).config.data.resolution.bars_per_year \
         == Decimal("6.5") * TRADING_DAYS

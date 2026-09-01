@@ -21,10 +21,19 @@
 -- `entry_price` is the ask, `exit_price` the bid, and `spread_pct` is kept so
 -- a run can be re-read against what it cost rather than what it hoped.
 
+-- `arm` is what makes this desk learn faster than anything else in the village.
+-- A firm evolves once every TRADE_EVOLVE_EVERY bars and produces one genome's
+-- worth of evidence in that time. This desk evaluates several genomes against
+-- the *same* chain on every bar and records what each would have written, so a
+-- bar yields as many observations as there are arms. Only the `live` arm is
+-- the desk's actual position; the rest are counterfactuals, which cost nothing
+-- because none of this touches money.
+--
 CREATE TABLE IF NOT EXISTS shadow_trades (
     id SERIAL PRIMARY KEY,
     desk TEXT NOT NULL,
     source TEXT DEFAULT 'shadow',
+    arm TEXT DEFAULT 'live',
     contract TEXT NOT NULL,
     underlying TEXT NOT NULL,
     side TEXT NOT NULL,
@@ -43,3 +52,5 @@ CREATE TABLE IF NOT EXISTS shadow_trades (
 
 CREATE INDEX IF NOT EXISTS idx_shadow_desk ON shadow_trades (desk, closed_at);
 CREATE INDEX IF NOT EXISTS idx_shadow_contract ON shadow_trades (contract);
+
+CREATE INDEX IF NOT EXISTS idx_shadow_arm ON shadow_trades (desk, arm, closed_at);
