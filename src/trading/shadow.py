@@ -282,9 +282,17 @@ class ShadowDesk:
         self._settle(bar, report)
         arms = self.arms(bar)
 
+        # Why each underlying produced nothing. "The desk is idle" covers three
+        # completely different situations — nobody published a reading, the
+        # reading had no direction, or it was too weak for any arm — and only
+        # one of them is the desk working as intended on a quiet night. A single
+        # catch-all sentence made the other two invisible.
+        quiet: dict = {}
+
         for underlying in self.universe:
             reading = self.board.reading(underlying, as_of)
             if reading is None:
+                quiet[underlying] = "nobody published a reading"
                 continue
             # **Both directions.** Bullish writes a put below the market,
             # bearish writes a call above it. This used to skip every bearish
@@ -293,11 +301,23 @@ class ShadowDesk:
             # half the strategy was excluded because of it.
             bullish = D(reading.score) > 0
             if D(reading.score) == 0:
+                quiet[underlying] = (f"reading has no direction "
+                                     f"(score 0, confidence {reading.confidence})")
+                continue
+
+            gates = sorted(_gene(g, "shadow_confidence") for g in arms.values())
+            if D(reading.confidence) < gates[0]:
+                quiet[underlying] = (
+                    f"confidence {reading.confidence} below every arm "
+                    f"(lowest gate {gates[0]})")
                 continue
 
             spot = D(market.mark(underlying))
             self._sd = _realised_sd(market.closes(underlying, 60))
             if spot <= 0 or self._sd is None:
+                quiet[underlying] = ("cannot price the underlying"
+                                     if spot <= 0 else
+                                     "not enough history to measure volatility")
                 continue
 
             # One chain, every arm. Five genomes for one network call.
@@ -374,6 +394,12 @@ class ShadowDesk:
                     report.opened.append(
                         f"SOLD {pick.symbol} at {pick.sell_at} "
                         f"(spread {pick.round_trip_pct:.1f}%)")
+
+        # Only when the desk did nothing at all: on a bar where it traded, the
+        # trades are the story and the rest is noise.
+        if not report.opened and quiet:
+            for underlying, why in sorted(quiet.items()):
+                report.notes.append(f"{underlying}: {why}")
         return report
 
     def _holds_arm(self, underlying: str, arm: str) -> bool:
