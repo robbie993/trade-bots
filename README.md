@@ -169,6 +169,25 @@ python -m src.main trade dashboard  # or freeze it into one shareable file
 TRADE_AUTONOMY=council python -m src.main trade run   # and let it run itself
 ```
 
+And there is a third thing in here, standalone and much smaller: the
+**[Evolving Hive-Mind Trader](hive_mind/README.md)** in `hive_mind/`. Five
+scouts, a council that votes, and a genome that evolves — wrapped in a
+walk-forward lock that will not let it near real money until it has survived
+data it was structurally prevented from reading. It is **not** part of the
+village — no database, no ledger, no firms, no gate, and nothing under `src/`
+imports it — but it reuses the village's arithmetic rather than growing a
+second copy: `src/money.py`, `src/trading/indicators.py`, the `Bar` and `Fill`
+models, and the paper venue's fill costs.
+
+```bash
+python -m hive_mind                        # watch it think, one day at a time
+python -m hive_mind --lock --overfit-demo  # watch it be refused, and see why
+python -m hive_mind.crucible_real          # and the same, against real SPY history
+```
+
+Step-by-step deployment, from install to a $100 live account, is in
+[hive_mind/DEPLOY.md](hive_mind/DEPLOY.md).
+
 ---
 
 ## The loop

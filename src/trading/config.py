@@ -211,6 +211,92 @@ class BrainConfig:
 
 
 @dataclass(frozen=True)
+class CrucibleConfig:
+    """The walk-forward lock — what a genome must survive before it is trusted.
+
+    Evolution's failure mode is not losing money, it is *winning* on the data
+    it was allowed to see. A genome that mutated its way to a 50% return over
+    the same six months it was scored on has demonstrated nothing except that
+    six months is memorisable. The crucible exists to make that difference
+    visible before the money does.
+
+    So every number here is a threshold applied to bars the evolver was
+    physically prevented from reading — see ``brain/crucible.py``, where the
+    hidden window is removed from the feed rather than politely skipped.
+
+    Two defaults are load-bearing:
+
+    ``required_for_live = True``
+        A firm pointed at a live venue does not trade until its *current*
+        genome holds a passing certificate. Turning this off is a decision you
+        have to make in writing.
+
+    ``allow_synthetic = False``
+        A proof earned on the synthetic random walk never licenses real money.
+        The synthetic feed is for testing the machinery, and a strategy that
+        beat a seeded PRNG has beaten a seeded PRNG.
+    """
+
+    # How many train/test folds the history is cut into.
+    folds: int = field(default_factory=lambda: _env_int("TRADE_CRUCIBLE_FOLDS", 3))
+    # Each hidden window, as a fraction of the whole history.
+    test_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_CRUCIBLE_TEST_PCT", "0.15")
+    )
+    # Lead-in bars before the first decision in any window. Indicators read
+    # them; no trade is made on them.
+    warmup: int = field(default_factory=lambda: _env_int("TRADE_CRUCIBLE_WARMUP", 30))
+    # Generations of evolution inside each training window. Zero freezes the
+    # genome completely and tests exactly what it is today.
+    generations: int = field(default_factory=lambda: _env_int("TRADE_CRUCIBLE_GENERATIONS", 3))
+    # Anchored: every training window starts at bar zero and grows. Rolling:
+    # it slides, so old regimes eventually fall out of the sample.
+    anchored: bool = field(default_factory=lambda: _env_bool("TRADE_CRUCIBLE_ANCHORED", True))
+
+    # -- what counts as surviving a fold ----------------------------------
+    # Below this, the fold's answer is "not enough trades to say", which is a
+    # failure to prove, never a pass.
+    min_oos_trades: int = field(default_factory=lambda: _env_int("TRADE_CRUCIBLE_MIN_TRADES", 3))
+    min_oos_return_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_CRUCIBLE_MIN_RETURN_PCT", "0.0")
+    )
+    max_oos_drawdown_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_CRUCIBLE_MAX_DRAWDOWN_PCT", "20.0")
+    )
+    # How much of its in-sample fitness a genome may lose out of sample before
+    # the gap itself is the finding. This is the overfitting detector: a
+    # strategy that scores 40 in training and 4 in the holdout did not get
+    # unlucky, it memorised.
+    max_fitness_decay_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_CRUCIBLE_MAX_DECAY_PCT", "70.0")
+    )
+    # Folds that must pass. Zero means all of them, which is the default
+    # because "it worked in two of our three holdouts" is a coin, not a proof.
+    min_folds_passed: int = field(
+        default_factory=lambda: _env_int("TRADE_CRUCIBLE_MIN_FOLDS_PASSED", 0)
+    )
+
+    # -- what a certificate licenses --------------------------------------
+    required_for_live: bool = field(
+        default_factory=lambda: _env_bool("TRADE_CRUCIBLE_REQUIRED", True)
+    )
+    allow_synthetic: bool = field(
+        default_factory=lambda: _env_bool("TRADE_CRUCIBLE_ALLOW_SYNTHETIC", False)
+    )
+    # A proof ages. The microstructure a genome was measured against is not
+    # the one it will trade in a year from now.
+    certificate_ttl_days: int = field(
+        default_factory=lambda: _env_int("TRADE_CRUCIBLE_TTL_DAYS", 90)
+    )
+    # Evolution on a firm that is pointed at a live venue. Off: the evolver
+    # still runs and still records what it found, it just may not promote —
+    # only a passing gauntlet moves a live firm's genome.
+    evolve_live_firms: bool = field(
+        default_factory=lambda: _env_bool("TRADE_CRUCIBLE_EVOLVE_LIVE", False)
+    )
+
+
+@dataclass(frozen=True)
 class HeartConfig:
     """Section 4.3 — the conscience.
 
@@ -321,6 +407,7 @@ class TradingConfig:
     autonomy: AutonomyConfig = field(default_factory=AutonomyConfig)
     living: "LivingConfig" = field(default_factory=lambda: _living_config())
     brain: BrainConfig = field(default_factory=BrainConfig)
+    crucible: CrucibleConfig = field(default_factory=CrucibleConfig)
     heart: HeartConfig = field(default_factory=HeartConfig)
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
     data: DataConfig = field(default_factory=DataConfig)

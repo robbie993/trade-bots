@@ -170,7 +170,13 @@ def test_a_firm_on_an_unapproved_live_venue_refuses_to_trade(ecosystem):
     report = ecosystem.tick(ecosystem.market().seek(150))
     assert ecosystem.store.fills(firm.id) == []
     if report.refused_by_venue:
-        assert "no approved live_trading" in report.refused_by_venue[0]
+        # Two independent gates stand in front of a live venue: a human's
+        # approval of the venue, and a crucible certificate for the genome.
+        # Either one refusing is the correct outcome; nothing was sent.
+        assert (
+            "no approved live_trading" in report.refused_by_venue[0]
+            or "crucible certificate" in report.refused_by_venue[0]
+        )
 
 
 def test_status_reports_the_whole_ecosystem(ecosystem):

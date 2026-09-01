@@ -33,8 +33,10 @@ from ..money import D, ZERO, fmt_money, money
 from ..notifications import Notifier, build_notifier
 from .audit.obsidian_logger import ObsidianLogger
 from .backtest import Backtester
+from .brain.crucible import Crucible, replace_genome
 from .brain.evolver import Evolver
 from .brain.learning import Learner
+from .brain.lock import WalkForwardLock
 from .brain.memory import AgentMemory
 from .brokerage.brokerage import Brokerage, OversightReport
 from .brokerage.reconciliation import LedgerNotReconciled
@@ -115,6 +117,8 @@ class Ecosystem:
         self.memory = AgentMemory(self.store, self.config.brain)
         self.learner = Learner(self.store, self.memory, self.config)
         self.evolver = Evolver(self.store, self.config)
+        self.crucible = Crucible(self.store, self.config)
+        self.lock = WalkForwardLock(self.store, self.config)
         self.brokerage = Brokerage(self.store, self.config, self.gate)
         self.council = Council(db, margin=self.config.autonomy.margin)
         if self.config.autonomy.council_decides:
@@ -562,6 +566,19 @@ class Ecosystem:
         positions = self.store.positions(record.id)
         venue = build_venue(record.venue, self.config, self.gate)
 
+        # The walk-forward lock. A live venue already refuses to send an order
+        # without a human's approval of *the venue*; this refuses to send one
+        # for a *strategy* that has never been measured on data it could not
+        # have been fitted to. The two are different questions and both have to
+        # be answered before real money moves.
+        if getattr(venue, "is_live", False):
+            decision = self.lock.check(record)
+            if not decision.allowed:
+                report.refused_by_venue.append(decision.reason)
+                self.flow.emit("venue", f"{record.venue} locked out {record.firm_key}",
+                               kind="refused", firm=record.firm_key, detail=decision.reason)
+                return
+
         flow = self.flow
         raw = firm.propose(market, positions)
 
@@ -875,6 +892,64 @@ class Ecosystem:
             # New genomes exist; the lineage in the vault should show them.
             self.log_brain()
         return out
+
+    def certify(
+        self,
+        firm_key: str,
+        generations: Optional[int] = None,
+        promote: bool = False,
+    ):
+        """Put a firm's genome through the crucible and store what happened.
+
+        ``promote`` is the only path by which a live firm's genome moves, and
+        it moves only on a pass: the genome that comes out is the one that was
+        measured on the final window, so promoting anything else would deploy
+        a strategy no fold ever tested.
+        """
+        record = self.store.get_firm(firm_key)
+        if record is None:
+            raise ValueError(f"no firm {firm_key!r}")
+        if promote:
+            # Same rule as `evolve`: what a firm will do next is not decided on
+            # books that do not add up. Measuring is always allowed.
+            self.brokerage.require_reconciled(self.market())
+        spec = self.specs().get(record.firm_key)
+        analysts = spec.analysts if spec else ("technical", "sentiment", "macro")
+        report = self.crucible.run(
+            record,
+            self.feed,
+            symbols=record.universe,
+            analysts=analysts,
+            generations=generations,
+        )
+        certificate = self.lock.certify(report, record)
+        if promote and report.passed and report.genome != record.genome:
+            # A pass is not automatically a licence. Ask the lock what this
+            # certificate is worth *for this firm* before deploying behind it —
+            # otherwise `--promote` on the synthetic feed would change a live
+            # firm's strategy on the strength of a random walk.
+            decision = self.lock.check(replace_genome(record, report.genome))
+            if decision.allowed:
+                self.store.update_firm_fields(
+                    record.id, genome=json.dumps(report.genome, sort_keys=True)
+                )
+                self.store.record_event(
+                    "crucible",
+                    f"{record.firm_key}: genome promoted by certificate "
+                    f"{certificate.fingerprint} — {report.folds_passed}/{len(report.folds)} "
+                    f"out-of-sample folds on {report.data_source}",
+                    firm_id=record.id,
+                    payload={"from": record.genome, "to": report.genome},
+                )
+            else:
+                self.store.record_event(
+                    "crucible",
+                    f"{record.firm_key}: genome {certificate.fingerprint} passed the "
+                    f"crucible but was NOT promoted — {decision.reason}",
+                    firm_id=record.id,
+                    payload={"held": record.genome, "proposed": report.genome},
+                )
+        return report, certificate
 
     def simulate(self, days: int = 30, on_tick=None) -> list:
         """Replay the last N bars through the *whole* ecosystem, one tick per bar.
