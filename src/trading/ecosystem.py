@@ -144,6 +144,18 @@ class Ecosystem:
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
         self._reported_bar = ""
+        #: The furthest bar this run has seen. `market.as_of()` is the max
+        #: timestamp across symbols, and it is **not monotonic**: a partial bar
+        #: is present in one fetch and absent from the next, so the maximum
+        #: flips back and forth. Measured live on 2026-09-01, the village's bar
+        #: alternated 16:00 / 16:15 / 16:00 / 16:15 within single minutes.
+        #:
+        #: Everything that asks "have I already done this bar?" is defeated by
+        #: that, because each flip looks like a new bar. It drained an 80-bar
+        #: gulag sentence in about two hours instead of twenty, and it bills
+        #: borrow once per alternating key rather than once per bar. Time does
+        #: not run backwards, so the bar the village acts on does not either.
+        self._high_bar = ""
         self._reported_blind: set = set()
 
     # =====================================================================
@@ -577,7 +589,7 @@ class Ecosystem:
         # firm rather than being decided by one.
         report.expiries = self._settle_expiries(market, flow)
 
-        current_bar = resolution.bar_key(market.as_of())
+        current_bar = self._bar_now(market, resolution)
 
         # Sentences are served in bars, and counted here because this is the
         # one place that knows the bar turned over. A firm whose time is up is
@@ -596,7 +608,7 @@ class Ecosystem:
                 flow.emit("brokerage", f"{record.firm_key} released",
                           firm=record.firm_key)
 
-        current_bar = resolution.bar_key(market.as_of())
+        current_bar = self._bar_now(market, resolution)
         for record in self.store.firms():
             if record.is_bankrupt:
                 continue  # wound up: flat, settled, postmortem written
@@ -909,6 +921,34 @@ class Ecosystem:
         except Exception:  # noqa: BLE001 - never fail a tick over this check
             return False
         return any(resolution.bar_key(r.get("as_of")) == bar for r in rows)
+
+    def _bar_now(self, market: MarketData, resolution) -> str:
+        """The current bar, never earlier than the last one this run saw.
+
+        `market.as_of()` is `max(bar.as_of)` across symbols and can go
+        *backwards* between ticks: a partial bar shows up in one fetch and is
+        missing from the next, so the maximum drops back to the previous one.
+        Observed live alternating 16:00 / 16:15 within the same minute.
+
+        Every guard in this file that asks "did I already do this bar?" tests
+        equality against a stored key, and equality cannot survive a value that
+        oscillates — each flip reads as a fresh bar. That is not theoretical:
+        it served an 80-bar gulag sentence in two hours, and it bills borrow
+        once per alternating key instead of once per bar.
+
+        Clamping here rather than in `MarketData` on purpose. `as_of()` is
+        honestly reporting what the feed returned, and a backtest that seeks
+        backwards through history *should* see the bar go down. It is only the
+        live tick, moving forward in wall-clock time, where a bar going
+        backwards is always wrong.
+        """
+        bar = resolution.bar_key(market.as_of())
+        if not bar:
+            return bar
+        if bar < self._high_bar:
+            return self._high_bar
+        self._high_bar = bar
+        return bar
 
     def _borrow_already_billed(self, record: FirmRecord, bar: str, resolution) -> bool:
         """Has this firm already paid borrow for this bar?

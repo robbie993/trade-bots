@@ -210,3 +210,45 @@ def test_settle_asks_for_the_contract_it_actually_holds(monkeypatch):
     assert asked.get("expiry_gte") == expiry.isoformat()
     assert asked.get("expiry_lte") == expiry.isoformat()
     assert asked.get("right") == "call"
+
+
+# =========================================================================
+# the bar the village acts on must not run backwards
+# =========================================================================
+def test_a_sentence_is_not_served_twice_when_the_bar_oscillates():
+    """`market.as_of()` is not monotonic and the gulag paid for it.
+
+    It reports `max(bar.as_of)` across symbols, and a partial bar is present in
+    one fetch and absent from the next — so the maximum flips back. Measured
+    live on 2026-09-01 the village alternated 16:00 / 16:15 / 16:00 / 16:15
+    within single minutes, and because the guard tested equality, every flip
+    counted as a fresh bar: an 80-bar sentence drained in about two hours
+    instead of twenty.
+    """
+    from src.trading.firms import strikes
+
+    state = {"strikes": 1, "gulag_bars_left": 10, "gulag_last_bar": None,
+             "breach_open": 1, "last_strike_reason": "x"}
+
+    class Store:
+        def strike_state(self, _): return dict(state)
+        def set_gulag(self, _, left, bar):
+            state["gulag_bars_left"] = left
+            if bar is not None:
+                state["gulag_last_bar"] = bar
+        def release_from_gulag(self, _): state["gulag_bars_left"] = 0
+
+    firm = type("F", (), {"id": 1, "firm_key": "f"})()
+    store = Store()
+
+    strikes.serve_sentence(store, firm, "2026-09-01T16:15")
+    assert state["gulag_bars_left"] == 9
+    # The feed drops the partial bar and the maximum falls back an interval.
+    strikes.serve_sentence(store, firm, "2026-09-01T16:00")
+    assert state["gulag_bars_left"] == 9, "time ran backwards and cost a bar"
+    # Same bar again: still nothing.
+    strikes.serve_sentence(store, firm, "2026-09-01T16:15")
+    assert state["gulag_bars_left"] == 9
+    # A genuinely new bar advances it.
+    strikes.serve_sentence(store, firm, "2026-09-01T16:30")
+    assert state["gulag_bars_left"] == 8

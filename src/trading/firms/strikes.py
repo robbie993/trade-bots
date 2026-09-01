@@ -122,8 +122,17 @@ def serve_sentence(store, firm, bar: str) -> Optional[StrikeOutcome]:
     left = state["gulag_bars_left"]
     if left <= 0:
         return None
-    if not bar or state["gulag_last_bar"] == bar:
-        return None                     # already counted this bar, or no bar
+    # **Ordered, not equal.** Equality assumes the bar only ever moves forward,
+    # and `market.as_of()` does not: a partial bar drops in and out of a fetch,
+    # so the village's bar was measured alternating 16:00 / 16:15 / 16:00
+    # within single minutes. Against `==`, every flip is a new bar and the
+    # sentence counts down twice as fast — an 80-bar sentence served in about
+    # two hours instead of twenty. ISO bar keys are fixed-width, so string
+    # ordering is chronological. The caller clamps this too; the guard is
+    # ordered as well because `gulag_last_bar` is persisted and has to be right
+    # across a restart, when the caller's high-water mark starts empty.
+    if not bar or bar <= (state["gulag_last_bar"] or ""):
+        return None                     # already counted, or time went backwards
 
     left -= 1
     store.set_gulag(firm.id, left, bar)
