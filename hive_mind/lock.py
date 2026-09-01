@@ -56,6 +56,10 @@ from .evolver import ALL_GENES, SIZING_GENES, STRATEGY_GENES, Evolver, Genome
 from .market import SCENARIOS, MarketFeed, Venue
 
 
+class ProfileMismatch(RuntimeError):
+    """A certified genome was pointed at data it was never measured on."""
+
+
 class Phase(str, Enum):
     UNPROVEN = "unproven"
     CRUCIBLE = "historical_crucible"
@@ -220,6 +224,10 @@ class WalkForwardLock:
         self.phase = Phase.UNPROVEN
         self.graveyard: set = set()
         self.certificate: Optional[str] = None
+        # The scales the certificate was earned on. A genome's thresholds are
+        # claims about these; run it against different ones and every rule
+        # fires at a different time, silently. See `check_profile`.
+        self.certified_profile: Optional[dict] = None
         self.evolver = Evolver(seed=self.seed)
         # Where phase 2b gets the regimes it has never seen. The default is
         # the generated scenarios; on real history it is disjoint windows of
@@ -274,6 +282,38 @@ class WalkForwardLock:
 
         return Permit(True, f"phase {self.phase.value}: training on historical data only", genes)
 
+    def check_profile(self, feed) -> Permit:
+        """May a certified genome be run against *this* data?
+
+        The genome's numbers were fitted to particular scales — what a VIX
+        print of 30 means, what a sentiment reading of -0.5 means. Point it at
+        a feed built differently and the thresholds still parse, still run,
+        still produce an equity curve, and are answering a different question.
+        Nothing raises, nothing logs, and the curve is quietly someone else's.
+
+        The most likely way to hit this is the honest one: phases 1 and 2 have
+        to run on a sentiment proxy, because no free source has years of real
+        news sentiment. Wire a live news scorer in afterwards and the deployed
+        genome is reading a scale it was never measured against.
+        """
+        if self.certified_profile is None:
+            return Permit(True, "nothing has been certified yet, so nothing is being risked")
+        live = feed.profile() if hasattr(feed, "profile") else dict(feed or {})
+        differences = [
+            f"{key}: certified on {self.certified_profile[key]!r}, this feed is {live.get(key)!r}"
+            for key in sorted(self.certified_profile)
+            if self.certified_profile[key] != live.get(key)
+        ]
+        if differences:
+            return Permit(
+                False,
+                "this genome was measured on different data than it is being run on — "
+                + "; ".join(differences)
+                + ". Re-run the crucible against the feed you intend to trade, or the "
+                "thresholds are calibrated to a scale nothing here is using.",
+            )
+        return Permit(True, "the feed matches what the certificate was earned on")
+
     def kill(self, genome: Genome, why: str) -> None:
         """Permanent. Both fingerprints, so a re-size cannot smuggle it back."""
         self.graveyard.add(genome.fingerprint())
@@ -292,6 +332,9 @@ class WalkForwardLock:
     ) -> LockReport:
         """Run all four phases in order. Stops at the first failure."""
         report = LockReport(genome_in=genome)
+        self.certified_profile = (
+            history.profile() if hasattr(history, "profile") else None
+        )
         if genome.fingerprint() in self.graveyard or strategy_fingerprint(genome) in self.graveyard:
             report.killed = True
             report.phases.append(
@@ -641,6 +684,7 @@ class WalkForwardLock:
 
 __all__ = [
     "LockConfig",
+    "ProfileMismatch",
     "LockReport",
     "MUTABLE_IN",
     "Permit",

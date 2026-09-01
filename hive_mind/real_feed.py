@@ -279,6 +279,21 @@ class RealFeed(MarketFeed):
     def window(self, start: int, end: int) -> WindowFeed:
         return WindowFeed(self, start, end)
 
+    def profile(self) -> dict:
+        """The two scales this feed's numbers are on, named stably.
+
+        Stable is the operative word: these strings go into a certificate and
+        get compared to a live feed's later, so they name the *method* rather
+        than the run. Change the method and the comparison should fail, which
+        is the entire mechanism.
+        """
+        self.bars()
+        return {
+            "feed": f"real:{self.symbol}",
+            "vix": "real:^VIX" if self.vix_source.startswith("real") else "proxy:realised-vol-20",
+            "sentiment": f"proxy:returns-vol-{self.sentiment_window}",
+        }
+
     def describe(self) -> str:
         self.bars()
         first, last = self._bars[0], self._bars[-1]

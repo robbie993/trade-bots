@@ -217,6 +217,20 @@ class MarketFeed:
     def window(self, start: int, end: int) -> "WindowFeed":
         return WindowFeed(self, start, end)
 
+    def profile(self) -> dict:
+        """What this feed *is*, in terms a certificate can be checked against.
+
+        A genome's thresholds are claims about the scales it was measured on.
+        Swap the scale and the same numbers fire on different days for
+        different reasons, with nothing to report — so the scales travel with
+        the licence. See `lock.check_profile`.
+        """
+        return {
+            "feed": "generated",
+            "vix": "generated:regime-model",
+            "sentiment": "generated:regime-model",
+        }
+
     def __len__(self) -> int:
         return len(self.bars())
 
@@ -254,6 +268,10 @@ class WindowFeed:
         absolute_start = self.start + max(0, int(start))
         absolute_end = min(self.end, self.start + int(end))
         return WindowFeed(self.source, absolute_start, max(absolute_start, absolute_end))
+
+    def profile(self) -> dict:
+        """A window is the same tape, so it is the same profile."""
+        return self.source.profile()
 
     def __len__(self) -> int:
         return len(self.bars())

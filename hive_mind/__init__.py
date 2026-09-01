@@ -10,6 +10,10 @@
 
 The validation harness — a separate path that never holds a position:
 
+    providers.py     where the tape comes from — stooq, yfinance, tiingo,
+                     alphavantage, or a CSV you already have
+    news.py          real headline sentiment, collected forward, never
+                     backfilled — and the calibration check that goes with it
     real_feed.py     real history from CSV, with VIX aligned and the
                      sentiment proxy declared as one
     crucible_real.py runs genomes against that history, seals the recent
@@ -20,7 +24,8 @@ Run it:
     python -m hive_mind                 # the narrated simulation
     python -m hive_mind --lock          # the full walk-forward pipeline
     python -m hive_mind --show-hallucination   # perfect fills vs real ones
-    python -m hive_mind.real_feed --download   # get real SPY and ^VIX onto disk
+    python -m hive_mind.providers              # get real SPY and ^VIX onto disk
+    python -m hive_mind.news                   # score today's headlines
     python -m hive_mind.crucible_real          # the harness, on that history
 
 It borrows from the village rather than re-deriving: ``src/money.py`` for the
@@ -46,8 +51,18 @@ from .evolver import (
     STRATEGY_GENES,
     create_random_genome,
 )
-from .lock import LockConfig, LockReport, Permit, Phase, WalkForwardLock, strategy_fingerprint
+from .lock import (
+    LockConfig,
+    LockReport,
+    Permit,
+    Phase,
+    ProfileMismatch,
+    WalkForwardLock,
+    strategy_fingerprint,
+)
 from .market import MarketFeed, PerfectVenue, SCENARIOS, Venue, WindowFeed
+from .news import calibrate, collect, score_text
+from .providers import ProviderError, fetch
 from .real_feed import RealDataMissing, RealFeed, real_stress_windows, stress_source
 from .memory import ObsidianMemory, Recall
 from .scouts import Proposal, ScoutAI
@@ -66,7 +81,9 @@ __all__ = [
     "Permit",
     "PerfectVenue",
     "Phase",
+    "ProfileMismatch",
     "Proposal",
+    "ProviderError",
     "Recall",
     "RealDataMissing",
     "RealFeed",
@@ -80,8 +97,12 @@ __all__ = [
     "WalkForwardLock",
     "WindowFeed",
     "backtest",
+    "calibrate",
+    "collect",
     "create_random_genome",
+    "fetch",
     "real_stress_windows",
+    "score_text",
     "strategy_fingerprint",
     "stress_source",
 ]

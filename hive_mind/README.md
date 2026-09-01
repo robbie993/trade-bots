@@ -218,19 +218,45 @@ forgetting to configure it.
 
 ## Running it on real history
 
+**Deploying it step by step, from `pip install` to a $100 live account, is in
+[DEPLOY.md](DEPLOY.md).** What follows is what each piece does and why.
+
 The generated tape is a demo toy. Two commands replace it:
 
 ```bash
-pip install yfinance
-python -m hive_mind.real_feed --download     # SPY and ^VIX -> data/market/*.csv
-python -m hive_mind.crucible_real            # genomes vs. that history
+python -m hive_mind.providers      # SPY and ^VIX -> data/market/*.csv
+python -m hive_mind.crucible_real  # genomes vs. that history
 ```
 
-The download writes the village's own CSV layout —
+Everything writes the village's own CSV layout —
 `data/market/<SYMBOL>.csv` with a `date,open,high,low,close,volume` header — so
 `src/trading/data/feeds.py` reads the same files, you can drop in data from any
-source without touching this code, and the result of a run does not depend on
-what a vendor's API returned this morning.
+source without touching this code, and a run's result does not depend on what a
+vendor's API returned this morning. Fetch once; nothing re-fetches a file that
+exists unless you pass `--force`.
+
+### Five ways to get the tape
+
+`--provider auto` tries them in order and prints which one answered, because a
+run whose data source you cannot name later is a run you cannot reproduce.
+
+| Provider | Key | Notes |
+|---|---|---|
+| `stooq` | none | One GET, a CSV back, no SDK. The least breakable free source there is, and first in the fallback order for that reason. |
+| `yfinance` | none | Full history including `^VIX`. Unofficial, so it breaks whenever Yahoo changes something. `pip install yfinance`. |
+| `tiingo` | `TIINGO_API_KEY` | 1,000 requests a day. A real API with a contract. |
+| `alphavantage` | `ALPHAVANTAGE_API_KEY` | 25 requests a day — two symbols, once, carefully. It answers a blown quota with HTTP 200 and prose, which the loader treats as the failure it is. |
+| `csv` | none | You already have it. Kaggle S&P 500 dailies, a broker export, anything. `--provider csv --source path/to.csv` |
+
+When all of them refuse, the error says so and tells you the manual route
+rather than leaving you with a stack trace. That is not hypothetical — this was
+written on a machine where every one of those hosts is firewalled, which is why
+the fallback exists at all.
+
+Two things worth knowing about the list of "free data sources" going around:
+`ml4t-data` is not on PyPI (checked), and a package at version 0.1.x is a
+dependency you are adopting, not a shortcut. Everything above uses either the
+standard library or one optional install.
 
 ### The two things a price feed does not come with
 
@@ -245,11 +271,60 @@ frightened, and nothing about it says anything went wrong. `--allow-vix-proxy`
 substitutes a labelled realised-volatility proxy if you want that instead,
 knowing that is what you are doing.
 
-**Sentiment is always a proxy.** There is no free daily news-sentiment series
-going back to 1993. What the feed computes is a normalised blend of recent
-return and volatility. It tracks mood because mood follows price, and it is not
-news. The label travels on the feed (`sentiment_source`), prints on every run,
-and repeats in `describe()` — the one way this becomes dishonest is quietly.
+**Sentiment is always a proxy — and RSS does not fix it.** What the feed
+computes is a normalised blend of recent return and volatility. It tracks mood
+because mood follows price, and it is not news. The label travels on the feed
+(`sentiment_source`), prints on every run, and repeats in `describe()`.
+
+Free RSS is real news, and it is worth having, but it does not solve this:
+
+```bash
+python -m hive_mind.news          # score today's headlines, append to SENTIMENT.csv
+python -m hive_mind.news --show   # what has accumulated so far
+```
+
+**A feed hands back the last few dozen headlines.** It cannot tell you how the
+market felt on 12 March 2009, and no free source can. Phases 1, 2 and 2b need
+years of daily sentiment, so they keep running on the proxy no matter what you
+install. What `news.py` is for is *starting the clock*: run it daily and in six
+months you have six months of real sentiment that was recorded forward and
+never backfilled — which is the only kind that can honestly appear in a
+backtest. It refuses to write a day twice, and refuses to write a zero when no
+feed answered, because a zero meaning "the feeds were down" is indistinguishable
+once stored from one meaning "the news was balanced".
+
+### The mistake this creates, and the guard for it
+
+A genome fitted against one sentiment distribution and deployed reading another
+is the expensive version of this. `fear_threshold = -0.5` is a claim about a
+specific scale: on a series with a standard deviation of 0.18 it is a rare
+event, and on one with a standard deviation of 1.5 it is a Tuesday. Swap the
+source and every fear rule in the genome fires on different days for different
+reasons — and nothing raises, nothing logs, the equity curve just quietly
+becomes someone else's.
+
+So the scales travel with the licence. Every feed reports a `profile()`, the
+certificate records the one it was earned on, and the engine checks it at the
+point a feed actually arrives:
+
+```
+>>> engine.run(live_news_feed)
+ProfileMismatch: this genome was measured on different data than it is being
+run on — sentiment: certified on 'proxy:returns-vol-20', this feed is
+'news:rss-lexicon-v1'. Re-run the crucible against the feed you intend to
+trade, or the thresholds are calibrated to a scale nothing here is using.
+```
+
+`news.calibrate(proxy_values, news_values)` puts numbers on how far apart two
+scales are before you find out the expensive way. Measuring is never gated —
+only deploying is.
+
+The scorer itself is a finance lexicon with negation handling and nothing else.
+It cannot read sarcasm and does not know that "beat expectations" is about the
+expectations. It is here because it has no dependencies and can be read in a
+sitting; replace `score_text` with something better and re-certify, because
+changing the scorer changes the distribution and voids the licence, which is
+the entire point.
 
 ### The seal, and the count of your looks
 
@@ -295,7 +370,7 @@ directory is the only thing a deployed build should ever read.
 
 | | Validation harness | The engine |
 |---|---|---|
-| Files | `real_feed.py`, `crucible_real.py` | everything else |
+| Files | `providers.py`, `news.py`, `real_feed.py`, `crucible_real.py` | everything else |
 | Money | never | only under the lock, phase 4 onward |
 | Genomes | thrown away every run | one, read from `certified/` |
 | If it crashes | you lose a report | — |

@@ -185,6 +185,9 @@ python -m hive_mind --lock --overfit-demo  # watch it be refused, and see why
 python -m hive_mind.crucible_real          # and the same, against real SPY history
 ```
 
+Step-by-step deployment, from install to a $100 live account, is in
+[hive_mind/DEPLOY.md](hive_mind/DEPLOY.md).
+
 ---
 
 ## The loop

@@ -389,6 +389,17 @@ class GodBrokerEngine:
 
     # -- a whole run ------------------------------------------------------
     def run(self, feed, label: str = "") -> Result:
+        # The one place a feed and a lock are both in hand. A genome certified
+        # on one set of scales and run against another is not a bug that
+        # surfaces as an error — it surfaces as an equity curve — so it is
+        # checked here rather than left to a caller to remember.
+        if self.lock is not None and hasattr(self.lock, "check_profile"):
+            verdict = self.lock.check_profile(feed)
+            if not verdict.allowed:
+                from .lock import ProfileMismatch
+
+                raise ProfileMismatch(verdict.reason)
+
         bars = list(feed)
         for bar in bars:
             self.step(bar)
