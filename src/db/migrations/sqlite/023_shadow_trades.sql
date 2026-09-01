@@ -21,6 +21,12 @@
 -- put a figure into that identity would be trading the ledger's credibility
 -- for a backtest, which is a bad trade at any price.
 --
+-- `source` separates what a desk imagined from what an account actually did.
+-- Seeding this table with 39 real Alpaca option fills is the only way the
+-- village has ever had executed option trades to learn from; mixing them
+-- with the desk's own hypotheticals under one label would make every later
+-- score a blend of evidence and imagination.
+--
 -- `entry_price` is the **ask** and `exit_price` is the **bid**. Storing a mid
 -- would make every result here a fiction, and `spread_pct` is recorded
 -- alongside so a run can always be re-read against what it cost rather than
@@ -29,6 +35,7 @@
 CREATE TABLE IF NOT EXISTS shadow_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     desk TEXT NOT NULL,
+    source TEXT DEFAULT 'shadow',
     contract TEXT NOT NULL,
     underlying TEXT NOT NULL,
     side TEXT NOT NULL,

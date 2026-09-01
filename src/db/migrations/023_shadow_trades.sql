@@ -13,12 +13,18 @@
 -- trustworthy and it broke twice on 31 August; a research desk must not be
 -- able to put a figure into it.
 --
+-- `source` separates real fills from the desk's hypotheticals — seeding this
+-- table with real Alpaca option fills is the only executed option history the
+-- village has, and blending it with imagined trades would make every score a
+-- mix of evidence and invention.
+--
 -- `entry_price` is the ask, `exit_price` the bid, and `spread_pct` is kept so
 -- a run can be re-read against what it cost rather than what it hoped.
 
 CREATE TABLE IF NOT EXISTS shadow_trades (
     id SERIAL PRIMARY KEY,
     desk TEXT NOT NULL,
+    source TEXT DEFAULT 'shadow',
     contract TEXT NOT NULL,
     underlying TEXT NOT NULL,
     side TEXT NOT NULL,

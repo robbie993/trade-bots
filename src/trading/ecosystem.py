@@ -140,6 +140,7 @@ class Ecosystem:
         self._scanners = None
         self._scribe = None
         self._news = None
+        self._shadow = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
         self._reported_bar = ""
@@ -194,6 +195,31 @@ class Ecosystem:
 
             self._signals = SignalBoard(self.db)
         return self._signals
+
+    @property
+    def shadow(self):
+        """The paper options desk, or None when it has not been switched on.
+
+        Off unless `TRADE_SHADOW_ENABLED` is set, and off by default for the
+        same reason the news desk is: it reaches the open internet on its own,
+        once per underlying per bar, and this village's rate limit has been the
+        proximate cause of more than one outage.
+        """
+        if self._shadow is None:
+            import os
+
+            if not os.environ.get("TRADE_SHADOW_ENABLED", "").strip():
+                return None
+            from .shadow import ShadowDesk
+
+            # It runs on the village's own genome so the evolver's mutations
+            # reach it — a desk reading module constants is a desk that cannot
+            # learn, which is what the first version of this was.
+            from .brain.evolver import BASE_GENOME
+
+            self._shadow = ShadowDesk(self.store, self.signals,
+                                      genome=dict(BASE_GENOME))
+        return self._shadow
 
     @property
     def news(self):
@@ -522,6 +548,14 @@ class Ecosystem:
         # making outbound requests is not one anybody asked for.
         if self.news is not None:
             report.signals.extend(self.news.run(market))
+        # The shadow options desk. It writes only to `shadow_trades` and can
+        # never reach the ledger, so it runs after everything that can.
+        if self.shadow is not None:
+            shadow = self.shadow.run(market)
+            for line in shadow.opened + shadow.closed:
+                report.village.append(f"shadow: {line}")
+            for line in shadow.refused[:2]:
+                report.bot_notes.append(f"shadow refused — {line}")
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 

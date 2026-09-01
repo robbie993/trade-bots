@@ -1,87 +1,66 @@
-"""The shadow desk — a firm that trades options on paper and never on the book.
+"""The shadow desk — options on paper, on the side the evidence actually favours.
 
-Three separate things stop this village trading options for real, and all three
-are correct:
+**It sells premium.** The first version of this file bought it, and three
+independent measurements say that was the wrong side of the same trade:
 
-* it **cannot write** them. `risk_manager` blocks a sale with no holding,
-  because no fraction-of-capital limit can size an unbounded loss;
-* it **cannot afford** to. One cash-secured SPY put needs about $76,600 of
-  collateral at a $766 underlying; the firms here hold $20,000;
-* what remains — buying premium — is the thing the sibling repo's 2026-07-31
-  study found dies on cost. It measured a real signal of roughly +0.5% per 21
-  days against round-trip spreads near 52% of premium.
+* 210,509 bar-days of 2024 option history: buy a contract and hold five days
+  and the mean return is **-12.98%**, the median **-45.28%**, winning 23.4% of
+  the time — before any spread;
+* the Alpaca account's own 21 written contracts, imported into this table:
+  **+$2,931 realised** across 13 closed, every one of them short;
+* the sibling repo's wheel backtest at Sharpe 0.84 and a 94.4% win rate, and
+  `option_bot.py`'s evidence base — the Cboe PUT index over 32 years at
+  +1.61%/yr alpha, Sharpe 0.65 against the S&P's 0.49.
 
-So this desk does not trade. It records what it *would* have bought, at the
-price it would actually have paid, and marks it every bar. The point is not to
-pretend it made money — it is that **117 closed trades is the binding
-constraint on everything in this village**: the evolver, the strike system, the
-scanner scorecard and the court are all starved of evidence, and a desk that
-generates measurable decisions at no risk is worth more than one that generates
-none.
+Buying premium pays theta every day. Selling it collects theta every day. The
+village's live account has been on the collecting side and is up; this desk was
+built on the paying side and measured how reliably it loses.
 
-**What makes it honest.**
+**Why it still cannot do this for real.** `risk_manager` blocks a written
+option because no fraction-of-capital limit can size an unbounded loss, and
+that rule is right. A shadow desk risks nothing — its worst outcome is a row in
+a table — so it can explore the side the ledger must not, and produce the
+evidence that would justify ever changing that rule.
 
-*Entries fill at the ask and exits at the bid.* Never the mid. The mid is what
-turns a 52%-spread study into a headline, and `options_feed.Quote` makes the
-cost a property so that no path here can avoid it.
+**What keeps it honest.**
 
-*It refuses its own trades.* A contract past the spread gate is not entered,
-and it is recorded as refused rather than silently skipped, so the log shows
-what the cost rejected as well as what it liked.
+*A seller receives the bid and pays the ask to close.* The mirror of a buyer,
+and stated explicitly, because getting this backwards would manufacture the
+exact edge the desk exists to test.
 
-*It cannot reach the ledger.* Its table is `shadow_trades`. It never writes
-`fills`, `positions` or `cash`. The reconciliation identity broke twice on 31
-August and the one thing that must never break it is a research toy.
+*Real and imagined never mix.* Imported Alpaca fills carry `source='real'`;
+this desk writes `source='shadow'`. A score blending them would be part
+evidence and part invention with no way to separate them afterwards.
 
-*It reads the same board as everyone else.* The scanner, the news desk and the
-scribe publish readings; this desk hears them exactly as a firm's `signals`
-seat does, at the same confidence, with no privileged access. If those sources
-are nulls — and the scanner measurably is — this desk will faithfully lose
-imaginary money, which is the correct outcome and the reason to run it on paper
-first.
+*Its knobs are genes.* The first version hardcoded every constant, so the
+evolver had nothing to change and the desk could have run for a year without
+learning anything. They are in `GENES` now, and mutants face the same held-out
+test that rejected three firm genomes on 31 August.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
 from ..money import D, ZERO, money
-from .data.options_feed import AlpacaOptionFeed, MAX_ROUND_TRIP_PCT
+from .data.options_feed import AlpacaOptionFeed
 
 DESK = "shadow_options"
 
-#: How far out to look for contracts. Short enough that a directional view has
-#: to be right soon, long enough that theta is not the entire trade.
-MIN_DAYS, MAX_DAYS = 7, 45
-
-#: A reading has to be at least this confident before the desk acts on it.
-#:
-#: **Set just above the median reading, not high.** The first version used 40,
-#: reasoning that an option starts a quarter of the premium behind so a
-#: marginal opinion cannot justify one. That sounds right and conflates two
-#: different things: `confidence` is a publisher's certainty, not an expected
-#: move, and nothing has ever established a relationship between them — the
-#: scorecard measured both publishers as nulls the same afternoon.
-#:
-#: So 40 was an arbitrary number that happened to exclude 93% of all readings
-#: ever published, which would starve this desk of the only thing it exists to
-#: collect. The desk risks nothing; the cost of a bad shadow trade is a row in
-#: a table. The cost of too few is that nothing is ever learned.
-#:
-#: 20 sits just above the median of 16.2, so the desk acts on the better half
-#: of what it hears and the confidence of every entry is recorded with it —
-#: which is what lets the question "did more confident readings do better?" be
-#: asked from data rather than assumed in a constant.
-MIN_CONFIDENCE = D(os.environ.get("TRADE_SHADOW_MIN_CONFIDENCE", "20"))
-
-#: Contracts per entry. One, because sizing is not what this desk is measuring
-#: and a number here would only add a parameter nobody can justify from 117
-#: closed trades.
-CONTRACTS = 1
+#: Genes this desk is tuned on. Registered in `brain/evolver.GENES` so the
+#: evolver can actually move them — the whole reason the first version could
+#: not learn is that its equivalents were module constants.
+GENE_DEFAULTS = {
+    "shadow_dte_min": 21,
+    "shadow_dte_max": 45,
+    "shadow_strike_sd": 1.0,      # how far below spot to write, in realised SD
+    "shadow_spread_cap": 15.0,    # round-trip % beyond which a contract is refused
+    "shadow_confidence": 20.0,
+}
 
 
 @dataclass
@@ -92,57 +71,62 @@ class ShadowReport:
     notes: list = field(default_factory=list)
 
 
-def _atm(quotes, underlying_price: Decimal, want_call: bool):
-    """The tradable contract closest to the money, or None.
+def _gene(genome, name):
+    try:
+        return D(str((genome or {}).get(name, GENE_DEFAULTS[name])))
+    except Exception:  # noqa: BLE001 - a malformed gene is the default gene
+        return D(str(GENE_DEFAULTS[name]))
 
-    Closest to the money because that is where a directional view lives. Deep
-    in-the-money contracts quote at 0.2% round trip and are stock with extra
-    steps; far out-of-the-money ones quote at 200% and are lottery tickets.
+
+def _strike_of(occ: str) -> Optional[Decimal]:
+    try:
+        return D(int(occ[-8:])) / D(1000)
+    except (ValueError, TypeError):
+        return None
+
+
+def _realised_sd(closes) -> Optional[Decimal]:
+    """Standard deviation of recent returns. None when it cannot be measured.
+
+    Used to place the strike rather than to forecast anything: writing "one SD
+    below spot" is the rule `option_bot.py` settled on, and its own header notes
+    that every entry filter tried on top of it made results worse.
     """
-    best, best_gap = None, None
-    for quote in quotes:
-        if not quote.tradable:
-            continue
-        # OCC: root, YYMMDD, C/P, then the strike in thousandths.
-        tail = quote.symbol[-9:]
-        right, strike_raw = tail[0], tail[1:]
-        if (right == "C") != want_call:
-            continue
-        try:
-            strike = D(int(strike_raw)) / D(1000)
-        except (ValueError, TypeError):
-            continue
-        gap = abs(strike - underlying_price)
-        if best_gap is None or gap < best_gap:
-            best, best_gap = quote, gap
-    return best
+    if not closes or len(closes) < 20:
+        return None
+    rets = [(b - a) / a for a, b in zip(closes, closes[1:]) if a]
+    if len(rets) < 10:
+        return None
+    mean = sum(rets, ZERO) / D(len(rets))
+    var = sum(((r - mean) ** 2 for r in rets), ZERO) / D(len(rets))
+    return var.sqrt() if var > 0 else None
 
 
 class ShadowDesk:
-    """Reads the board, writes to `shadow_trades`, touches nothing else."""
+    """Writes puts on paper, records what it would have collected."""
 
     name = DESK
 
-    def __init__(self, store, board, universe=None, feed=None):
+    def __init__(self, store, board, universe=None, feed=None, genome=None):
         self.store = store
         self.board = board
         self.feed = feed or AlpacaOptionFeed()
         self.universe = list(universe or ("SPY", "QQQ", "IWM"))
+        self.genome = dict(genome or {})
 
-    # -- reading its own book ---------------------------------------------
+    # -- its own book ------------------------------------------------------
     def open_trades(self) -> list:
         try:
             return self.store.db.query(
-                "SELECT * FROM shadow_trades WHERE desk = ? AND closed_at IS NULL",
-                (DESK,),
-            ) or []
-        except Exception:  # noqa: BLE001 - no table yet is not a crash
+                "SELECT * FROM shadow_trades WHERE desk = ? AND source = 'shadow' "
+                "AND closed_at IS NULL", (DESK,)) or []
+        except Exception:  # noqa: BLE001
             return []
 
-    def _already_open(self, underlying: str) -> bool:
+    def _holds(self, underlying: str) -> bool:
         return any(str(r["underlying"]) == underlying for r in self.open_trades())
 
-    # -- the tick ----------------------------------------------------------
+    # -- the bar -----------------------------------------------------------
     def run(self, market, as_of=None) -> ShadowReport:
         report = ShadowReport()
         as_of = as_of if as_of is not None else market.as_of()
@@ -150,108 +134,121 @@ class ShadowDesk:
             return report
         bar = str(as_of)
 
-        # Mark and exit first, so a closing trade frees the underlying for a
-        # new opinion on the same bar rather than a bar later.
         self._settle(bar, report)
 
+        dte_min = int(_gene(self.genome, "shadow_dte_min"))
+        dte_max = int(_gene(self.genome, "shadow_dte_max"))
+        sd_mult = _gene(self.genome, "shadow_strike_sd")
+        cap = _gene(self.genome, "shadow_spread_cap")
+        min_conf = _gene(self.genome, "shadow_confidence")
+
         for underlying in self.universe:
-            if self._already_open(underlying):
+            if self._holds(underlying):
                 continue
             reading = self.board.reading(underlying, as_of)
-            if reading is None or abs(D(reading.confidence)) < MIN_CONFIDENCE:
+            if reading is None or D(reading.confidence) < min_conf:
                 continue
-            score = D(reading.score)
-            if score == 0:
+            # A put seller wants the underlying to stay up. A bearish reading is
+            # a reason not to write, not a reason to write a call — the account's
+            # own record is 21 short contracts and this desk does not invent a
+            # strategy the evidence has not seen.
+            if D(reading.score) < 0:
                 continue
 
-            price = D(market.mark(underlying))
-            if price <= 0:
+            spot = D(market.mark(underlying))
+            sd = _realised_sd(market.closes(underlying, 60))
+            if spot <= 0 or sd is None:
                 continue
+            target = spot * (D(1) - sd * sd_mult)
 
             today = date.today()
             quotes = self.feed.chain(
                 underlying,
-                expiry_gte=(today + timedelta(days=MIN_DAYS)).isoformat(),
-                expiry_lte=(today + timedelta(days=MAX_DAYS)).isoformat(),
-            )
+                expiry_gte=(today + timedelta(days=dte_min)).isoformat(),
+                expiry_lte=(today + timedelta(days=dte_max)).isoformat())
             if not quotes:
                 report.notes.append(
                     f"{underlying}: no chain — "
                     f"{self.feed.last_error.get(underlying, 'nothing quoted')}")
                 continue
 
-            pick = _atm(quotes, price, want_call=score > 0)
-            if pick is None:
-                worst = min((q.round_trip_pct for q in quotes), default=D(0))
+            best, gap = None, None
+            for quote in quotes:
+                if quote.symbol[-9] != "P":
+                    continue                      # puts only
+                if quote.round_trip_pct > cap or quote.bid <= 0:
+                    continue
+                strike = _strike_of(quote.symbol)
+                if strike is None or strike >= spot:
+                    continue                      # out of the money only
+                distance = abs(strike - target)
+                if gap is None or distance < gap:
+                    best, gap = quote, distance
+
+            if best is None:
                 report.refused.append(
-                    f"{underlying}: nothing inside the {MAX_ROUND_TRIP_PCT}% "
-                    f"spread gate (best {worst:.1f}%)")
+                    f"{underlying}: no OTM put inside a {cap}% spread near "
+                    f"{target:.2f} ({sd_mult}sd below {spot:.2f})")
                 continue
 
             self.store.db.insert("shadow_trades", {
                 "desk": DESK,
-                "contract": pick.symbol,
+                "source": "shadow",
+                "contract": best.symbol,
                 "underlying": underlying,
-                "side": "buy",
-                "quantity": CONTRACTS,
-                "entry_price": str(pick.buy_at),      # the ask, always
-                "entry_mid": str(pick.mid),
-                "spread_pct": str(pick.round_trip_pct),
-                "reason": (f"{reading.note[:80]} (score {score}, "
-                           f"confidence {reading.confidence})"),
+                "side": "sell",
+                "quantity": 1,
+                # A seller is filled at the bid. The mirror of a buyer, and the
+                # single place where getting the sign wrong would invent an edge.
+                "entry_price": str(best.sell_at),
+                "entry_mid": str(best.mid),
+                "spread_pct": str(best.round_trip_pct),
+                "reason": (f"wrote {sd_mult}sd below {spot:.2f}; "
+                           f"{reading.note[:60]} (conf {reading.confidence})"),
                 "opened_bar": bar,
             })
             report.opened.append(
-                f"{pick.symbol} at {pick.buy_at} "
-                f"(mid {pick.mid}, spread {pick.round_trip_pct:.1f}%)")
+                f"SOLD {best.symbol} at {best.sell_at} "
+                f"(mid {best.mid}, spread {best.round_trip_pct:.1f}%)")
         return report
 
     def _settle(self, bar: str, report: ShadowReport) -> None:
-        """Close anything whose contract can still be quoted, at the bid."""
+        """Buy the written put back, at the ask, when it can be quoted."""
         for row in self.open_trades():
-            underlying = str(row["underlying"])
-            quotes = {q.symbol: q for q in self.feed.chain(underlying)}
+            quotes = {q.symbol: q for q in self.feed.chain(str(row["underlying"]))}
             quote = quotes.get(str(row["contract"]))
-            if quote is None or quote.bid <= 0:
-                continue                     # still open, or unquotable
-            entry = D(str(row["entry_price"]))
-            realized = money((quote.sell_at - entry) * D(CONTRACTS) * D(100))
+            if quote is None or quote.ask <= 0:
+                continue
+            received = D(str(row["entry_price"]))
+            # Sold at the bid, bought back at the ask: premium kept minus cost.
+            realised = money((received - quote.buy_at) * D(str(row["quantity"])) * D(100))
             self.store.db.execute(
                 "UPDATE shadow_trades SET exit_price = ?, realized = ?, "
                 "closed_bar = ?, closed_at = ? WHERE id = ?",
-                (str(quote.sell_at), str(realized), bar,
-                 __import__("datetime").datetime.utcnow()
-                 .strftime("%Y-%m-%dT%H:%M:%SZ"), row["id"]),
-            )
-            report.closed.append(f"{row['contract']} at {quote.sell_at} "
-                                 f"({realized:+})")
+                (str(quote.buy_at), str(realised), bar,
+                 datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                 row["id"]))
+            report.closed.append(
+                f"BOUGHT BACK {row['contract']} at {quote.buy_at} ({realised:+})")
 
     # -- the scoreboard ----------------------------------------------------
-    def record(self) -> dict:
-        """What the desk would have made, and what the spread took."""
+    def record(self, source: str = "shadow") -> dict:
+        """What this desk made, and what the real account made, side by side."""
         try:
             rows = self.store.db.query(
-                "SELECT realized, entry_price, entry_mid, spread_pct FROM "
-                "shadow_trades WHERE desk = ? AND closed_at IS NOT NULL", (DESK,)
-            ) or []
+                "SELECT realized FROM shadow_trades WHERE desk = ? AND source = ? "
+                "AND closed_at IS NOT NULL", (DESK, source)) or []
         except Exception:  # noqa: BLE001
-            return {}
-        if not rows:
             return {"closed": 0}
-        net = sum((D(str(r["realized"] or 0)) for r in rows), ZERO)
-        # What the same trades would have shown filling at the mid — the
-        # flattering number, kept beside the real one so the gap is visible.
-        paid_over_mid = sum(
-            ((D(str(r["entry_price"] or 0)) - D(str(r["entry_mid"] or 0)))
-             * D(100) for r in rows), ZERO)
-        wins = sum(1 for r in rows if D(str(r["realized"] or 0)) > 0)
+        if not rows:
+            return {"closed": 0, "net": money(ZERO), "win_rate": 0.0}
+        values = [D(str(r["realized"] or 0)) for r in rows]
+        wins = sum(1 for v in values if v > 0)
         return {
-            "closed": len(rows),
-            "net": money(net),
-            "win_rate": round(100.0 * wins / len(rows), 1),
-            "spread_paid": money(paid_over_mid),
-            "net_at_mid": money(net + paid_over_mid),
+            "closed": len(values),
+            "net": money(sum(values, ZERO)),
+            "win_rate": round(100.0 * wins / len(values), 1),
         }
 
 
-__all__ = ["ShadowDesk", "ShadowReport", "DESK"]
+__all__ = ["ShadowDesk", "ShadowReport", "DESK", "GENE_DEFAULTS"]

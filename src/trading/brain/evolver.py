@@ -71,6 +71,21 @@ GENES: dict = {
     # decision being made by hand.
     "news_trust": (ZERO, D(150), False),
     "scribe_trust": (ZERO, D(150), False),
+    # The shadow options desk. Its first version hardcoded every one of these
+    # as a module constant, so the evolver had nothing to move and the desk
+    # could have run for a year without changing a thing — which is exactly
+    # what "it learned nothing" meant when it was asked.
+    #
+    # Ranges are bounded by what the evidence supports rather than by what is
+    # expressible. Writing closer than half a standard deviation is a different
+    # strategy from the one the account's 21 contracts describe, and a spread
+    # cap above 30% admits contracts the 2026-07-31 study already showed cannot
+    # be traded profitably at any signal strength.
+    "shadow_dte_min": (D(7), D(30), True),
+    "shadow_dte_max": (D(21), D(60), True),
+    "shadow_strike_sd": (D("0.5"), D("2.5"), False),
+    "shadow_spread_cap": (D(2), D(30), False),
+    "shadow_confidence": (ZERO, D(80), False),
 }
 
 BASE_GENOME: dict = {
@@ -100,6 +115,15 @@ BASE_GENOME: dict = {
     "signal_trust": 100,
     "news_trust": 100,
     "scribe_trust": 100,
+    # Starting points from what the account actually did: its written
+    # contracts cluster around a month out, and option_bot.py settled on
+    # one realised SD below spot with no filter on top, having measured
+    # that every filter it tried made results worse.
+    "shadow_dte_min": 21,
+    "shadow_dte_max": 45,
+    "shadow_strike_sd": 1.0,
+    "shadow_spread_cap": 15.0,
+    "shadow_confidence": 20.0,
 }
 
 
