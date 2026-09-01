@@ -8,6 +8,12 @@
     engine.py    the book, the arithmetic, the narration
     lock.py      the four phases a genome must clear before real money
 
+Importing this package gives you the engine. The validation harness is
+imported explicitly — ``from hive_mind.real_feed import RealFeed`` — because
+it is a separate path, and a package that pulls it in on every import is one
+where "the engine does not depend on the harness" is a claim rather than a
+fact.
+
 The validation harness — a separate path that never holds a position:
 
     providers.py     where the tape comes from — stooq, yfinance, tiingo,
@@ -61,9 +67,6 @@ from .lock import (
     strategy_fingerprint,
 )
 from .market import MarketFeed, PerfectVenue, SCENARIOS, Venue, WindowFeed
-from .news import calibrate, collect, score_text
-from .providers import ProviderError, fetch
-from .real_feed import RealDataMissing, RealFeed, real_stress_windows, stress_source
 from .memory import ObsidianMemory, Recall
 from .scouts import Proposal, ScoutAI
 
@@ -83,10 +86,7 @@ __all__ = [
     "Phase",
     "ProfileMismatch",
     "Proposal",
-    "ProviderError",
     "Recall",
-    "RealDataMissing",
-    "RealFeed",
     "Result",
     "SCENARIOS",
     "SIZING_GENES",
@@ -97,12 +97,6 @@ __all__ = [
     "WalkForwardLock",
     "WindowFeed",
     "backtest",
-    "calibrate",
-    "collect",
     "create_random_genome",
-    "fetch",
-    "real_stress_windows",
-    "score_text",
     "strategy_fingerprint",
-    "stress_source",
 ]
