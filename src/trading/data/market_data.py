@@ -114,6 +114,23 @@ class MarketData:
         stamps = [b.as_of for b in (self.bar(s) for s in self.symbols) if b is not None]
         return max(stamps) if stamps else None
 
+    #: How far behind its peers a symbol may fall before it is treated as
+    #: stale. **In seconds, not bars.** Three bars was fine on an hourly feed
+    #: and became forty-five minutes on a fifteen-minute one — and a thinly
+    #: traded ETF crosses forty-five minutes routinely without anything being
+    #: wrong. Measured after the switch to 15m: SPY had printed to 23:45 with
+    #: no gaps while EFA's newest bar was 20:45, because SPY trades all through
+    #: extended hours and EFA barely trades at all. Nothing was broken; one is
+    #: liquid and one is not.
+    #:
+    #: The cost of getting it wrong is not cosmetic. `firm_h_global`'s entire
+    #: universe is EEM, EFA, EWJ, FXI and VGK, so a threshold that flags thin
+    #: ETFs marks every symbol it owns unpriceable and stops it trading.
+    #:
+    #: Three hours is the same tolerance the old three-bar rule gave at hourly
+    #: resolution, now stated in the unit it always meant.
+    LAG_TOLERANCE_S = 3 * 60 * 60
+
     def lagging(self, bar_seconds: float, max_bars_behind: float = 3.0) -> dict:
         """Symbols left behind by their own peers. `{symbol: how far behind}`.
 
@@ -151,9 +168,15 @@ class MarketData:
                 continue        # one symbol cannot be out of step with itself
             freshest = max(stamp for _, stamp in members)
             for symbol, stamp in members:
-                behind = (freshest - stamp).total_seconds() / bar_seconds
-                if behind > max_bars_behind:
-                    out[symbol] = behind
+                seconds = (freshest - stamp).total_seconds()
+                # Whichever is more generous: the caller's bar count, or the
+                # fixed time tolerance. On an hourly feed they agree; on a
+                # fifteen-minute one the time floor is what stops a thinly
+                # traded ETF being called broken for trading thinly.
+                if seconds <= max(bar_seconds * max_bars_behind,
+                                  self.LAG_TOLERANCE_S):
+                    continue
+                out[symbol] = seconds / bar_seconds
         return out
 
     def closes(self, symbol: str, lookback: Optional[int] = None) -> list[Decimal]:
