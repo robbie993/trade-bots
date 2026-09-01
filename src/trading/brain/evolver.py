@@ -5,7 +5,7 @@ trend-versus-reversion bias, the band that counts as fairly valued. The
 evolver mutates them, backtests each variant on the *same* data, and keeps
 the fittest.
 
-Three properties this implementation insists on:
+Four properties this implementation insists on:
 
 * **Deterministic.** The mutation RNG is seeded from ``brain.seed`` and the
   generation number. The same population, the same data and the same seed
@@ -16,6 +16,11 @@ Three properties this implementation insists on:
 * **Promotion is earned, not assumed.** A mutant replaces the incumbent only
   if it beats the incumbent's fitness *on that same data*. The incumbent is
   always re-scored rather than trusting a fitness from a previous run.
+* **A live firm's genome does not move here.** Beating the incumbent on the
+  data you were scored on is not evidence, it is the definition of
+  overfitting. On a firm pointed at a live venue the evolver records what it
+  found and promotes nothing; only ``crucible.py``, running on windows this
+  code could not read, can move that genome.
 """
 
 from __future__ import annotations
@@ -141,19 +146,28 @@ class Evolver:
         return out
 
     # -- evolution ---------------------------------------------------------
-    def evolve(
+    def compete(
         self,
         firm: FirmRecord,
         market: MarketData,
         generation: int = 1,
         analysts: Sequence[str] = ("technical", "sentiment", "macro"),
+        backtester: Optional[Backtester] = None,
     ) -> Generation:
-        """Run one generation for one firm. Writes genomes; promotes at most one."""
+        """Score one generation and name its winner. **Writes nothing.**
+
+        Selection is separated from persistence so that something other than
+        the live ecosystem can run it — the crucible evolves inside a training
+        window dozens of times, and none of those exploratory generations are
+        the firm's history. Everything that reaches the database goes through
+        ``evolve``.
+        """
+        runner = backtester or self.backtester
         candidates = self.population(firm.genome or BASE_GENOME, generation)
         for candidate in candidates:
             # A fresh cursor per candidate: every genome sees identical bars.
             data = MarketData(market.feed, firm.universe or market.symbols)
-            candidate.result = self.backtester.run(
+            candidate.result = runner.run(
                 firm_key=firm.firm_key,
                 symbols=firm.universe or market.symbols,
                 market=data,
@@ -165,9 +179,21 @@ class Evolver:
             candidate.fitness = candidate.result.fitness
 
         gen = Generation(number=generation, candidates=candidates)
+        gen.winner = max(candidates, key=lambda c: c.fitness)
+        return gen
+
+    def evolve(
+        self,
+        firm: FirmRecord,
+        market: MarketData,
+        generation: int = 1,
+        analysts: Sequence[str] = ("technical", "sentiment", "macro"),
+    ) -> Generation:
+        """Run one generation for one firm. Writes genomes; promotes at most one."""
+        gen = self.compete(firm, market, generation, analysts)
+        candidates = gen.candidates
         incumbent = next(c for c in candidates if c.is_incumbent)
-        best = max(candidates, key=lambda c: c.fitness)
-        gen.winner = best
+        best = gen.winner
 
         # The incumbent goes in first so the mutants can point at it. Every
         # mutant in a generation *is* a mutation of that one genome, and
@@ -187,8 +213,20 @@ class Evolver:
                  "parent_id": parent_id},
             )
 
-        if (
+        blocked = self._live_promotion_block(firm)
+        if blocked and best is not incumbent and best.fitness > incumbent.fitness:
+            # The generation still happened and is still on the record. What it
+            # may not do is move the genome of a firm that is holding real
+            # money — see `_live_promotion_block`.
+            self.store.record_event(
+                "evolution",
+                f"{firm.firm_key}: genome NOT promoted at generation {generation} — {blocked}",
+                firm_id=firm.id,
+                payload={"held": incumbent.genome, "proposed": best.genome},
+            )
+        elif (
             self.brain.promote_winners
+            and not blocked
             and best is not incumbent
             and best.fitness > incumbent.fitness
         ):
@@ -202,6 +240,30 @@ class Evolver:
             )
             gen.promoted = True
         return gen
+
+    def _live_promotion_block(self, firm: FirmRecord) -> str:
+        """Why this firm's genome may not move here, or "" if it may.
+
+        A firm pointed at a live venue is the one place where promotion is not
+        a bookkeeping change. Evolution reads the recent past and rewards
+        whatever fitted it; doing that to a book that holds real positions is
+        how a system talks itself into a new strategy at the worst possible
+        moment, with no out-of-sample evidence at all.
+
+        So on a live firm the evolver proposes and stops. The genome moves
+        only when ``brain/crucible.py`` proves a replacement on windows the
+        evolver was never allowed to see, and ``brain/lock.py`` issues the
+        certificate that says so.
+        """
+        if self.config.crucible.evolve_live_firms:
+            return ""
+        venue = (firm.venue or "paper").strip().lower()
+        if venue in ("", "paper"):
+            return ""
+        return (
+            f"{venue} is a live venue; a live firm's genome moves only through "
+            f"the crucible (`trade crucible {firm.firm_key} --promote`)"
+        )
 
     def history(self, firm_id: int, limit: int = 20) -> list:
         return self.store.db.query(

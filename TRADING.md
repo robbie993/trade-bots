@@ -107,11 +107,15 @@ one it may never touch.
 | Close positions, hand cash back | Add a new live venue |
 | Halt the entire ecosystem | Transfer capital between firms |
 | Try a strategy file and rule on it | Deploy a genome the court accepted |
+| Evolve a **paper** firm's genome | Move a **live** firm's genome |
 | Award tokens, run bouts, plot and betray | — |
 
 Every entry in the right-hand column writes a row in `human_approvals` — the
 same table, the same `mvv approve` command, as the product village. A pending
-request spends nothing and expires into nothing.
+request spends nothing and expires into nothing. The last row is the exception
+and is not a permission at all: no approval moves a live firm's genome, because
+the thing standing in the way is evidence rather than authority. See
+**[the crucible](#the-crucible--the-walk-forward-lock)**.
 
 ```bash
 python -m src.main trade live-request --venue alpaca   # asks; sends no order
@@ -446,7 +450,10 @@ audit and "something similar" cannot be quoted.
 **Evolution** mutates the strategy genome, backtests every candidate on
 identical bars, and promotes the winner only if it beat the incumbent on that
 same data. Seeded from `TRADE_EVO_SEED`: same seed, same data, same survivors,
-on any machine.
+on any machine. On a firm pointed at a live venue it promotes nothing at all —
+beating the incumbent on the data you were scored on is the definition of
+overfitting, not evidence, and that genome moves only through **the crucible**
+below.
 
 ```bash
 python -m src.main trade evolve --firm firm_c_crypto --generations 3
@@ -459,6 +466,102 @@ produced it. They never change behaviour on their own — only a promoted
 genome, an allocation change, or a human does that. A system that silently
 rewrote its own strategy from its own conclusions is exactly what a kill
 switch cannot see coming.
+
+### The crucible — the walk-forward lock
+
+Evolution's failure mode is not losing money. It is *winning* on the data it
+was scored on. Give the evolver enough generations and it will always find a
+genome that fits the sample, and the harder it fits, the less the fitness
+means. A backtest that returns 50% over the six months it was tuned on has
+demonstrated that six months is memorisable — and it looks exactly like a
+strategy that works, right up until it is holding your money.
+
+So a genome does not reach a live venue on a backtest. It reaches one by
+surviving the crucible:
+
+```bash
+python -m src.main trade crucible firm_a_etf              # run the gauntlet
+python -m src.main trade crucible firm_a_etf --promote    # …and deploy what survived
+python -m src.main trade certificates                     # who is licensed, and who is not
+```
+
+The history is cut into folds. Inside each fold the evolver may mutate freely
+on the **training window**; the winner is then frozen and simply executed over
+the **test window** that follows it. Only the test numbers count.
+
+```
+bars 0                        220        280        340        400
+     |------- train ----------|-- test --|
+     |------------ train ----------------|-- test --|
+     |------------------ train ----------------------|-- test --|
+```
+
+**The blindfold is structural.** The evolver is not handed the whole history
+with an instruction to stop at bar 220 — it is handed a `WindowedFeed` whose
+`series()` returns bars 0–219 and which has no method that returns any others.
+There is no cursor to mis-set and no convention to forget. That matters more
+here than anywhere else in this repository, because a leak from the test
+window into training does not look like a bug: it looks like a strategy that
+works.
+
+A fold fails, in English, for any of four reasons:
+
+| Failure | What it means |
+|---|---|
+| under the trade minimum | too few closed trades out of sample to say anything — **unproven, never passed** |
+| under the return floor | it lost money on bars it had not seen |
+| over the drawdown limit | it survived, at a cost you said you would not pay |
+| fitness decay over the limit | it scored 40 in training and 4 in the holdout: that gap **is** the overfitting, and it is the finding this whole layer exists to produce |
+
+The gauntlet passes only if every fold passes, the *final* fold passes — it is
+the only one that measured this exact genome on unseen data — and mean
+out-of-sample fitness is positive. Anything else writes a failing certificate,
+which is kept: "this was tried, and could not survive its holdout" is the more
+useful half of the record.
+
+### What a certificate licenses
+
+A passing run writes a certificate against a **fingerprint of the genome**,
+not against the firm. That one choice is the lock:
+
+* **Change one gene and the certificate stops matching.** The firm is
+  uncertified again, so a strategy cannot evolve its way onto real money
+  between proofs — and the lock holds even if the genome is edited by hand,
+  imported, restored from a backup, or promoted by a code path nobody has
+  written yet.
+* **A live firm's genome does not move in `trade evolve` at all.** The evolver
+  still runs on it and still records what it found; it may not promote. Only a
+  passing gauntlet, through `trade crucible --promote`, moves that genome.
+* **A proof on the synthetic feed licenses nothing.** Beating a seeded random
+  walk is a fact about the PRNG. Run it against real history —
+  `TRADE_DATA_SOURCE=csv` over `data/market/*.csv`, or `yahoo` — before it
+  counts. Refusing this is the default.
+* **A proof expires** after `TRADE_CRUCIBLE_TTL_DAYS` (90). A gauntlet run
+  against last year's history is evidence about last year.
+
+At the tick, a firm pointed at a live venue is checked before it is allowed to
+propose anything, and the refusal is recorded like any other:
+
+```
+alpaca locked out firm_a_etf: genome e2ec5a4e6649a3 holds no passing crucible
+certificate, so it may not trade alpaca. Run `trade crucible firm_a_etf`.
+```
+
+This is a *second* gate, not a replacement for the first. The live venues
+still refuse to send an order without a human's approval of that venue. One
+asks whether you agreed to trade there; the other asks whether the strategy
+has ever been measured on data that could not have shaped it. Both have to be
+answered before money moves.
+
+**What a passing certificate does not say.** It does not say the strategy
+works. Out-of-sample bars are still past bars, and no arrangement of history
+predicts the next regime. What it says is narrower and worth saying: this
+exact genome was measured on data that could not have shaped it, on this date,
+and it survived. Everything that fails here would have failed live too — only
+slower, and with your name on it.
+
+Every threshold is a `TRADE_CRUCIBLE_*` environment variable; they are listed
+with the rest in `src/trading/config.py`.
 
 ### Seeing it — the vault as a graph
 
@@ -1158,6 +1261,8 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade reconcile` | do the books add up? (exit 1 if not) |
 | `trade backtest [--firm F]` | strategy in isolation; writes nothing |
 | `trade evolve [--generations N]` | genome evolution; refuses on broken books |
+| `trade crucible <firm> [--promote]` | walk-forward gauntlet on windows it was never shown |
+| `trade certificates` | which genomes are licensed to trade live, and why not |
 | `trade memory [--symbol S]` | what the brain remembers |
 | `trade audit [--write]` | the full audit report |
 | `trade status` | one-screen health check |
@@ -1209,7 +1314,7 @@ src/trading/
 ├── data/                synthetic / csv / yahoo, behind one cursor
 ├── firms/               analysts, researchers, trader, risk, kill switch, spec
 ├── brokerage/           reconciliation, evaluator, allocator, leaderboard, kill
-├── brain/               memory, evolver, learning
+├── brain/               memory, evolver, crucible, lock, learning
 ├── heart/               conscience, restrictions, compliance, ethics
 ├── court/               strategy trials: evidence, jury, advocates, judge
 ├── competition/         tokens, titles, bouts, milestones
@@ -1230,8 +1335,8 @@ every setting to the environment variable that sets it.
 
 **Real.** The ledger, the reconciliation, the kill criteria, the human gate,
 the risk limits, the ethics checks, the leaderboard, the allocator, the
-evolution, the audit trail, the paper fills and their costs. All of it is
-tested, and all of it runs with no network.
+evolution, the walk-forward lock, the audit trail, the paper fills and their
+costs. All of it is tested, and all of it runs with no network.
 
 **Not real.** The market data, by default — `synthetic` is a random walk, and a
 strategy that looks profitable on it has demonstrated nothing about the world.

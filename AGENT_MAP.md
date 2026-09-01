@@ -85,6 +85,10 @@ Rules on what the ledger settles; grants, refuses, or **defers**.
 
 ### The Brain (`src/trading/brain/`)
 Memory, lessons, genome evolution.
+- **May never:** move a live firm's genome. Evolution proposes; only the
+  crucible (`crucible.py`), running on windows the evolver was structurally
+  prevented from reading, can promote one — and `lock.py` binds the resulting
+  certificate to that exact genome, so a mutation revokes it.
 
 ### The Gate (`src/agents/human_gate.py`)
 Every decision that increases risk becomes a row here and waits for a person.
@@ -92,7 +96,8 @@ Every decision that increases risk becomes a row here and waits for a person.
 ### The Venues (`src/trading/execution/`)
 `paper` fills against the reference price with slippage and fees, always
 against the trader. Live venues **refuse to send an order** until the venue
-itself is approved.
+itself is approved — and the tick refuses to let a firm reach one at all until
+its current genome holds a passing crucible certificate.
 
 ---
 

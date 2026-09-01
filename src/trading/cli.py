@@ -18,6 +18,8 @@ human has already made.
     trade reconcile            do the books add up?
     trade backtest             every firm over the configured history
     trade evolve               one generation of genome evolution
+    trade crucible <firm>      walk-forward gauntlet on unseen windows
+    trade certificates         which genomes are licensed to trade live
     trade memory               what the brain remembers
     trade audit                the full audit report
     trade status               one-screen health check
@@ -45,6 +47,8 @@ from ..db.connection import Database
 from ..money import D, fmt_money, fmt_pct
 from .adapters import render_survey
 from .black_market import ASSET_TYPES
+from .brain.crucible import NotEnoughHistory
+from .brain.lock import genome_fingerprint
 from .brokerage.reconciliation import LedgerNotReconciled
 from .competition.arena import METRICS
 from .config import TradingConfig
@@ -357,6 +361,83 @@ def cmd_evolve(args) -> int:
         return 0
     for generation in generations:
         print(generation.summary())
+    return 0
+
+
+def cmd_crucible(args) -> int:
+    """The walk-forward gauntlet: evolve on what it may see, score on what it may not."""
+    eco = _ecosystem(args)
+    try:
+        report, certificate = eco.certify(
+            args.firm, generations=args.generations, promote=args.promote
+        )
+    except ValueError as exc:
+        print(exc)
+        return 1
+    except NotEnoughHistory as exc:
+        print(f"refusing to certify: {exc}")
+        return 1
+    except LedgerNotReconciled as exc:
+        print(f"refusing to promote: {exc}")
+        return 1
+
+    print(report.summary())
+    print(f"\ncertificate {certificate.fingerprint} recorded (id {certificate.id}).")
+    if not report.passed:
+        print(
+            "This genome is not licensed to trade live. That is the system working:\n"
+            "a strategy that cannot survive data it was not fitted to would have\n"
+            "lost the same money live, only slower and with your name on it."
+        )
+        return 1
+    if certificate.data_source.startswith("synthetic"):
+        print(
+            "\nEarned on the synthetic feed, so it licenses nothing. A seeded random\n"
+            "walk is a test of this machinery, not of a strategy. Re-run it with\n"
+            "TRADE_DATA_SOURCE=csv (or yahoo) over real history before it counts."
+        )
+    if not args.promote:
+        print("Add --promote to make this the firm's genome.")
+    elif eco.store.get_firm(args.firm).genome == report.genome:
+        print("The firm now runs the genome that passed the final unseen window.")
+    else:
+        print(
+            "Not promoted. The gauntlet passed, but the certificate does not license\n"
+            "this firm — `trade certificates` says why."
+        )
+    return 0
+
+
+def cmd_certificates(args) -> int:
+    eco = _ecosystem(args)
+    certificates = eco.lock.certificates(args.firm, limit=args.limit)
+    if not certificates:
+        print("no crucible runs recorded. `trade crucible <firm>` is how a genome earns one.")
+        return 0
+    for certificate in certificates:
+        print(f"  {certificate.summary()}")
+        for reason in certificate.reasons:
+            print(f"      - {reason}")
+
+    print("\nWhat each live firm is currently licensed to do:")
+    rows = []
+    for record in eco.store.firms():
+        if (record.venue or "paper").strip().lower() == "paper":
+            continue
+        decision = eco.lock.check(record)
+        rows.append(
+            {
+                "firm": record.firm_key,
+                "venue": record.venue,
+                "genome": genome_fingerprint(record.genome or {}),
+                "may trade": "yes" if decision.allowed else "NO",
+                "why": decision.reason[:90],
+            }
+        )
+    if not rows:
+        print("  (no firm is pointed at a live venue; nothing is gated)")
+    else:
+        print(_table(rows))
     return 0
 
 
@@ -1106,6 +1187,17 @@ def add_trade_parser(subparsers) -> None:
     p = add("evolve", "one generation of genome evolution", cmd_evolve)
     p.add_argument("--firm")
     p.add_argument("--generations", type=int, default=1)
+
+    p = add("crucible", "prove a genome on windows it was never shown", cmd_crucible)
+    p.add_argument("firm")
+    p.add_argument("--generations", type=int,
+                   help="evolution rounds per training window (0 freezes the genome)")
+    p.add_argument("--promote", action="store_true",
+                   help="on a pass, make the surviving genome the firm's")
+
+    p = add("certificates", "which genomes are licensed to trade live", cmd_certificates)
+    p.add_argument("--firm")
+    p.add_argument("--limit", type=int, default=20)
 
     p = add("memory", "what the brain remembers", cmd_memory)
     p.add_argument("--symbol")
