@@ -129,3 +129,28 @@ def test_the_entry_is_the_bid_because_a_writer_is_filled_there():
     pick, _ = desk._pick([quote], Decimal("100"), dict(GENE_DEFAULTS), bullish=True)
     assert pick.sell_at == Decimal("2.00")
     assert pick.sell_at < pick.mid, "recording the mid would invent an edge"
+
+
+def test_an_arm_is_named_after_every_gene_that_varies():
+    """The name is the arm's identity and results are pooled under it, so a
+    gene left out of the name merges two different strategies into one row.
+    `shadow_confidence` was the omission: it mutates from ~1 to ~40, which is
+    the difference between writing on almost any reading and almost never."""
+    desk = _desk()
+    arms = desk.arms("2026-09-01T07:36")
+    for name, genome in arms.items():
+        if name == "live":
+            continue
+        for gene in GENE_DEFAULTS:
+            assert str(genome[gene]) in name, f"{gene} missing from arm name {name}"
+
+
+def test_two_arms_differing_only_in_selectivity_get_different_names():
+    from src.trading.shadow import ShadowDesk
+
+    desk = _desk()
+    a = dict(GENE_DEFAULTS, shadow_confidence=5.0)
+    b = dict(GENE_DEFAULTS, shadow_confidence=45.0)
+    key = lambda g: ("sd{shadow_strike_sd}/dte{shadow_dte_min}-{shadow_dte_max}"
+                     "/cap{shadow_spread_cap}/conf{shadow_confidence}").format(**g)
+    assert key(a) != key(b)

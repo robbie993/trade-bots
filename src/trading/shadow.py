@@ -260,8 +260,14 @@ class ShadowDesk:
         out = {"live": dict(self.genome)}
         for i in range(1, ARMS):
             mutant = _mutate(self.genome, _seed(bar, i))
+            # **Every gene that varies has to be in the name.** The name is the
+            # arm's identity, and results are pooled under it. `shadow_confidence`
+            # is mutated across a huge range — 1.3 to 39.8 on one observed bar,
+            # the difference between an arm that writes on almost any reading and
+            # one that almost never does — and leaving it out let two completely
+            # different strategies bank their trades in the same bucket.
             key = ("sd{shadow_strike_sd}/dte{shadow_dte_min}-{shadow_dte_max}"
-                   "/cap{shadow_spread_cap}").format(**mutant)
+                   "/cap{shadow_spread_cap}/conf{shadow_confidence}").format(**mutant)
             out[key] = mutant
         return out
 
