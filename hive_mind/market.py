@@ -242,6 +242,19 @@ class WindowFeed:
     def bars(self) -> list:
         return self.source.bars()[self.start : self.end]
 
+    def window(self, start: int, end: int) -> "WindowFeed":
+        """A narrower window of this one. It can never be a wider one.
+
+        The crucible splits whatever feed it is handed, so a blindfolded feed
+        has to be splittable too — and the split must not be a way back out.
+        Both ends are resolved against this window and the far end is clamped
+        to it, so no arithmetic here, and no caller's arithmetic, can hand back
+        a bar this feed was not allowed to see.
+        """
+        absolute_start = self.start + max(0, int(start))
+        absolute_end = min(self.end, self.start + int(end))
+        return WindowFeed(self.source, absolute_start, max(absolute_start, absolute_end))
+
     def __len__(self) -> int:
         return len(self.bars())
 

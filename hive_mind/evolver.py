@@ -226,6 +226,24 @@ class Evolver:
         self.lineage.append((generation, parent.fingerprint(), child.fingerprint()))
 
 
+def create_random_genome(seed: int = 0) -> Genome:
+    """A genome drawn uniformly from the gene bounds.
+
+    For asking what a *population* of strategies does on a dataset, rather
+    than what one hand-chosen strategy does. Read the answer carefully: if a
+    large share of random genomes clears a gauntlet, the likelier explanation
+    is that the gauntlet is too easy, not that the architecture has an edge.
+    ``crucible_real.py`` reports the null controls next to the survival rate
+    for exactly that reason.
+    """
+    rng = random.Random(f"random-genome:{seed}")
+    values = {
+        name: D(str(round(rng.uniform(float(low), float(high)), 6)))
+        for name, (low, high) in BOUNDS.items()
+    }
+    return clamp(Genome(**values))
+
+
 __all__ = [
     "ALL_GENES",
     "BASE_GENOME",
@@ -233,6 +251,7 @@ __all__ = [
     "Evolver",
     "Genome",
     "SIZING_GENES",
+    "create_random_genome",
     "STRATEGY_GENES",
     "clamp",
 ]

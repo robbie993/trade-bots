@@ -182,6 +182,7 @@ models, and the paper venue's fill costs.
 ```bash
 python -m hive_mind                        # watch it think, one day at a time
 python -m hive_mind --lock --overfit-demo  # watch it be refused, and see why
+python -m hive_mind.crucible_real          # and the same, against real SPY history
 ```
 
 ---

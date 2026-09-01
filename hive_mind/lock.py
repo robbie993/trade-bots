@@ -209,13 +209,24 @@ class LockConfig:
 class WalkForwardLock:
     """Holds the phase, the graveyard, and the answer to "may I mutate?"."""
 
-    def __init__(self, config: Optional[LockConfig] = None, seed: int = 20260901):
+    def __init__(
+        self,
+        config: Optional[LockConfig] = None,
+        seed: int = 20260901,
+        stress_markets=None,
+    ):
         self.config = config or LockConfig()
         self.seed = int(seed)
         self.phase = Phase.UNPROVEN
         self.graveyard: set = set()
         self.certificate: Optional[str] = None
         self.evolver = Evolver(seed=self.seed)
+        # Where phase 2b gets the regimes it has never seen. The default is
+        # the generated scenarios; on real history it is disjoint windows of
+        # the real tape (see `real_feed.real_stress_windows`), because "many
+        # regimes it never saw" means something different when there is only
+        # one tape and it is not ours to generate.
+        self._stress_markets = stress_markets
 
     # -- the gate ---------------------------------------------------------
     def permit(self, genome: Genome) -> Permit:
@@ -472,10 +483,26 @@ class WalkForwardLock:
             for i in range(max(1, self.config.stress_runs))
         ]
 
+    def stress_markets(self) -> list:
+        """``(label, feed, seed)`` for every regime phase 2b will run."""
+        if self._stress_markets is not None:
+            return list(self._stress_markets(self.config.stress_runs))
+        return [
+            (name, MarketFeed.scenario(name, seed=seed), seed)
+            for name, seed in self.stress_plan()
+        ]
+
     def _stress(self, genome: Genome, say) -> PhaseResult:
         runs = []
-        for scenario, seed in self.stress_plan():
-            feed = MarketFeed.scenario(scenario, seed=seed)
+        markets = self.stress_markets()
+        if not markets:
+            return PhaseResult(
+                "phase 2b — the stress tests",
+                False,
+                "no stress regimes were available to run — an untested genome is "
+                "not a passing one",
+            )
+        for scenario, feed, seed in markets:
             result = backtest(genome, feed, seed=seed, label=scenario)
             passed = (
                 result.return_pct > 0

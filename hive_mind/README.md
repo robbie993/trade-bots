@@ -10,13 +10,19 @@ this package is built to prevent, and it is worth reading about before running
 anything.
 
 ```bash
-python -m hive_mind                     # watch it think, one day at a time
+python -m hive_mind                       # watch it think, one day at a time
 python -m hive_mind --show-hallucination  # perfect fills vs real ones
-python -m hive_mind --lock              # the four-phase pipeline, and its verdict
+python -m hive_mind --lock                # the four-phase pipeline, and its verdict
 python -m hive_mind --lock --overfit-demo # the training-data trap, caught live
+
+pip install yfinance                      # the only optional dependency
+python -m hive_mind.real_feed --download  # real SPY and ^VIX onto disk
+python -m hive_mind.crucible_real         # the validation harness, on real history
 ```
 
-No third-party dependencies, no network, no keys.
+No third-party dependencies for the engine, no network, no keys. The
+validation harness wants `yfinance` once, to fetch a CSV it then reads from
+disk forever.
 
 It is **not** part of the village. It has no database, no ledger, no firms, no
 brokerage and no human gate, and nothing in `src/` imports anything from here.
@@ -210,6 +216,99 @@ forgetting to configure it.
 
 ---
 
+## Running it on real history
+
+The generated tape is a demo toy. Two commands replace it:
+
+```bash
+pip install yfinance
+python -m hive_mind.real_feed --download     # SPY and ^VIX -> data/market/*.csv
+python -m hive_mind.crucible_real            # genomes vs. that history
+```
+
+The download writes the village's own CSV layout —
+`data/market/<SYMBOL>.csv` with a `date,open,high,low,close,volume` header — so
+`src/trading/data/feeds.py` reads the same files, you can drop in data from any
+source without touching this code, and the result of a run does not depend on
+what a vendor's API returned this morning.
+
+### The two things a price feed does not come with
+
+The scouts read VIX and sentiment. An OHLCV row has neither.
+
+**VIX is real, and required by default.** `^VIX` goes back to 1990 and is worth
+the second download. Without it every VIX branch in the genome is dead code,
+and the survival number you get back is measuring a plain momentum strategy
+wearing this one's name. If `VIX.csv` is missing the feed **refuses** rather
+than filling zeros — a zero-VIX tape is one where the market is never
+frightened, and nothing about it says anything went wrong. `--allow-vix-proxy`
+substitutes a labelled realised-volatility proxy if you want that instead,
+knowing that is what you are doing.
+
+**Sentiment is always a proxy.** There is no free daily news-sentiment series
+going back to 1993. What the feed computes is a normalised blend of recent
+return and volatility. It tracks mood because mood follows price, and it is not
+news. The label travels on the feed (`sentiment_source`), prints on every run,
+and repeats in `describe()` — the one way this becomes dishonest is quietly.
+
+### The seal, and the count of your looks
+
+There is exactly one real SPY history. Tuning the scout logic until the
+survival rate clears 70% on it is the training-data trap moved up one level:
+from the genome to the person writing the genome's code. The overfitting is
+identical, and this time no backtest can see it, because *you* are the thing
+being fitted.
+
+So the harness splits the tape four ways:
+
+```
+[         history          ][  forward  ][  SEALED  ]
+ phases 1 and 2              phase 3      nothing, by default
+```
+
+and every run appends to `data/market/.crucible_log.jsonl`. It tells you this
+is look #7 at this dataset — because a survival rate on the seventh look, after
+six rounds of tweaking, is weaker evidence than the same number on the first,
+and the only defence against that is counting. `--spend-holdout` runs against
+the sealed years and records that you did. They cannot be resealed.
+
+### How to read the number it gives you
+
+The harness prints three things next to the survival rate, each because the
+bare percentage answers a question nobody asked:
+
+- **Where the genomes died.** "36% survived" is equally consistent with a
+  gauntlet that is far too easy and one that is far too hard. The phase-by-phase
+  mortality tells you which.
+- **Buy and hold, over the same window.** SPY compounded across most windows a
+  slice of its history can give you. A strategy that clears a gauntlet while
+  underperforming a thing you could have done by falling asleep has not shown an
+  edge; it has shown the gauntlet never asked about opportunity cost.
+- **A warning when the rate is high.** These genomes are drawn uniformly at
+  random. If most *random* strategies clear the pipeline, the likelier reading is
+  a lenient pipeline than a fertile architecture. Above 60% the harness says so.
+
+Survivors are written to `data/market/certified/<fingerprint>.json`. That
+directory is the only thing a deployed build should ever read.
+
+### The separation
+
+| | Validation harness | The engine |
+|---|---|---|
+| Files | `real_feed.py`, `crucible_real.py` | everything else |
+| Money | never | only under the lock, phase 4 onward |
+| Genomes | thrown away every run | one, read from `certified/` |
+| If it crashes | you lose a report | — |
+
+The harness importing the engine is fine; the engine importing the harness is
+not, and does not. A bug in the thing that beats on the code cannot reach the
+thing that holds a position — which is not hypothetical: the first real run of
+`crucible_real.py` crashed all six genomes on a missing `WindowFeed.window()`,
+printed `⛔ 6 of 6 runs CRASHED — this is not a result about strategies, it is
+a broken harness`, and nothing else in the package noticed.
+
+---
+
 ## Where the honesty runs out
 
 Read this part twice.
@@ -248,10 +347,11 @@ that leaves it has been through `price()` first.
 
 ### To point this at reality
 
-Replace `MarketFeed` with something that reads real bars — its whole interface
-is `bars()` returning objects with the fields of `Bar`, plus a `window(start,
-end)` that returns a feed with fewer of them. Everything downstream, including
-the lock, is written against that and nothing else. Then:
+`real_feed.py` already does it — see **Running it on real history** above. If
+you want a different source, the whole interface is `bars()` returning objects
+with the fields of `Bar`, plus `window(start, end)` returning a feed with fewer
+of them. Everything downstream, including the lock, is written against that and
+nothing else. Then:
 
 - Re-run the pipeline. Expect most genomes to die in phase 2. That is the
   system working, not the system failing.
