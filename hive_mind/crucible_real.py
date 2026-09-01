@@ -362,6 +362,11 @@ def run(
                 "genome": {k: str(v) for k, v in genome.to_dict().items()},
                 "fingerprint": genome.fingerprint(),
                 "certificate": report.certificate,
+                # The scales it was measured on. Without these the live loop
+                # has nothing to compare a feed against, and a genome fitted to
+                # proxy sentiment could be deployed reading real news with
+                # nothing to notice.
+                "profile": feed.profile(),
                 "dataset": fingerprint,
                 "look": look,
                 "spent_holdout": spend_holdout,

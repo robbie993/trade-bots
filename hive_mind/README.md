@@ -59,6 +59,7 @@ And the sixth, which is the point of the exercise:
 | | |
 |---|---|
 | **`lock.py`** — the walk-forward lock | The straitjacket. Four phases a genome must clear before it is allowed near real money, and a gate the engine physically cannot route around. |
+| **`live.py`** — the paper loop | One decision a day against a book that survives the process. Idempotent on a repeated bar, complete across a missed week, and frozen: the genome is loaded from a certificate and never moves. Paper only — no broker path exists. |
 
 ---
 
@@ -370,7 +371,7 @@ directory is the only thing a deployed build should ever read.
 
 | | Validation harness | The engine |
 |---|---|---|
-| Files | `providers.py`, `news.py`, `real_feed.py`, `crucible_real.py` | everything else |
+| Files | `providers.py`, `news.py`, `real_feed.py`, `crucible_real.py` | everything else, incl. `live.py` |
 | Money | never | only under the lock, phase 4 onward |
 | Genomes | thrown away every run | one, read from `certified/` |
 | If it crashes | you lose a report | — |

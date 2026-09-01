@@ -158,10 +158,38 @@ fit — which is exactly what you sealed the years to find out.
 
 ## 5. Paper forward, for months (no code changes)
 
-Take one certified genome and run it on data as it arrives. Do not evolve it,
-do not tune it, do not restart it when it has a bad fortnight. The point of
-this phase is to spend real calendar time discovering whether the thing holds
-up on days nobody has seen, including you.
+```bash
+python -m hive_mind.live --once --catch-up   # opens the book, trades today
+python -m hive_mind.live --status            # what it holds right now
+```
+
+Then two cron lines, and nothing else for six months:
+
+```bash
+0 21 * * 1-5  cd /path/to/trade-bots && python -m hive_mind.providers --force >> live.log 2>&1
+0 22 * * 1-5  cd /path/to/trade-bots && python -m hive_mind.live --once      >> live.log 2>&1
+0 22 * * 1-5  cd /path/to/trade-bots && python -m hive_mind.news             >> news.log 2>&1
+```
+
+Refresh the tape, take one decision, collect the headlines. The book lives in
+`data/market/live_book.json` and every decision is appended to
+`live_journal.jsonl` — state and history kept separately, because one of them
+you overwrite and the other you never do.
+
+It is built for the days it goes wrong rather than the days it works. Running
+twice on the same bar does nothing (a doubled bar is a doubled position, and it
+would look like a good day). A week of missed bars is processed in full, in
+order, because taking only the newest would leave holes in an equity curve that
+still plots. The genome is loaded from its certificate, checked against its own
+fingerprint, and never mutates — this phase measures what the crucible
+certified, and a genome that moves here is measuring nothing.
+
+**Paper only.** There is no venue but the hostile paper one, no credential is
+read, and no code path in this package reaches a broker.
+
+Do not evolve it, do not tune it, do not restart it when it has a bad
+fortnight. The point of this phase is to spend real calendar time discovering
+whether the thing holds up on days nobody has seen, including you.
 
 Six months at minimum. If forward returns are positive with a drawdown you
 would actually have tolerated while watching it, continue. Otherwise stop —
@@ -228,8 +256,10 @@ resembling its own history.
 ## Daily and weekly, once it is running
 
 ```bash
+python -m hive_mind.live --once                 # daily: one decision
+python -m hive_mind.live --status               # daily: what it holds
 python -m hive_mind.news                        # daily: keep the clock running
-python -m hive_mind.providers --force           # weekly: refresh the tape
+python -m hive_mind.providers --force           # daily: refresh the tape
 python -m hive_mind.crucible_real --genomes 20  # after any code change, ever
 python -m pytest tests/test_hive_mind*.py -q    # before trusting a result
 ```
