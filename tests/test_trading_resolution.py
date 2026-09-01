@@ -399,3 +399,37 @@ def test_replaying_a_simulation_does_not_scramble_the_scorecard(ecosystem):
         if card.sharpe is not None:
             assert abs(card.sharpe) < Decimal(50), (
                 f"{card.firm_key}: sharpe {card.sharpe} is not a measurement")
+
+
+def test_a_two_point_sharpe_is_refused_because_it_has_a_fixed_point():
+    """The third firm-killing artifact in this repository's history.
+
+    For any two-return series with one zero return, `mean / sd` is exactly
+    ±1/sqrt(2), so the annualised ratio is ±57.2364 at 15m bars *whatever the
+    other return was* — one billionth of a percent and fifty percent give the
+    identical number. It encodes the sign of a single bar.
+
+    On 2026-09-01 five unrelated firms carried |57.2364| simultaneously and the
+    kill switch paused `firm_d_value`, up $38,413 on $80,000 and the best desk
+    in the village, because its unrealised P&L moved -0.0069% in one bar and
+    the next bar was flat.
+    """
+    from src.trading.indicators import MIN_RETURNS, sharpe
+
+    per_year = parse("15m").bars_per_year
+    for other in ("0.00000384", "-0.00006881", "0.5", "-0.000000001"):
+        assert sharpe([Decimal(other), Decimal(0)], periods_per_year=per_year) is None
+        assert sharpe([Decimal(0), Decimal(other)], periods_per_year=per_year) is None
+
+    # ...and a series long enough to mean something still measures.
+    real = [Decimal("0.001"), Decimal("-0.0005")] * MIN_RETURNS
+    assert sharpe(real, periods_per_year=per_year) is not None
+
+
+def test_the_sharpe_sample_gate_matches_the_kill_switch_one():
+    """Refusing to judge a firm on 19 trades and judging it on 19 observations
+    is the same claim about the same evidence."""
+    from src.trading.firms.kill_switch import FirmKillConfig
+    from src.trading.indicators import MIN_RETURNS
+
+    assert MIN_RETURNS == FirmKillConfig().minimum_trades

@@ -54,9 +54,20 @@ def test_stdev_and_zscore_need_two_points():
 
 
 def test_sharpe_is_none_without_dispersion():
-    assert sharpe(series("0.01", "0.01", "0.01")) is None
+    from src.trading.indicators import MIN_RETURNS
+
+    # Flat series: no dispersion to divide by, at any length.
+    assert sharpe(series(*(["0.01"] * MIN_RETURNS))) is None
     assert sharpe(series("0.01")) is None
-    result = sharpe(series("0.01", "-0.005", "0.02", "0.001"))
+    # With dispersion *and* enough observations to be a sample, it measures.
+    # This used to pass four returns, which is below `MIN_RETURNS`: a two- or
+    # four-point Sharpe is an arithmetic accident rather than a measurement,
+    # and at two points with one zero it has a fixed point of ±1/sqrt(2) that
+    # paused the best firm in the village. See the sample-gate test in
+    # test_trading_resolution.py.
+    varied = series(*(["0.01", "-0.005", "0.02", "0.001"] * 6))
+    assert len(varied) >= MIN_RETURNS
+    result = sharpe(varied)
     assert result is not None and isinstance(result, Decimal)
 
 

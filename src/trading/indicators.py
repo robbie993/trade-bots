@@ -86,6 +86,29 @@ def volatility_pct(returns: Sequence[Decimal],
     return percent(sd * per_year.sqrt() * D(100))
 
 
+#: Returns needed before a Sharpe ratio is a measurement rather than an
+#: arithmetic accident.
+#:
+#: **Two is not a sample, and at two the ratio has a fixed point.** For any
+#: two-return series where one return is zero, ``mean / sd`` is exactly
+#: ±1/√2 — so at 15m bars the answer is ±57.2364 whatever the other return
+#: was. A move of one billionth of a percent produces the same number as a
+#: move of fifty percent. It encodes the *sign* of a single bar and nothing
+#: else.
+#:
+#: That is not hypothetical. On 2026-09-01 five unrelated firms carried
+#: |57.2364| at once, and the kill switch paused ``firm_d_value`` — up
+#: $38,413 on $80,000, the best desk in the village — because its unrealised
+#: P&L moved -0.0069% in one bar and the next bar was flat. This is the third
+#: time this repository has killed a firm with a units-or-sample artifact,
+#: after the per-tick annualisation and the per-fill loss counter.
+#:
+#: Twenty matches ``FirmKillConfig.minimum_trades``: the system already
+#: refuses to judge a firm on fewer than twenty trades, and judging it on
+#: fewer than twenty observations is the same claim about the same evidence.
+MIN_RETURNS = 20
+
+
 def sharpe(returns: Sequence[Decimal], risk_free_annual: Decimal = ZERO,
            periods_per_year: Decimal = D(TRADING_DAYS)) -> Optional[Decimal]:
     """Annualised Sharpe ratio. None when there is no dispersion to divide by.
@@ -96,7 +119,7 @@ def sharpe(returns: Sequence[Decimal], risk_free_annual: Decimal = ZERO,
     and this ratio is read by the kill switch. The default is daily because
     that is what every caller meant before bars could be anything else.
     """
-    if len(returns) < 2:
+    if len(returns) < MIN_RETURNS:
         return None
     nums = [D(r) for r in returns]
     mean = sum(nums, ZERO) / D(len(nums))
