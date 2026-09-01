@@ -154,3 +154,59 @@ def test_two_arms_differing_only_in_selectivity_get_different_names():
     key = lambda g: ("sd{shadow_strike_sd}/dte{shadow_dte_min}-{shadow_dte_max}"
                      "/cap{shadow_spread_cap}/conf{shadow_confidence}").format(**g)
     assert key(a) != key(b)
+
+
+# =========================================================================
+# closing a written contract
+# =========================================================================
+def test_a_written_contract_is_held_rather_than_bought_straight_back():
+    """A premium seller is paid for time and has to spend some.
+
+    `_settle` used to buy back on the very next bar it could quote the
+    contract: sold at the bid, bought at the ask, no decay collected and the
+    whole round trip paid. At this desk's 3% median spread that is a machine
+    for losing 3% a trade, and every arm converges on the same loss while the
+    leaderboard ranks the noise between them.
+
+    It never fired only because a second bug hid it — the lookup asked for an
+    unfiltered chain, which is the first hundred contracts in symbol order, so
+    the desk's own contracts were never in the window and nothing ever closed.
+    Fixing the lookup alone would have switched the real bug on.
+    """
+    from datetime import date, timedelta
+
+    from src.trading.shadow import EXIT_DTE, _expiry_of
+
+    far = date.today() + timedelta(days=30)
+    near = date.today() + timedelta(days=1)
+    assert (far - date.today()).days > EXIT_DTE, "a 30-day contract must be held"
+    assert (near - date.today()).days <= EXIT_DTE, "a 1-day contract must be closed"
+
+
+def test_settle_asks_for_the_contract_it_actually_holds(monkeypatch):
+    """The lookup must be filtered to the contract's own expiry and side."""
+    from src.trading.shadow import ShadowDesk
+
+    asked = {}
+
+    class Feed:
+        last_error: dict = {}
+
+        def chain(self, underlying, **kw):
+            asked.update(kw, underlying=underlying)
+            return []
+
+    desk = ShadowDesk.__new__(ShadowDesk)
+    desk.feed = Feed()
+    desk.store = None
+    from datetime import date, timedelta
+    expiry = date.today() + timedelta(days=1)
+    occ = f"SPY{expiry:%y%m%d}C00500000"
+    desk.open_trades = lambda: [{
+        "id": 1, "contract": occ, "underlying": "SPY",
+        "entry_price": "1.00", "quantity": 1,
+    }]
+    desk._settle("bar", type("R", (), {"closed": []})())
+    assert asked.get("expiry_gte") == expiry.isoformat()
+    assert asked.get("expiry_lte") == expiry.isoformat()
+    assert asked.get("right") == "call"

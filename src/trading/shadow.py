@@ -122,6 +122,12 @@ def _realised_sd(closes) -> Optional[Decimal]:
 #: the desk's actual stance; the rest are counterfactuals.
 ARMS = int(os.environ.get("TRADE_SHADOW_ARMS", "5") or 5)
 
+#: Days to expiry at which a written contract is closed. A premium seller is
+#: paid for time and has to spend some: closing early collects no decay and
+#: pays the whole round trip. Two days leaves room to buy the contract back
+#: while it is still quoted, rather than relying on the expiry settlement.
+EXIT_DTE = int(os.environ.get("TRADE_SHADOW_EXIT_DTE", "2") or 2)
+
 
 def _seed(bar: str, index: int) -> int:
     """A stable seed for one arm on one bar.
@@ -279,7 +285,7 @@ class ShadowDesk:
             return report
         bar = str(as_of)
 
-        self._settle(bar, report)
+        self._settle(bar, report, market)
         arms = self.arms(bar)
 
         # Why each underlying produced nothing. "The desk is idle" covers three
@@ -406,13 +412,71 @@ class ShadowDesk:
         return any(str(r["underlying"]) == underlying and str(r["arm"]) == arm
                    for r in self.open_trades())
 
-    def _settle(self, bar: str, report: ShadowReport) -> None:
-        """Buy the written put back, at the ask, when it can be quoted."""
+    def _settle(self, bar: str, report: ShadowReport, market=None) -> None:
+        """Close a written contract — but only once there is a reason to.
+
+        **A premium seller is paid for time, so it has to spend some.** This
+        used to buy the contract back on the very next bar it could quote it:
+        sold at the bid, bought at the ask, no decay collected and the whole
+        round trip paid. At a 3% median spread that is not a strategy, it is a
+        machine for losing 3% a trade, and every arm would have converged on
+        the same loss while the leaderboard ranked the noise between them.
+
+        It never actually happened, because of a second bug that hid the first:
+        the lookup called `chain(underlying)` with no filters, and an unfiltered
+        chain is the first hundred contracts in symbol order — measured on SPY,
+        a hundred *calls* all expiring the same day. None of the desk's own
+        contracts were ever in that window, so nothing ever closed. Fixing the
+        lookup alone would have switched the real bug on.
+
+        So the rule is the one the strategy implies: hold until the contract is
+        nearly dead, then close it. Before that the position is left alone; at
+        expiry, if nobody will quote it, it settles at intrinsic value against
+        the underlying rather than vanishing.
+        """
+        today = date.today()
         for row in self.open_trades():
-            quotes = {q.symbol: q for q in self.feed.chain(str(row["underlying"]))}
-            quote = quotes.get(str(row["contract"]))
-            if quote is None or quote.ask <= 0:
+            contract = str(row["contract"])
+            expiry = _expiry_of(contract)
+            if expiry is None:
                 continue
+            dte = (expiry - today).days
+            if dte > EXIT_DTE:
+                continue                # still earning its keep
+
+            # Ask for *this* contract's expiry and side, or the answer comes
+            # back as a hundred unrelated near-dated calls.
+            quotes = {q.symbol: q for q in self.feed.chain(
+                str(row["underlying"]),
+                expiry_gte=expiry.isoformat(), expiry_lte=expiry.isoformat(),
+                right="call" if contract[-9] == "C" else "put")}
+            quote = quotes.get(contract)
+
+            if quote is None or quote.ask <= 0:
+                # Expired and unquotable: settle against the underlying. A
+                # position that stops being priceable must not simply disappear
+                # — that is survivorship, and it deletes exactly the losers.
+                if dte > 0 or market is None:
+                    continue
+                spot = D(market.mark(str(row["underlying"])))
+                strike = _strike_of(contract)
+                if spot <= 0 or strike is None:
+                    continue
+                intrinsic = (max(ZERO, spot - strike) if contract[-9] == "C"
+                             else max(ZERO, strike - spot))
+                received = D(str(row["entry_price"]))
+                realised = money((received - intrinsic)
+                                 * D(str(row["quantity"])) * D(100))
+                self.store.db.execute(
+                    "UPDATE shadow_trades SET exit_price = ?, realized = ?, "
+                    "closed_bar = ?, closed_at = ? WHERE id = ?",
+                    (str(intrinsic), str(realised), bar,
+                     datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                     row["id"]))
+                report.closed.append(
+                    f"EXPIRED {contract} intrinsic {intrinsic} ({realised:+})")
+                continue
+
             received = D(str(row["entry_price"]))
             # Sold at the bid, bought back at the ask: premium kept minus cost.
             realised = money((received - quote.buy_at) * D(str(row["quantity"])) * D(100))
