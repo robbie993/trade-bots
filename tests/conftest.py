@@ -42,10 +42,18 @@ AMBIENT_SWITCHES = (
 
 
 @pytest.fixture(autouse=True)
-def _hermetic_env(monkeypatch):
+def _hermetic_env(monkeypatch, tmp_path):
     """Every test starts from the shipped defaults, not from this machine."""
     for name in AMBIENT_SWITCHES:
         monkeypatch.delenv(name, raising=False)
+    # The tick guard asks whether another process is running this village, and
+    # answers by reading `run/loop.beat`. On a developer's machine the real loop
+    # usually *is* running, so three web tests were told — correctly — that they
+    # must not tick, and failed. The guard is right; the tests simply must not
+    # be able to see the operator's loop. Point it at a path per test.
+    monkeypatch.setenv("TRADE_HEARTBEAT", str(tmp_path / "loop.beat"))
+    import src.trading.heartbeat as _hb
+    monkeypatch.setattr(_hb, "HEARTBEAT", tmp_path / "loop.beat")
 
 
 @pytest.fixture

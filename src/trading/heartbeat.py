@@ -50,12 +50,13 @@ HEARTBEAT = Path(os.environ.get(
 STALE_AFTER_S = float(os.environ.get("TRADE_HEARTBEAT_STALE_S", "180") or 180)
 
 
-def beat(path: Path = HEARTBEAT) -> None:
+def beat(path: Optional[Path] = None) -> None:
     """Record that this process just ran a tick. Never raises.
 
     A village that cannot write its heartbeat still has to trade — this is a
     coordination hint, not a precondition — so every failure here is swallowed.
     """
+    path = path or HEARTBEAT
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"{os.getpid()}\n"
@@ -64,7 +65,7 @@ def beat(path: Path = HEARTBEAT) -> None:
         pass
 
 
-def running_elsewhere(path: Path = HEARTBEAT) -> Optional[dict]:
+def running_elsewhere(path: Optional[Path] = None) -> Optional[dict]:
     """The other process ticking this village, or None.
 
     Returns `{"pid", "age_s"}` when something *else* is alive and has ticked
@@ -75,6 +76,12 @@ def running_elsewhere(path: Path = HEARTBEAT) -> Optional[dict]:
     * the pid is not us — our own heartbeat is not a conflict;
     * the pid still exists — `signal 0` asks the kernel rather than guessing.
     """
+    # Read the module global at call time, not as a default bound at import:
+    # a default freezes the path before a test — or an operator's
+    # TRADE_HEARTBEAT — can redirect it, and a guard that cannot be pointed
+    # somewhere else is a guard that reads the developer's own running loop
+    # during their test suite.
+    path = path or HEARTBEAT
     try:
         pid_text, stamp_text = path.read_text().split()[:2]
         pid = int(pid_text)

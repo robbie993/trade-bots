@@ -96,9 +96,25 @@ def file_successor(store, firm: FirmRecord, pm, lesson: str,
     at it later is reading the reason the last attempt failed, attached to the
     thing that would try again.
 
-    Returns None when an heir already exists, so the tick cannot breed a queue
-    of identical paused firms by calling this more than once.
+    Returns None when this firm already has an heir, so the tick cannot breed a
+    queue of identical paused firms by calling this more than once.
+
+    **That guard used to be a lie.** It asked `_successor_key` for a name and
+    stopped only when the name ran out — and `_successor_key` returns the first
+    *unused* suffix, so with `_ii` already filed it cheerfully returned `_iii`,
+    then `_iv`, `_v`, `_vi`. Repeated wind-ups of one dead parent therefore bred
+    exactly the queue this docstring promised they could not, five deep, and
+    stopped only because the suffix list ran out.
+
+    It is not hypothetical: on 2026-09-01 the village went from 17 firms to 46,
+    of which 22 were unfunded heirs with no fills and no kill reason — whole
+    lineages (`firm_h_global_iii` through `_vi`) that had never traded and
+    never could, because an heir is filed broke and only a human can fund one.
+    A dead firm gets one successor. Ask whether it already has one.
     """
+    if any((f.genome or {}).get("inherited_from") == firm.firm_key
+           for f in store.firms()):
+        return None
     existing = {f.firm_key for f in store.firms()}
     key = _successor_key(firm.firm_key, existing)
     if not key:
