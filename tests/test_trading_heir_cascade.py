@@ -94,3 +94,38 @@ def test_successor_key_still_avoids_collisions():
     assert _successor_key("firm_x", {"firm_x_ii"}) == "firm_x_iii"
     assert _successor_key("firm_x", {"firm_x_ii", "firm_x_iii", "firm_x_iv",
                                      "firm_x_v", "firm_x_vi"}) == ""
+
+
+# =========================================================================
+# a sentence outliving the firm serving it
+# =========================================================================
+def test_a_wound_up_firm_is_not_resurrected_when_its_sentence_ends():
+    """The gulag countdown must not reverse a kill.
+
+    A firm can be sent to the gulag and then killed and wound up while its
+    sentence is still counting down. The release step set status ACTIVE
+    unconditionally, so when the countdown finished it resurrected a firm whose
+    capital had already been returned and whose successor had already been
+    filed. `firm_c_crypto_ii` came back that way on 2026-09-02: wound up after
+    returning $4,884.56, then active again with $54.88 of allocation and no
+    cash — ready to be evaluated, and killed, a second time.
+
+    `bankrupt` is documented as the end of the estate. Only the court reverses
+    a kill.
+    """
+    from src.trading.models import FirmStatus
+
+    for status in ("killed", "bankrupt"):
+        firm = FirmRecord(id=1, firm_key="firm_x", name="X",
+                          asset_class="Equities", allocation=Decimal("0"),
+                          cash=Decimal("0"), universe=["SPY"], status=status)
+        assert firm.is_killed or firm.is_bankrupt, (
+            f"{status} must be recognised as dead, or the guard cannot fire"
+        )
+
+    alive = FirmRecord(id=2, firm_key="firm_y", name="Y", asset_class="Equities",
+                       allocation=Decimal("1"), cash=Decimal("1"),
+                       universe=["SPY"], status=FirmStatus.PAUSED.value)
+    assert not (alive.is_killed or alive.is_bankrupt), (
+        "a paused firm is serving a sentence and must still be released"
+    )

@@ -598,6 +598,18 @@ class Ecosystem:
         from .firms import strikes as _strikes
 
         for record in self.store.firms():
+            # **The dead do not come back on a timer.** A firm can be sent to
+            # the gulag, and then be killed and wound up while its sentence is
+            # still counting down. When the countdown finished, this set it
+            # ACTIVE unconditionally — resurrecting a firm whose capital had
+            # already been returned and whose successor had already been filed.
+            # `firm_c_crypto_ii` came back that way on 2026-09-02: wound up
+            # after returning $4,884.56, then active again with $54.88 of
+            # allocation and no cash, ready to be evaluated and killed a second
+            # time. Bankrupt is documented as the end of the estate, and the
+            # only way to reverse a kill is through the court.
+            if record.is_killed or record.is_bankrupt:
+                continue
             served = _strikes.serve_sentence(self.store, record, current_bar)
             if served is not None and served.released:
                 self.store.set_firm_status(record.id, FirmStatus.ACTIVE.value)
