@@ -1403,6 +1403,14 @@ function walk(edgeId, ev) {
   const road = document.getElementById('edge-' + edgeId);
   const traffic = document.getElementById('traffic');
   if (!road || !traffic) return;
+  // **Nobody is watching a hidden tab, and rAF knows it.** Browsers pause
+  // requestAnimationFrame in a background tab but keep setInterval running,
+  // so the poll went on creating walkers whose animation never advanced and
+  // whose cleanup — which lives at the end of that animation — never ran.
+  // Measured on a tab left in the background: 88 walkers, all 88 still
+  // mid-walk, none finished. It grows without limit for as long as the tab is
+  // away, and the page you come back to is choked with invisible people.
+  if (document.hidden) return;
   const colour = KIND[ev.kind] || 'var(--good)';
 
   const g = document.createElementNS(NS, 'g');
@@ -1418,6 +1426,10 @@ function walk(edgeId, ev) {
 
   const length = road.getTotalLength();
   const duration = Math.min(2600, Math.max(900, length * 4));
+  // A walker must not be able to outlive its walk, whatever happens to the
+  // animation driving it — the tab being hidden mid-stride is exactly the
+  // case the rAF-based cleanup below cannot cover.
+  const sweep = setTimeout(() => g.remove(), duration + 2000);
   const started = performance.now();
   function step(now) {
     const t = Math.min(1, (now - started) / duration);
@@ -1430,6 +1442,7 @@ function walk(edgeId, ev) {
     else {
       // Arrived. Stand still for a beat, then go inside.
       g.classList.remove('walking');
+      clearTimeout(sweep);
       setTimeout(() => g.remove(), 500);
     }
   }
