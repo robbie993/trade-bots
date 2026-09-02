@@ -1480,10 +1480,17 @@ async function poll() {
     if (data.events.length) after = data.events[data.events.length - 1].id;
     // Most polls land between ticks, so "quiet" would be wrong while the
     // village is plainly running. Say which it is.
+    // Three states, not two. The page used to know only whether *it* was
+    // ticking, so a village driven by the background loop — the normal way to
+    // run one — was reported as stopped, and the advice was to start what was
+    // already running. `data.loop` is the loop's own heartbeat file.
     say(data.events.length
       ? data.events.length + ' villager(s) on the roads'
-      : (living ? 'running — next tick shortly'
-                : 'quiet — run a tick, let it run, or start `trade run`'));
+      : (data.loop
+           ? 'the loop is running (pid ' + data.loop.pid + ', ticked '
+             + data.loop.age_s + 's ago) — the roads are quiet between trades'
+           : (living ? 'running — next tick shortly'
+                     : 'quiet — run a tick, let it run, or start `trade run`')));
   } catch (err) { /* a dropped poll is not an error; the page keeps trying */ }
 }
 setInterval(poll, 900);
@@ -1633,12 +1640,27 @@ def _village(firms: list) -> str:
     # it, or the villagers stand on top of the building's own label.
     quarter = positions["firms"]
     residents = []
-    for index, firm in enumerate(firms):
-        x = quarter["x"] + 16 + (index % 4) * 22
-        y = quarter["y"] + BUILDING_H + 62 + (index // 4) * 26
-        mood = {"active": "resident", "paused": "paused", "killed": "gone"}.get(
-            firm.status, "resident"
-        )
+    # **The yard is a fixed size and the graveyard is not.** Two things went
+    # wrong here once the village started burying its dead in numbers.
+    #
+    # The mood map knew `active`, `paused` and `killed` but not `bankrupt` \u2014
+    # the status a wound-up firm actually ends at \u2014 so every corpse fell
+    # through to the default and stood in the yard looking perfectly healthy.
+    # And at four to a row and 26px a row, 46 firms wanted 312px of a 500px
+    # canvas: the column ran straight down through the courthouse and the
+    # tavern, burying three buildings and the nine firms that were trading.
+    #
+    # The living are drawn first and the dead fill whatever room is left, so a
+    # graveyard can grow without ever crowding out the firms still standing.
+    # `ROWS` is what fits above the next row of buildings, not a taste.
+    ROWS, PER_ROW = 4, 4
+    order = {"active": 0, "paused": 1}
+    standing_first = sorted(firms, key=lambda f: order.get(f.status, 2))
+    for index, firm in enumerate(standing_first[: ROWS * PER_ROW]):
+        x = quarter["x"] + 16 + (index % PER_ROW) * 22
+        y = quarter["y"] + BUILDING_H + 62 + (index // PER_ROW) * 26
+        mood = {"active": "resident", "paused": "paused",
+                "killed": "gone", "bankrupt": "gone"}.get(firm.status, "resident")
         residents.append(
             _villager(x, y, f"{firm.firm_key} \u2014 {firm.status}", mood,
                       ident=f"resident-{firm.firm_key}")
@@ -1731,8 +1753,12 @@ def flow_page() -> HTMLResponse:
         "effect — when the village is quiet, the roads are empty.</p>",
         _panel("", village),
         f"<p class=muted>The figures outside the firm quarter are the "
-        f"{len(firms)} firm(s) that actually exist. A paused firm sits one out; "
-        f"a killed one has faded.</p>",
+        f"{sum(1 for f in firms if f.status in ('active', 'paused'))} firm(s) "
+        f"still standing, drawn first; a paused one sits with its back turned "
+        f"and a wound-up one has faded. "
+        f"{len(firms)} firm(s) exist in total — the yard holds sixteen, so a "
+        f"long graveyard is counted here rather than drawn over the village."
+        f"</p>",
         "<div class=card>"
         "<form method=post action='/village/actions/tick'>"
         "<button class=go>Run a tick</button></form>"
@@ -1774,13 +1800,22 @@ def solar_page() -> HTMLResponse:
 
 @router.get("/village/flow/events")
 def flow_events(after: int = 0, limit: int = 60) -> JSONResponse:
-    """Everything the tick has recorded since `after`. Polled by the page."""
+    """Everything the tick has recorded since `after`. Polled by the page.
+
+    Also reports whether the background loop is running. The page could only
+    see its *own* auto-tick, so with the real loop ticking every sixty seconds
+    it still told the operator "quiet — start `trade run`" — advice to start a
+    thing that was already running, on a page whose roads were empty for the
+    ordinary reason that no firm had traded that bar.
+    """
+    from .heartbeat import running_elsewhere
+
     eco = ecosystem()
     try:
         events = [ev.to_dict() for ev in eco.flow.since(after, limit)]
     finally:
         eco.db.close()
-    return JSONResponse({"events": events})
+    return JSONResponse({"events": events, "loop": running_elsewhere()})
 
 
 __all__ = ["router"]
