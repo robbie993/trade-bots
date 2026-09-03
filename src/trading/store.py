@@ -336,14 +336,27 @@ class TradingStore:
                 self.db.update(
                     "trade_proposals", fill.proposal_id, {"status": ProposalStatus.FILLED.value}
                 )
-            self.db.update(
-                "firms",
-                firm.id,
-                {
-                    "cash": new_cash,
-                    "consecutive_losses": consecutive,
-                    "updated_at": utcnow_iso(),
-                },
+            # **Relative, not absolute.** `new_cash` is computed from
+            # `firm.cash` — an in-memory value read before this transaction
+            # opened — so writing it as an absolute makes the last writer win.
+            # Settle two fills against one stale record and the second silently
+            # undoes the first's cash movement while both fill rows remain:
+            # two debits recorded, one applied, and `cash = allocation + sum
+            # (cash_delta)` breaks by exactly one fill.
+            #
+            # That is not hypothetical. On 2026-09-03 `firm_a_etf_ii_v` wrote
+            # two identical EFA fills of -$400.28 in one pass and the ledger
+            # came out $400.28 rich; `firm_d_value_iii` did the same with VZ
+            # for $226.68. It is also the best explanation for two earlier
+            # "torn ledgers" this session that were blamed on SIGKILL and on
+            # two processes, and survived the fixes for both.
+            #
+            # Letting the database do the arithmetic makes the result correct
+            # whatever the caller was holding.
+            self.db.execute(
+                "UPDATE firms SET cash = cash + ?, consecutive_losses = ?, "
+                "updated_at = ? WHERE id = ?",
+                (fill.cash_delta, consecutive, utcnow_iso(), firm.id),
             )
         firm.cash = new_cash
         firm.consecutive_losses = consecutive
