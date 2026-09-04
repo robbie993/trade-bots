@@ -328,9 +328,25 @@ class Position:
         self.avg_price = price(self.avg_price)
         self.realized_pnl = money(self.realized_pnl)
 
+    #: Below this many units a position is dust: too small to be worth a cent
+    #: at any price this village trades, and too small to close without the
+    #: proceeds rounding to zero.
+    #:
+    #: **A position that cannot be closed is closed every bar, forever.**
+    #: `firm_a_etf_ii_v` held 0.00000024 EFA and sold half of it every fifteen
+    #: minutes — 3.78e-06, 1.89e-06, 9.4e-07, 4.7e-07, 2.4e-07 — each fill
+    #: moving zero cash and zero fee, each counted as a trade in the tick
+    #: summary and in every statistic built on the fill table. Halving never
+    #: reaches zero, so the loop had no end.
+    #:
+    #: Treating dust as flat ends it: `is_open` is what the tick, the
+    #: liquidation and the reconciler all ask, so nothing proposes against a
+    #: holding worth 0.000026 of a cent.
+    DUST = Decimal("0.000001")
+
     @property
     def is_open(self) -> bool:
-        return self.quantity != 0
+        return abs(self.quantity) >= self.DUST
 
     @property
     def is_long(self) -> bool:

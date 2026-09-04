@@ -9,7 +9,8 @@ indicator from accidentally reading tomorrow's close.
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable, Optional
 
@@ -162,6 +163,57 @@ class MarketData:
     #: Three hours is the same tolerance the old three-bar rule gave at hourly
     #: resolution, now stated in the unit it always meant.
     LAG_TOLERANCE_S = 3 * 60 * 60
+
+    #: How old a bar may be before the price behind it is not tradeable, in
+    #: hours. **This is the check `lagging` structurally cannot make.**
+    #:
+    #: `lagging` asks "is this symbol behind its peers?", which catches one
+    #: thin ETF falling behind a busy market and is exactly right for that. It
+    #: is blind to the case where *every* equity is equally stale, because then
+    #: nothing is behind anything — and that case is the US market being shut,
+    #: which happens every single night.
+    #:
+    #: Measured at 06:22 UTC on 2026-09-04, with `lagging` flagging only JNJ:
+    #: EFA 9.69h old, EEM 7.69h, SPY 6.69h, SOL-USD 0.19h. `firm_a_etf_ii_v`
+    #: was selling EFA at 107.256345 — one price, unchanged since the close,
+    #: stamped with a bar the *crypto* feed had advanced to. A trade at a
+    #: moment the symbol could not trade.
+    #:
+    #: Deliberately generous. A thin ETF can go three hours without a print
+    #: inside a normal session, and a threshold tight enough to catch that
+    #: muted `firm_h_global`'s entire universe once already. Six hours clears
+    #: any real intraday gap and still catches an overnight by a wide margin.
+    #: It is a freshness rule, not a clock: a firm may trade the pre-market and
+    #: the after-hours session whenever there are real prints to trade on.
+    MAX_BAR_AGE_S = float(os.environ.get("TRADE_MAX_BAR_AGE_H", "6") or 6) * 3600
+
+    def stale(self, now: Optional[datetime] = None) -> dict:
+        """Symbols whose newest bar is too old to trade on. `{symbol: hours}`.
+
+        Absolute, so it works when the whole market is shut and the relative
+        check has nothing to compare against.
+
+        **"Now" is the data's clock, not the wall clock.** Defaulting to
+        `datetime.now()` looks obviously right and is wrong for every backtest:
+        a replay of 2024 would find every symbol years stale and refuse to
+        price anything. It is the same mistake as annualising per-tick
+        observations or billing borrow per loop pass — judging market data by
+        how long the operator has been awake. `as_of()` is the latest bar the
+        village has seen, which in a live loop *is* approximately now, and in a
+        replay is the moment being replayed.
+        """
+        now = now or self.as_of()
+        if now is None:
+            return {}
+        out: dict = {}
+        for symbol in self.symbols:
+            bar = self.bar(symbol)
+            if bar is None or bar.as_of is None:
+                continue            # no bars at all is `unpriceable`, not stale
+            age = (now - bar.as_of).total_seconds()
+            if age > self.MAX_BAR_AGE_S:
+                out[symbol] = round(age / 3600, 2)
+        return out
 
     def lagging(self, bar_seconds: float, max_bars_behind: float = 3.0) -> dict:
         """Symbols left behind by their own peers. `{symbol: how far behind}`.

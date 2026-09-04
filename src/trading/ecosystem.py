@@ -516,6 +516,20 @@ class Ecosystem:
                 f"bar is {behind:.1f} bars behind the rest of the village — the "
                 "other symbols are current, so this one is stale, not quiet",
             )
+        # And the check the relative one cannot make. `lagging` compares a
+        # symbol against its peers, so when the whole equity market is shut
+        # every equity is equally stale, nothing is behind anything, and
+        # nothing is flagged — which is how a firm came to sell EFA overnight
+        # at a price 9.7 hours old, stamped with a bar the crypto feed had
+        # advanced to. This is a freshness rule and not a clock: pre-market and
+        # after-hours trading stay open, because a symbol printing in those
+        # sessions has a fresh bar and never reaches this branch.
+        for symbol, hours in market.stale().items():
+            market.unpriceable.setdefault(
+                symbol,
+                f"newest bar is {hours:.1f}h old — nothing has traded this "
+                "symbol for too long to stand behind the price",
+            )
 
         # A symbol the feed cannot price is now a symbol with no bars rather
         # than an exception out of the whole tick — but it must not pass
