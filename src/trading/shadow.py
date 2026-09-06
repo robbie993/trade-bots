@@ -344,10 +344,28 @@ class ShadowDesk:
                 right="put" if bullish else "call",
                 strike_gte=(spot - reach) if bullish else spot,
                 strike_lte=spot if bullish else (spot + reach))
+            # **A quote nobody could have filled is not evidence.**
+            # `options_feed` has carried `is_fresh` since the day it was
+            # written, with a docstring saying market-maker spreads widen
+            # enormously when the underlying is shut — and this desk never
+            # once asked. Measured on a Sunday: every SPY quote in the chain
+            # was stamped Friday 19:59:59, 28.3 hours old, `is_fresh=False`,
+            # and the desk was writing calls against them.
+            #
+            # It matters more here than in the equity path. A stale quote is
+            # not merely old, it is wrong in a direction that flatters a
+            # premium seller: entry is recorded at the bid, and a Friday-close
+            # bid is the most favourable number in the window. 357 of this
+            # desk's 379 trades are calls, and all of it exists to produce one
+            # trustworthy number on 2026-09-18.
+            offered = len(quotes)
+            quotes = [q for q in quotes if q.is_fresh()]
             if not quotes:
-                report.notes.append(
-                    f"{underlying}: no chain — "
-                    f"{self.feed.last_error.get(underlying, 'nothing quoted')}")
+                why = (f"every one of {offered} quotes is stale — the market is "
+                       "shut and these are the last prints, not prices"
+                       if offered else
+                       self.feed.last_error.get(underlying, "nothing quoted"))
+                report.notes.append(f"{underlying}: no tradeable chain — {why}")
                 continue
 
             for arm, genome in arms.items():

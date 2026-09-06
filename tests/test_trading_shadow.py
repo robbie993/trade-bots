@@ -252,3 +252,41 @@ def test_a_sentence_is_not_served_twice_when_the_bar_oscillates():
     # A genuinely new bar advances it.
     strikes.serve_sentence(store, firm, "2026-09-01T16:30")
     assert state["gulag_bars_left"] == 8
+
+
+def test_the_desk_refuses_a_quote_nobody_could_have_filled():
+    """`options_feed` carried `is_fresh` from day one; the desk never asked.
+
+    Measured on a Sunday: every SPY quote in the chain was stamped Friday
+    19:59:59 — 28.3 hours old, `is_fresh=False` — and the desk was writing
+    calls against them. A stale option quote is not merely old, it is wrong in
+    a direction that flatters a premium seller: entry is booked at the bid, and
+    a Friday-close bid is the most favourable number in the window.
+    """
+    from datetime import timedelta
+
+    desk = _desk()
+    now = datetime.now(timezone.utc)
+    fresh = Quote(symbol="SPY261016P00099000", bid=Decimal("2.00"),
+                  ask=Decimal("2.02"), as_of=now - timedelta(minutes=5))
+    stale = Quote(symbol="SPY261016P00095000", bid=Decimal("1.00"),
+                  ask=Decimal("1.02"), as_of=now - timedelta(hours=28))
+    assert fresh.is_fresh() and not stale.is_fresh()
+
+    # Only the fresh one may reach `_pick`.
+    tradeable = [q for q in (fresh, stale) if q.is_fresh()]
+    assert tradeable == [fresh]
+    pick, _ = desk._pick(tradeable, Decimal("100"), dict(GENE_DEFAULTS), bullish=True)
+    assert pick is not None and pick.symbol == fresh.symbol
+
+
+def test_a_whole_chain_of_stale_quotes_is_refused_not_traded():
+    from datetime import timedelta
+
+    desk = _desk()
+    old = datetime.now(timezone.utc) - timedelta(hours=28)
+    chain = [Quote(symbol=f"SPY261016P0009{i}000", bid=Decimal("1.00"),
+                   ask=Decimal("1.02"), as_of=old) for i in range(5)]
+    assert [q for q in chain if q.is_fresh()] == [], (
+        "a weekend chain must leave nothing to trade"
+    )
