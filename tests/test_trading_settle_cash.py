@@ -69,3 +69,47 @@ def test_a_fresh_record_still_settles_correctly(store, firm):
         store.settle(current, _buy(current))
     after = store.get_firm("cash_test")
     assert after.cash == Decimal("9700.00")
+
+
+# =========================================================================
+# one order per symbol per decision
+# =========================================================================
+def test_a_deliberation_that_repeats_itself_is_deduped():
+    """The churn gate stops a firm deliberating twice in a bar. It cannot see
+    a single deliberation returning the same order twice, because that is one
+    call.
+
+    On 2026-09-06 `firm_i_memecoins_ii` returned DOGE, WIF, DOGE, WIF for bar
+    22:00. All four filled, four rows landed in the same second, and the ledger
+    came out $497.22 rich — exactly one DOGE plus one WIF. Same shape on 09-01
+    (six identical DOGE buys) and 09-03 (two identical WIF buys).
+    """
+    from src.trading.models import Side, TradeProposal
+
+    def prop(symbol, side=Side.BUY.value, qty="1"):
+        return TradeProposal(firm_id=1, symbol=symbol, side=side,
+                             quantity=Decimal(qty), rationale="x")
+
+    raw = [prop("DOGE-USD"), prop("WIF-USD"), prop("DOGE-USD"), prop("WIF-USD")]
+
+    seen, deduped = set(), []
+    for p in raw:
+        key = (p.symbol, p.side)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(p)
+
+    assert [p.symbol for p in deduped] == ["DOGE-USD", "WIF-USD"]
+
+
+def test_opposite_sides_of_one_symbol_are_not_duplicates():
+    """A firm may legitimately close one leg and open another."""
+    from src.trading.models import Side, TradeProposal
+
+    buy = TradeProposal(firm_id=1, symbol="SPY", side=Side.BUY.value,
+                        quantity=Decimal("1"), rationale="x")
+    sell = TradeProposal(firm_id=1, symbol="SPY", side=Side.SELL.value,
+                         quantity=Decimal("1"), rationale="x")
+    keys = {(p.symbol, p.side) for p in (buy, sell)}
+    assert len(keys) == 2

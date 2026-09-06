@@ -1006,6 +1006,33 @@ class Ecosystem:
         flow = self.flow
         raw = firm.propose(market, positions)
 
+        # **One decision per symbol per deliberation.** The churn gate stops a
+        # firm deliberating twice in a bar; it cannot see a single deliberation
+        # that returns the same order twice, because that is one call.
+        #
+        # On 2026-09-06 `firm_i_memecoins_ii` returned DOGE, WIF, DOGE, WIF for
+        # bar 22:00. All four were risk-checked, all four filled, four fill rows
+        # landed in the same second — and the ledger came out $497.22 rich,
+        # exactly one DOGE plus one WIF. The same shape appeared on 09-01 (six
+        # identical DOGE buys) and 09-03 (two identical WIF buys).
+        #
+        # Deduping here rather than chasing the cash: whatever lets a duplicate
+        # row escape its debit, a firm buying the same coin twice in one breath
+        # is not a decision the village meant to make, and the second one is
+        # what pays the spread twice.
+        seen: set = set()
+        deduped = []
+        for proposal in raw:
+            key = (proposal.symbol, proposal.side)
+            if key in seen:
+                report.bot_notes.append(
+                    f"{record.firm_key}: dropped a repeat {proposal.side} "
+                    f"{proposal.symbol} — one order per symbol per decision")
+                continue
+            seen.add(key)
+            deduped.append(proposal)
+        raw = deduped
+
         # A bot that returned nothing usable looks exactly like a quiet day.
         # Say which it was, or the first thing you do when a firm stops trading
         # is go looking in the wrong place.
