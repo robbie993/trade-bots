@@ -113,3 +113,20 @@ def test_opposite_sides_of_one_symbol_are_not_duplicates():
                          quantity=Decimal("1"), rationale="x")
     keys = {(p.symbol, p.side) for p in (buy, sell)}
     assert len(keys) == 2
+
+
+def test_cash_arithmetic_is_exact_not_accumulated_in_floats(store, firm):
+    """`SET cash = cash + ?` hands the sum to SQLite in floating point.
+
+    `firms.cash` is declared NUMERIC, and SQLite's NUMERIC affinity already
+    stores it as REAL, so the column has always carried binary drift — that is
+    the schema's doing and predates this code. What settle controls is whether
+    it *adds* arithmetic on top: the sum is done in Decimal, so repeated
+    settles do not accumulate error.
+    """
+    stale = store.get_firm("cash_test")
+    for _ in range(3):
+        store.settle(stale, _buy(stale, price="33.33", qty="3"))
+
+    after = store.get_firm("cash_test")
+    assert after.cash == Decimal("9700.03"), after.cash

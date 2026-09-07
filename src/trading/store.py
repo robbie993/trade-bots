@@ -336,28 +336,42 @@ class TradingStore:
                 self.db.update(
                     "trade_proposals", fill.proposal_id, {"status": ProposalStatus.FILLED.value}
                 )
-            # **Relative, not absolute.** `new_cash` is computed from
-            # `firm.cash` — an in-memory value read before this transaction
-            # opened — so writing it as an absolute makes the last writer win.
-            # Settle two fills against one stale record and the second silently
-            # undoes the first's cash movement while both fill rows remain:
-            # two debits recorded, one applied, and `cash = allocation + sum
-            # (cash_delta)` breaks by exactly one fill.
+            # **Re-read the cash inside the transaction, then write it.**
+            # Two things have to be true at once here and getting either wrong
+            # breaks the ledger in a way that takes days to find.
             #
-            # That is not hypothetical. On 2026-09-03 `firm_a_etf_ii_v` wrote
-            # two identical EFA fills of -$400.28 in one pass and the ledger
-            # came out $400.28 rich; `firm_d_value_iii` did the same with VZ
-            # for $226.68. It is also the best explanation for two earlier
-            # "torn ledgers" this session that were blamed on SIGKILL and on
-            # two processes, and survived the fixes for both.
+            # *It must not use the caller's copy.* `firm.cash` is read before
+            # this transaction opens, so writing `firm.cash + delta` as an
+            # absolute makes the last writer win: settle two fills against one
+            # record and the second silently undoes the first while both fill
+            # rows remain. Two debits recorded, one applied. That is the
+            # $400.28 break on `firm_a_etf_ii_v` and the $226.68 on
+            # `firm_d_value_iii` on 2026-09-03.
             #
-            # Letting the database do the arithmetic makes the result correct
-            # whatever the caller was holding.
-            self.db.execute(
-                "UPDATE firms SET cash = cash + ?, consecutive_losses = ?, "
-                "updated_at = ? WHERE id = ?",
-                (fill.cash_delta, consecutive, utcnow_iso(), firm.id),
+            # *It should not hand the arithmetic to SQLite either.* The
+            # obvious repair — `SET cash = cash + ?` — was mine, and it trades
+            # one problem for another: `_params` binds a `Decimal` as a string,
+            # so the sum is done in floating point. `firms.cash` is declared
+            # NUMERIC and SQLite's NUMERIC affinity already stores it as REAL,
+            # so money in this column has always carried binary drift
+            # (18652.910000000003 in the live ledger, and that predates this
+            # code) — but there is no reason to add arithmetic on top of it.
+            #
+            # Reading inside the transaction gives both properties: exact
+            # Decimal arithmetic, on a value nobody can have changed since.
+            row = self.db.query_one(
+                "SELECT cash FROM firms WHERE id = ?", (firm.id,))
+            settled_cash = money(D(str(row["cash"])) + fill.cash_delta)
+            self.db.update(
+                "firms",
+                firm.id,
+                {
+                    "cash": settled_cash,
+                    "consecutive_losses": consecutive,
+                    "updated_at": utcnow_iso(),
+                },
             )
+            new_cash = settled_cash
         firm.cash = new_cash
         firm.consecutive_losses = consecutive
         return fill
