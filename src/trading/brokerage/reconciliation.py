@@ -37,16 +37,23 @@ class Break:
     identity: str
     expected: Decimal
     actual: Decimal
+    #: Evidence captured at the moment the break was found. A break is
+    #: transient — the next tick often clears it — so by the time anyone looks,
+    #: the state that caused it is gone. Four separate mechanisms were
+    #: eliminated by hand before this existed; the fifth should identify
+    #: itself.
+    detail: str = ""
 
     @property
     def difference(self) -> Decimal:
         return money(self.actual - self.expected)
 
     def __str__(self) -> str:
-        return (
+        base = (
             f"{self.firm_key}: {self.identity} expected {fmt_money(self.expected)}, "
             f"found {fmt_money(self.actual)} (off by {fmt_money(self.difference)})"
         )
+        return f"{base}\n      {self.detail}" if self.detail else base
 
 
 @dataclass
@@ -80,7 +87,26 @@ class Reconciler:
 
         cash_expected = money(D(firm.allocation) + self.store.cash_delta_total(firm.id))
         if abs(cash_expected - D(firm.cash)) > tolerance:
-            breaks.append(Break(firm.firm_key, "cash", cash_expected, D(firm.cash)))
+            # Capture the evidence now. A break is often transient — the next
+            # tick clears it and the state that caused it is gone — which is
+            # why four candidate mechanisms had to be eliminated by hand
+            # instead of read off a log. Name the fills whose movement would
+            # account for the gap, so the next occurrence explains itself.
+            gap = money(D(firm.cash) - cash_expected)
+            recent = fills[-6:] if fills else []
+            suspects = [f"{f.symbol} {f.side} {fmt_money(f.cash_delta)}"
+                        for f in recent
+                        if abs(D(f.cash_delta) - gap) < D("0.01")
+                        or abs(D(f.cash_delta) + gap) < D("0.01")]
+            trail = " | ".join(
+                f"{str(f.as_of)[:16]} {f.symbol} {f.side} {fmt_money(f.cash_delta)}"
+                for f in recent)
+            detail = (f"gap {fmt_money(gap)} across {len(fills)} fills; "
+                      f"last: {trail or 'none'}")
+            if suspects:
+                detail += f"; a fill of exactly this size exists: {', '.join(suspects)}"
+            breaks.append(Break(firm.firm_key, "cash", cash_expected,
+                                D(firm.cash), detail))
 
         positions = self.store.positions(firm.id)
         market_value = sum((p.market_value(market.mark(p.symbol)) for p in positions), ZERO)
