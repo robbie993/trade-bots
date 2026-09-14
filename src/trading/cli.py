@@ -350,6 +350,47 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_retention(args) -> int:
+    """How much of an entry's edge survives the delay before it is acted on.
+
+    Prints three summaries of the same trades because they disagree, and the
+    disagreement is the point. The entry-weighted mean once read -14.4 bps and
+    looked like proof the village was far worse than chance; one overnight bar
+    where 22 firms bought the same two coins into a 5% slide produced all of
+    it, and weighting bars equally read +1.4.
+    """
+    from . import retention as retention_mod
+
+    eco = _ecosystem(args)
+    cost = (eco.config.data.slippage_bps + eco.config.data.fee_bps) * 2
+    curve = retention_mod.from_village(
+        eco.store, eco.feed, horizon=args.horizon, cost_bps=cost,
+        only=args.only)
+    if not curve.points:
+        print("no entries matched a bar. Has the village traded yet?")
+        return 0
+
+    print(f"round trip charged: {float(cost):.2f} bps   horizon: {args.horizon} bars"
+          f"   scope: {args.only}\n")
+    print(f"{'delay':>10}{'mean':>10}{'median':>10}{'per-bar':>10}"
+          f"{'entries':>9}{'bars':>7}  ")
+    for p in curve.points:
+        bar = ("  -" if p.bar_weighted_bps is None
+               else f"{float(p.bar_weighted_bps):.2f}")
+        ratio = curve.ratio_at(p.bars)
+        print(f"{p.label:>10}{float(p.edge_bps):>10.2f}{float(p.median_bps):>10.2f}"
+              f"{bar:>10}{p.n:>9}{p.bars_seen or 0:>7}"
+              f"  {'FRAGILE' if p.fragile else ''}"
+              f"{'' if ratio is None else f'  R={float(ratio):.2f}'}")
+    if curve.viable_to is None:
+        print(f"\nT* : no delay clears the {float(cost):.2f} bps round trip — "
+              f"there is no edge here to lose to latency, so speed is not "
+              f"what is wrong.")
+    else:
+        print(f"\nT* : edge still clears costs {curve.viable_to} bars late.")
+    return 0
+
+
 def cmd_evolve(args) -> int:
     eco = _ecosystem(args)
     try:
@@ -1349,6 +1390,13 @@ def add_trade_parser(subparsers) -> None:
     p = add("backtest", "backtest firms on the configured history", cmd_backtest)
     p.add_argument("--firm")
     p.add_argument("--days", type=int, help="limit the number of bars")
+
+    p = add("retention", "does the entry edge survive the delay to act on it?",
+            cmd_retention)
+    p.add_argument("--horizon", type=int, default=4,
+                   help="bars held, fixed across delays")
+    p.add_argument("--only", choices=("all", "equities", "crypto"),
+                   default="all")
 
     p = add("evolve", "one generation of genome evolution", cmd_evolve)
     p.add_argument("--firm")

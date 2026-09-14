@@ -54,6 +54,14 @@ class Point:
     #: and the gap was one overnight bar where 22 firms bought DOGE and WIF
     #: into a 5% slide. Dropping that single bar moved the mean to -2.1.
     median_bps: Decimal = ZERO
+    #: Mean with every *bar* weighted equally instead of every entry. Firms
+    #: act on the same bar constantly — 1,017 entries landed on 239 bars — so
+    #: the entry-weighted mean is really a vote on the few bars the village
+    #: crowded into. Weighting bars equally flipped the first run's headline
+    #: from -14.4 bps to +1.4, and it is the honest summary of the two.
+    bar_weighted_bps: Optional[Decimal] = None
+    #: How many distinct bars the entries fell on. The real sample size.
+    bars_seen: Optional[int] = None
 
     @property
     def label(self) -> str:
@@ -147,24 +155,96 @@ def measure(signals: Sequence[tuple], closes_by_symbol: dict,
     delay would measure a longer trade rather than a later one, and a longer
     trade in a drifting market looks like retained edge when it is only
     retained exposure.
+
+    A signal is ``(symbol, bar_index, sign)``, or ``(symbol, bar_index, sign,
+    bar_key)`` to also get the bar-weighted mean. Pass the bar key whenever you
+    have it: without it there is no way to tell 1,000 independent decisions
+    from 1,000 firms agreeing with each other on 200 bars.
     """
     out = Retention(cost_bps=D(cost_bps))
     for delay in delays:
-        got = []
-        for symbol, index, sign in signals:
+        got, by_bar = [], {}
+        for signal in signals:
+            symbol, index, sign = signal[0], signal[1], signal[2]
+            key = signal[3] if len(signal) > 3 else None
             closes = closes_by_symbol.get(symbol) or []
             r = _returns_at(closes, index, delay, horizon, sign)
             if r is not None:
                 got.append(r)
+                if key is not None:
+                    by_bar.setdefault(key, []).append(r)
         if got:
             ordered = sorted(got)
             mid = len(ordered) // 2
             median = (ordered[mid] if len(ordered) % 2
                       else (ordered[mid - 1] + ordered[mid]) / D(2))
+            bar_mean = None
+            if by_bar:
+                means = [sum(v, ZERO) / D(len(v)) for v in by_bar.values()]
+                bar_mean = sum(means, ZERO) / D(len(means))
             out.points.append(Point(bars=delay,
                                     edge_bps=sum(got, ZERO) / D(len(got)),
-                                    n=len(got), median_bps=median))
+                                    n=len(got), median_bps=median,
+                                    bar_weighted_bps=bar_mean,
+                                    bars_seen=len(by_bar) or None))
     return out
 
 
-__all__ = ["Point", "Retention", "measure"]
+def from_village(store, feed, delays: Sequence[int] = (0, 1, 2, 4, 8, 16),
+                 horizon: int = 4, cost_bps: Decimal = ZERO,
+                 min_bars: int = 100, only: str = "all") -> Retention:
+    """Measure the curve on the village's own entries.
+
+    A *buy* fill is the signal. Sells are deliberately excluded: the village is
+    long-only in practice, so a sell is an exit, and counting an exit as a
+    short entry inverts its sign and quietly corrupts the whole curve.
+
+    `only` takes "all", "equities" or "crypto". They deserve separate curves —
+    crypto trades through the night against a spread several times wider, and
+    pooling the two hides both.
+    """
+    rows = store.db.query(
+        "SELECT symbol, as_of FROM fills WHERE side = 'buy' AND quantity > ?",
+        (str(DUST),))
+    wanted = [r for r in rows if _in(r["symbol"], only)]
+    if not wanted:
+        return Retention(cost_bps=D(cost_bps))
+
+    closes_by_symbol, index = {}, {}
+    for symbol in sorted({r["symbol"] for r in wanted}):
+        try:
+            bars = feed.series(symbol)
+        except Exception:
+            continue                    # a feed gap is not a reason to stop
+        if len(bars) < min_bars:
+            continue
+        closes_by_symbol[symbol] = [b.close for b in bars]
+        index[symbol] = {b.as_of.strftime(_BAR_KEY): i
+                         for i, b in enumerate(bars)}
+
+    signals = []
+    for r in wanted:
+        symbol = r["symbol"]
+        if symbol not in index:
+            continue
+        key = str(r["as_of"])[:16].replace(" ", "T")
+        i = index[symbol].get(key)
+        if i is not None:
+            signals.append((symbol, i, 1, key))
+    return measure(signals, closes_by_symbol, delays=delays, horizon=horizon,
+                   cost_bps=cost_bps)
+
+
+def _in(symbol: str, only: str) -> bool:
+    if only == "equities":
+        return "-USD" not in symbol
+    if only == "crypto":
+        return "-USD" in symbol
+    return True
+
+
+#: Fills below this are dust, not trades.
+DUST = D("0.000001")
+_BAR_KEY = "%Y-%m-%dT%H:%M"
+
+__all__ = ["Point", "Retention", "measure", "from_village"]
