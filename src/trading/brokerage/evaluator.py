@@ -58,6 +58,10 @@ class Scorecard:
     worst_trade_pct: Decimal = ZERO
     score: Decimal = ZERO
     sufficient_data: bool = False
+    #: What buying and holding this firm's own universe returned over the same
+    #: bars, equal-weighted. `None` when it could not be priced, which is a
+    #: refusal rather than a zero — see `Evaluator.score`.
+    benchmark_pct: Optional[Decimal] = None
     components: dict = field(default_factory=dict)
     as_of: Optional[datetime] = None
     # Open positions the feed could not price. Everything above is computed
@@ -411,16 +415,78 @@ class Evaluator:
             mispriced=mismatched,
         )
         card.sufficient_data = card.closed_trades >= self.config.kill.minimum_trades
+        card.benchmark_pct = self._benchmark_pct(firm, market)
         card.score, card.components = self.score(card)
         return card
 
+    def _benchmark_pct(self, firm: FirmRecord, market: MarketData) -> Optional[Decimal]:
+        """Equal-weighted buy-and-hold of this firm's universe, over the bars
+        it has been measured across.
+
+        `None` rather than zero when it cannot be priced. **Every leg must
+        price, not merely some of them** — a universe of four where only the
+        two that rose could be priced is a survivorship filter, and it would
+        hand the firm a lower bar than the thing it actually traded. Same rule
+        as `Backtester._hold_pct`, which this deliberately mirrors.
+
+        Entry crosses the spread and pays a fee, as the firm's own fills do.
+        No exit cost: the alternative being modelled is that you bought it and
+        are still holding it.
+        """
+        from ..benchmark import bars_lived, buy_and_hold
+
+        universe = [s for s in (firm.universe or ())]
+        if not universe:
+            return None
+        bars = bars_lived(self.store, firm.id)
+        if bars <= 0:
+            return None
+        legs = []
+        for symbol in universe:
+            held = buy_and_hold(
+                market, symbol, D(10_000), bars,
+                slippage_bps=self.config.data.slippage_bps,
+                fee_bps=self.config.data.fee_bps,
+            )
+            if held is None:
+                return None
+            legs.append((held - D(10_000)) / D(10_000) * D(100))
+        return percent(sum(legs, ZERO) / D(len(legs)))
+
     def score(self, card: Scorecard) -> tuple[Decimal, dict]:
-        """The weighted sum, with every term reported alongside the total."""
+        """The weighted sum, with every term reported alongside the total.
+
+        **The return term is excess over the firm's own universe, not the raw
+        return.** It was the raw return, and that is the same gap that was
+        found in `BacktestResult.fitness` on 2026-09-14 — except this score
+        does not pick a genome, it *moves capital*: `allocator` raises a firm
+        at `good_score` and cuts it at `poor_score`, straight off this number.
+
+        Measured on the shipped weights: a firm that returned +6% while the
+        universe it trades returned +30% scored **62 — above the raise
+        threshold of 60**. It underperformed by twenty-four points and was
+        handed more money. A defensive desk that lost 2% while its universe
+        lost 20% scored 43, a hair above the cut.
+
+        The benchmark is the firm's own universe for the same reason it is in
+        `fitness`: a crypto desk that made 5% while BTC made 50% is a bad desk,
+        and scoring it against an equity index answers a question nobody asked.
+
+        When the benchmark cannot be priced the raw return is used and
+        `return_basis` says so. That is a real weakening and it is recorded in
+        the components, which are stored beside the score precisely so a
+        capital cut can be re-derived from the row months later.
+        """
+        excess = card.return_pct
+        basis = "raw return (no benchmark)"
+        if card.benchmark_pct is not None:
+            excess = D(card.return_pct) - D(card.benchmark_pct)
+            basis = f"excess over own universe ({card.benchmark_pct}%)"
         components = {
             "base": D(50),
-            # 1% of return is worth 2 points, capped so one lucky month cannot
-            # buy a firm an unlimited allocation.
-            "return": _cap(card.return_pct * D(2), D(-30), D(30)),
+            # 1% of excess return is worth 2 points, capped so one lucky month
+            # cannot buy a firm an unlimited allocation.
+            "return": _cap(excess * D(2), D(-30), D(30)),
             # Drawdown is subtracted at full weight and is not capped upward:
             # a firm can lose all of its points to risk-taking alone.
             "drawdown": -_cap(card.drawdown_pct, ZERO, D(50)),
@@ -431,7 +497,9 @@ class Evaluator:
             if card.sharpe is not None:
                 components["sharpe"] = _cap(card.sharpe * D(5), D(-15), D(15))
         total = sum(components.values(), ZERO)
-        return percent(_cap(total, ZERO, D(100))), {k: str(v) for k, v in components.items()}
+        out = {k: str(v) for k, v in components.items()}
+        out["return_basis"] = basis
+        return percent(_cap(total, ZERO, D(100))), out
 
     def evaluate_all(self, firms, market: MarketData) -> list[Scorecard]:
         return [self.evaluate(firm, market) for firm in firms]

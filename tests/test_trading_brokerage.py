@@ -164,7 +164,13 @@ def test_score_components_are_reported_with_the_score(store, trading_config):
         sufficient_data=True,
     )
     score, components = evaluator.score(card)
-    assert set(components) == {"base", "return", "drawdown", "win_rate", "sharpe"}
+    assert set(components) == {"base", "return", "drawdown", "win_rate", "sharpe",
+                               "return_basis"}
+    # `return_basis` records which question the return term answered. A stored
+    # component set that cannot tell "beat its universe by 10%" from "went up
+    # 10% while its universe went up 30%" cannot justify the capital move it
+    # was used to make, which is the whole reason components are stored.
+    assert components["return_basis"] == "raw return (no benchmark)"
     assert score == Decimal("85.00")  # 50 + 20 - 5 + 10 + 10
 
 
@@ -550,3 +556,54 @@ def test_a_halted_ecosystem_does_not_reallocate(store, firm_record, market, trad
     report = Brokerage(store, trading_config, gate).oversee(market)
     assert report.halted is not None
     assert report.allocation_changes == []
+
+
+# =========================================================================
+# the score moves capital, so it has to ask whether the firm was worth it
+# =========================================================================
+def test_a_firm_that_lags_its_own_universe_is_not_handed_more_money(store, trading_config):
+    """The gap this closes, and it is worse here than in `fitness`.
+
+    `fitness` picks a genome. This score *moves capital*: `allocator` raises
+    at `good_score` and cuts at `poor_score` straight off it. On the shipped
+    weights a firm that returned +6% while the universe it trades returned
+    +30% scored 62 — above the raise threshold of 60 — and was handed more
+    money for underperforming by twenty-four points.
+    """
+    evaluator = Evaluator(store, trading_config)
+    laggard = Scorecard(firm_key="x", firm_id=1, return_pct=D("6"),
+                        benchmark_pct=D("30"))
+    score, components = evaluator.score(laggard)
+    assert score < trading_config.brokerage.good_score, \
+        "a firm 24 points behind its own universe still qualified for a raise"
+    assert "excess over own universe" in components["return_basis"]
+
+
+def test_a_defensive_firm_that_beat_a_falling_universe_is_not_cut(store, trading_config):
+    """The mirror. Losing 2% while the universe lost 20% is a good desk, and
+    the raw-return score had it a hair above the cut threshold."""
+    evaluator = Evaluator(store, trading_config)
+    defensive = Scorecard(firm_key="y", firm_id=1, return_pct=D("-2"),
+                          drawdown_pct=D("3"), benchmark_pct=D("-20"))
+    score, _ = evaluator.score(defensive)
+    assert score > trading_config.brokerage.poor_score
+
+
+def test_an_unpriceable_benchmark_says_so_rather_than_scoring_zero(store, trading_config):
+    """Falling back to the raw return is a real weakening of the claim. It is
+    recorded in the components, which are stored beside the score precisely so
+    a capital move can be re-derived from the row months later."""
+    evaluator = Evaluator(store, trading_config)
+    card = Scorecard(firm_key="z", firm_id=1, return_pct=D("6"), benchmark_pct=None)
+    _, components = evaluator.score(card)
+    assert components["return_basis"] == "raw return (no benchmark)"
+
+
+def test_a_universe_that_only_partly_prices_gives_no_benchmark(store, trading_config,
+                                                               market_data, firm_record):
+    """Pricing two legs of four is a survivorship filter: it would hand the
+    firm a lower bar than the thing it actually traded."""
+    evaluator = Evaluator(store, trading_config)
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.universe = ["SPY", "GHOST"]
+    assert evaluator._benchmark_pct(firm, market_data) is None

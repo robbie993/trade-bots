@@ -114,6 +114,26 @@ class LiveReadiness:
         default_factory=lambda: _env_decimal("TRADE_LIVE_MAX_DRAWDOWN_PCT", "10.0"))
     min_win_rate_pct: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_LIVE_MIN_WIN_RATE_PCT", "40.0"))
+    #: How far ahead of simply holding its own universe a firm has to be
+    #: before real money is discussed.
+    #:
+    #: Every other criterion here measures the firm against *zero*:
+    #: `min_expectancy_t` asks whether the mean trade differs from nothing,
+    #: win rate and drawdown ask whether it was steady. A firm can clear all of
+    #: them — real feed, fifty closed trades, t of 2.5, a 6% drawdown, a 55%
+    #: win rate — while losing to buy-and-hold for the entire period, and this
+    #: gate would have handed it live capital.
+    #:
+    #: `benchmark.py` was written to answer exactly this and says so in its
+    #: first paragraph: "A firm up 8% in a year when SPY did 12% has lost money
+    #: in the way that matters, and until now nothing here would have said so."
+    #: It was never wired into the gate that matters most.
+    #:
+    #: Zero means "must at least match it". It is not a high bar and it is not
+    #: meant to be; it is the difference between a criterion that can fail for
+    #: this reason and one that cannot.
+    min_excess_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_LIVE_MIN_EXCESS_PCT", "0.0"))
     max_start_capital: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_LIVE_START_CAPITAL", "500"))
 
@@ -362,6 +382,30 @@ def assess(store, firm, card, feed_name: str,
         f">= {cfg.min_win_rate_pct}%",
         win_rate is not None and win_rate >= cfg.min_win_rate_pct,
         "below the promotion floor",
+    ))
+
+    # 5. And it was worth doing at all.
+    #
+    # Everything above measures the firm against zero. This is the only check
+    # that asks whether the money would have done better sitting in the things
+    # the firm trades, which is the question a person handing over capital is
+    # actually asking.
+    #
+    # **An unmeasurable comparison fails.** If the benchmark could not be
+    # priced there is no evidence either way, and "no evidence" must not open
+    # the door to real money — everywhere else in this village that answer is
+    # `insufficient data`, and it refuses.
+    benchmark = D(card.benchmark_pct) if (
+        card is not None and getattr(card, "benchmark_pct", None) is not None) else None
+    excess = (D(card.return_pct) - benchmark) if (benchmark is not None and card) else None
+    out.checks.append(Check(
+        "Beats buy-and-hold", "—" if excess is None else f"{excess}%",
+        f">= {cfg.min_excess_pct}%",
+        excess is not None and excess >= cfg.min_excess_pct,
+        ("its own universe could not be priced, so there is no comparison — "
+         "and no comparison is not a passed one")
+        if excess is None else
+        f"holding its own universe returned {benchmark}%, which it did not beat",
     ))
 
     # The first live mandate is small on purpose, and never larger than what

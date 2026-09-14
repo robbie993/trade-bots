@@ -256,6 +256,10 @@ def test_a_firm_with_real_evidence_passes(store, firm_record, market_data):
     card = Scorecard(
         firm_key=firm_record.firm_key, firm_id=firm_record.id,
         drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"),
+        # Real evidence now includes having been worth doing: every other
+        # criterion here measures the firm against zero, and a firm can clear
+        # all of them while losing to buy-and-hold the whole way.
+        return_pct=Decimal("12.0"), benchmark_pct=Decimal("4.0"),
     )
     verdict = assess(store, firm_record, card, "alpaca")
     assert verdict.ready, [c.name for c in verdict.failures]
@@ -282,6 +286,7 @@ def test_readiness_grants_nothing(store, firm_record, market_data):
     assess(store, firm_record, Scorecard(
         firm_key=firm_record.firm_key, firm_id=firm_record.id,
         drawdown_pct=Decimal("1"), win_rate_pct=Decimal("90"),
+        return_pct=Decimal("12.0"), benchmark_pct=Decimal("4.0"),
     ), "alpaca")
 
     after = store.require_firm_by_id(firm_record.id)
@@ -321,7 +326,8 @@ def _make_ready(store, firm, feed="alpaca"):
                          Decimal("-10")] * 20)
     _bars(store, firm, feed, 60)
     return Scorecard(firm_key=firm.firm_key, firm_id=firm.id,
-                     drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"))
+                     drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"),
+                     return_pct=Decimal("12.0"), benchmark_pct=Decimal("4.0"))
 
 
 def _buy(store, firm, symbol="SPY", quantity="10", price="100"):
@@ -546,3 +552,68 @@ def test_the_council_never_rules_on_real_money(ecosystem):
     ecosystem.hold_council()
     assert ecosystem.gate.get(approval.id).status == "pending"
     assert ecosystem.store.get_firm(firm.firm_key).venue == "paper"
+
+
+# =========================================================================
+# was it worth doing at all
+# =========================================================================
+def test_a_firm_that_lost_to_buy_and_hold_is_refused_live_money(store, firm_record):
+    """The gap this closes, at the highest-stakes gate in the system.
+
+    Every other criterion measures the firm against *zero* — `expectancy_t`
+    asks whether the mean trade differs from nothing, win rate and drawdown
+    ask whether it was steady. A firm can clear all of them on a real feed
+    with fifty closed trades and still have lost to simply holding the things
+    it trades for the entire period, and this gate would have handed it live
+    capital.
+    """
+    from src.trading.brokerage.evaluator import Scorecard
+
+    _fills(store, firm_record, [Decimal("40"), Decimal("30"), Decimal("50"),
+                                Decimal("-10")] * 20)
+    _bars(store, firm_record, "alpaca", 60)
+    card = Scorecard(
+        firm_key=firm_record.firm_key, firm_id=firm_record.id,
+        drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"),
+        return_pct=Decimal("8.0"), benchmark_pct=Decimal("12.0"),
+    )
+    verdict = assess(store, firm_record, card, "alpaca")
+    assert not verdict.ready
+    failed = {c.name for c in verdict.failures}
+    assert failed == {"Beats buy-and-hold"}, (
+        "it passed every other criterion, which is the point — "
+        f"failures were {failed}")
+
+
+def test_an_unpriceable_benchmark_refuses_rather_than_waves_through(store, firm_record):
+    """No evidence either way must not open the door to real money.
+    Everywhere else in this village that answer is `insufficient data`, and it
+    refuses."""
+    from src.trading.brokerage.evaluator import Scorecard
+
+    _fills(store, firm_record, [Decimal("40"), Decimal("30"), Decimal("50"),
+                                Decimal("-10")] * 20)
+    _bars(store, firm_record, "alpaca", 60)
+    card = Scorecard(
+        firm_key=firm_record.firm_key, firm_id=firm_record.id,
+        drawdown_pct=Decimal("4.0"), win_rate_pct=Decimal("75.0"),
+        return_pct=Decimal("8.0"), benchmark_pct=None,
+    )
+    verdict = assess(store, firm_record, card, "alpaca")
+    assert not verdict.ready
+    check = next(c for c in verdict.checks if c.name == "Beats buy-and-hold")
+    assert "no comparison is not a passed one" in check.why
+
+
+def test_the_criterion_appears_in_the_audit_table(store, firm_record):
+    """Every threshold is printed beside its value so the judgement can be
+    argued with. A criterion that decides live money and is not in the table
+    is not auditable."""
+    from src.trading.brokerage.evaluator import Scorecard
+    from src.trading.promotion import table
+
+    card = Scorecard(firm_key=firm_record.firm_key, firm_id=firm_record.id,
+                     return_pct=Decimal("8.0"), benchmark_pct=Decimal("2.0"))
+    rows = table(assess(store, firm_record, card, "alpaca"))
+    row = next(r for r in rows if r["criterion"] == "Beats buy-and-hold")
+    assert row["value"] == "6.0%" and ">=" in row["needs"]
