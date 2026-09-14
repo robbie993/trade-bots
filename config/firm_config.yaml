@@ -63,9 +63,16 @@ firms:
     # had no business here. Alpaca's crypto tier is roughly 0.25% a side for
     # retail volume; equities are commission-free, which is why the other
     # desks carry no override at all.
+    #
+    # The fee stands; the slippage was a guess and is now a measurement.
+    # Median half-spread from Alpaca crypto quotes, 2026-09-11 15:00-16:00Z,
+    # 1,000 quotes per symbol: BTC 1.51 bps a side, ETH 2.31, SOL 5.32. The
+    # 10 assumed here was between 2x and 7x those. Taking the widest of the
+    # three rather than the median, because a desk that trades all three
+    # should not be told the cheapest one is typical.
     costs:
       fee_bps: 25
-      slippage_bps: 10
+      slippage_bps: 5.3
     universe: [BTC-USD, ETH-USD, SOL-USD]
     analysts: [technical, sentiment, onchain]
     genome:
@@ -182,12 +189,20 @@ firms:
     # emptied by one name.
     risk_limit: 0.015
     capital_allocation: 30000
-    # Same Alpaca crypto fee as firm_c_crypto, but a much wider slippage
-    # assumption: these are thin books and a market order in DOGE or WIF does
-    # not fill where a market order in BTC fills.
+    # Same Alpaca crypto fee as firm_c_crypto, and a genuinely wider spread —
+    # but the 35 assumed here was still nearly twice the real one. Measured
+    # 2026-09-11 15:00-16:00Z, 1,000 quotes each: DOGE 19.64 bps a side,
+    # WIF 19.65. Thin books, confirmed: 13x BTC's spread and 4x SOL's. The
+    # assumption was right about the shape and wrong about the size.
+    #
+    # This one matters more than the others. It is the blocker on testing
+    # whether explicit crowd signals predict anything on these names: the
+    # research effect is strongest exactly on low-cap, recently-negative
+    # assets, and at 60 a side a real signal would have had to clear 120 bps
+    # round trip to show up at all. The true bar is 39.
     costs:
       fee_bps: 25
-      slippage_bps: 35
+      slippage_bps: 19.7
     universe: [DOGE-USD, SHIB-USD, PEPE-USD, WIF-USD]
     analysts: [technical, sentiment, onchain]
     genome:
