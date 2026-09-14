@@ -61,6 +61,15 @@ from src.trading.research import spearman          # noqa: E402
 
 GENERATIONS = int(os.environ.get("EVO_GENERATIONS", "4"))
 
+# Restrict to firms carrying real capital. The village's books hold 48 firms
+# and 28 of them have never placed a fill — unfunded heirs left behind by the
+# `file_successor` cascade of 2026-09-01 (fixed; see
+# `tests/test_trading_heir_cascade.py`). An unfunded firm still backtests,
+# because `evolve` falls back to the configured capital, so it is a legitimate
+# test-bed for a genome — but the result should not depend on including them,
+# and this is how that gets checked rather than assumed.
+MIN_ALLOCATION = float(os.environ.get("EVO_MIN_ALLOCATION", "0"))
+
 
 def main() -> int:
     app_config = Config(database_url=os.environ["DATABASE_URL"])
@@ -72,6 +81,10 @@ def main() -> int:
 
     # ---- 1. is the split actually clean? --------------------------------
     firms = [f for f in eco.store.firms() if not f.is_killed]
+    if MIN_ALLOCATION > 0:
+        firms = [f for f in firms if float(f.allocation or 0) >= MIN_ALLOCATION]
+        print(f"(restricted to {len(firms)} firm(s) with allocation >= "
+              f"{MIN_ALLOCATION:,.0f})")
     probe = firms[0]
     symbols = probe.universe or market.symbols
     fitted_bars, holdout_start, holdout_bars = evolver._split(market, symbols)

@@ -55,6 +55,27 @@ within-cohort shuffle null, 500 draws:
 Two runs of the same script differ because the evolver's mutation draws are
 random; the verdict does not move. 25 of 48 cohorts positive is a coin flip.
 
+### Robustness: the six firms that actually trade
+
+The books hold 48 firms and **28 have never placed a fill** — unfunded heirs
+left by the `file_successor` cascade (see §"the population" below). Two of them
+were among the 8 above. An unfunded firm still backtests, because `evolve`
+falls back to the configured capital, so it is a legitimate test-bed for a
+genome — but the result must not depend on including them.
+
+Restricted to the 6 firms carrying real capital, 6 generations each:
+
+```
+mean within-cohort rho   : +0.0014   sd 0.3431   se 0.0572   t = +0.024
+cohorts with rho > 0     : 15/36      (288 candidates)
+within-cohort shuffle    : 236/500  ->  empirical p = 0.472
+```
+
+Cleaner than the full set, not dirtier. The null does not depend on the
+orphans.
+
+`EVO_MIN_ALLOCATION=1` reproduces it.
+
 ## 4. The third defect: the pooled statistic lied
 
 The first version of this script pooled all candidates and reported
@@ -70,6 +91,11 @@ so the pooled statistic recovers *which firm a genome belongs to* — a fact
 known before any evolution happened — and reports it as predictive power. At
 384 candidates the pooled figure is +0.5972, p < 1e-4, and it is still an
 artefact.
+
+The restricted run is the confirmation. Dropping the unfunded heirs leaves the
+firms whose capital differs most — and the pooled figure *rises* to **+0.8818**
+while the within-cohort mean falls to +0.0014. A statistic that gets stronger
+as the real effect gets weaker is measuring the thing it was not supposed to.
 
 The selection rule never chooses between firms. It chooses the best of eight
 mutants inside one firm's generation. **The cohort is the unit**, and the null
@@ -129,7 +155,55 @@ rule here", not "evolution cannot work".
 Counted in `data/pvalue_ledger.json` under `evolver:selection_rule` — the look
 is recorded whether or not the answer flattered the run.
 
-## 7. Reproducing it
+## 7. The population — what "48 firms" actually means
+
+Checked because a null measured over a population that mostly died is a
+different claim from a null measured over a working one.
+
+```
+firms on the books        : 48
+  ever placed a fill      : 20
+  NEVER placed a fill     : 28      <- unfunded heirs
+  active AND funded       :  6
+```
+
+**The village is six firms.** `firm_f_bonds`, `firm_g_commodities`,
+`firm_h_global_ii`, `firm_d_value_iii`, `firm_c_crypto_ii_v`,
+`firm_e_momentum_ii_v`.
+
+The 39 `status='bankrupt'` rows are not 39 dead strategies. There are **39
+bankruptcy events across 13 distinct firms** — six of them wound up four or
+five times each, each pass minting another heir:
+
+```
+firm_i_memecoins    5x      firm_a_etf_ii        4x
+firm_h_global       5x      firm_c_crypto_ii     4x
+firm_b_stocks_ii    5x      firm_e_momentum_ii   4x
+```
+
+**This is a known bug, already found and already fixed**, and
+`file_successor`'s own docstring is the best account of it: the guard "asked
+`_successor_key` for a name and stopped only when the name ran out", so with
+`_ii` filed it returned `_iii`, then `_iv`, `_v`, `_vi`. On 2026-09-01 the
+village went from 17 firms to 46. The fix reads `inherited_from` instead of
+guessing from names, and `tests/test_trading_heir_cascade.py` pins it with a
+test that files five times and asserts one heir — a test asking the guarantee,
+not the plumbing.
+
+What remains is residue, not a live fault:
+
+- **26 orphan heirs** carry `status='bankrupt'` with zero fills and zero
+  capital. They inflate every population count in the system; the benchmark
+  report's "34 could not be compared" is mostly them.
+- The council still re-rules `resume_firm` on dead firms — 53 in the last 24
+  hours, **every one a defer**, repeatedly on the same two. Harmless in
+  outcome and worth cleaning up: it is re-asking a question whose answer
+  cannot change, and it is most of what fills `council_rulings`.
+
+Neither is touched here. Deleting or re-statusing rows in a live ledger is a
+decision, not a cleanup, and the reconciler currently passes on all 48.
+
+## 8. Reproducing it
 
 ```bash
 EVO_SCRATCH=/tmp/evo EVO_GENERATIONS=6 python scripts/rederive_evolution.py
