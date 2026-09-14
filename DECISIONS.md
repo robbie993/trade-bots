@@ -265,3 +265,58 @@ also 2 of the 8 firms the evolution re-derivation ran on.
   was parsed, not pinged. n/a for anything about signal, because nothing was
   measured.
 - **Review date:** when a hypothesis exists and has a prereg. Not before.
+
+---
+
+### D-V010 · SUPERSEDES D-V001 — the evolution measurement is window-dependent and settles nothing
+- **Date:** 2026-09-14 (night)
+- **Question:** D-V001 concluded the selection rule carries no out-of-sample
+  information. Does that survive being measured again?
+- **Evidence:** the identical statistic, the same script, the same 6 funded
+  firms, the same 6 generations, 36 cohorts every time — run nine times across
+  one afternoon:
+
+  | when | rho | permutation p |
+  |---|---|---|
+  | ~14:20 (48 cohorts, 8 firms) | +0.0170 | 0.356 |
+  | ~14:25 reproduction | +0.0146 | 0.418 |
+  | ~14:30 (36 cohorts, funded) | **+0.0014** | 0.472 |
+  | 15:48 (two-arm, arm A) | +0.1203 | 0.024 |
+  | ~16:05 | +0.1638 | 0.000 |
+  | ~16:12 | +0.1647 | 0.000 |
+  | ~16:19 | +0.1399 | 0.006 |
+  | ~16:26 | +0.1267 | 0.018 |
+  | ~17:00 (same script as 14:30) | **+0.1351** | 0.006 |
+
+  The afternoon runs say no information. The evening runs say information,
+  comfortably past their own null. **The 14:30 and 17:00 runs are the same
+  script with the same arguments.**
+
+  Mechanism: `AlpacaFeed.keep_bars = 720`. The feed keeps the most recent 720
+  bars, so every new 15-minute bar pushes the oldest out and **both the fitted
+  window and the holdout slide**. Each run measures a different holdout period.
+  The within-batch drift is visible directly — +0.1638, +0.1647, +0.1399,
+  +0.1267 across four runs 25 minutes apart is a window moving, not noise
+  around a constant.
+- **Decision:** **D-V001 is withdrawn.** It is *not* replaced by "the selection
+  rule carries information". Both claims are unsupported. The recorded finding
+  is now: **this measurement is not of a fixed quantity and cannot settle the
+  question either way.**
+- **Reason:** A statistic that moves from +0.0014 (p=0.472) to +0.1351 (p=0.006)
+  in ninety minutes, with no code change, is not estimating a property of the
+  selection rule. The permutation null cannot detect this by construction — it
+  conditions on the cohorts it is handed and shuffles inside them, so it prices
+  the ranking *within one window* and is silent about the window itself. It
+  reported p=0.006 and p=0.472 for the same underlying question with equal
+  confidence.
+- **What was wrong with D-V001 specifically:** it called itself *Reproduced* on
+  the strength of runs that were minutes apart and therefore shared a window.
+  Reproduction across a shared nuisance parameter is not reproduction. The
+  confidence ladder was applied correctly to the wrong axis.
+- **Confidence at decision:** **Confirmed** that the measurement is
+  window-dependent — nine runs, a known mechanism, and a within-batch drift
+  consistent with it. **Nothing at all** about whether evolution works.
+- **Review date:** when the measurement is pinned to a fixed bar range and
+  walked forward across several windows, reporting the distribution rather than
+  one draw. Until then no evolution verdict may be quoted, including the ones
+  committed earlier today.
