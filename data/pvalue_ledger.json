@@ -1,11 +1,75 @@
 [
  {
+  "subject": "evolver:firm_a_etf_ii_v_ii",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.6872847751762754,
+  "run_date": "2026-09-14",
+  "note": "generation 3, purge gap 150 bars, rho=-0.162 p=0.687 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
   "subject": "evolver:firm_b_stocks_ii_vi_ii",
   "test": "in-sample fitness rank predicts held-out rank",
-  "p": 5.975119561140371e-06,
+  "p": 0.35797067264432814,
   "run_date": "2026-09-14",
-  "note": "generation 1, rho=+0.880 p=0.000 n=8 | look 1, needs p<0.0500 | survives its own history",
+  "note": "generation 3, purge gap 150 bars, rho=+0.351 p=0.358 n=8 | look 2, needs p<0.0250 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:firm_c_crypto_ii_v",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.4254650213377834,
+  "run_date": "2026-09-14",
+  "note": "generation 4, purge gap 150 bars, rho=+0.309 p=0.425 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:firm_d_value_iii",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 3.6776374833958297e-07,
+  "run_date": "2026-09-14",
+  "note": "generation 4, purge gap 150 bars, rho=+0.901 p=0.000 n=8 | look 1, needs p<0.0500 | survives its own history",
   "verdict": "PASS"
+ },
+ {
+  "subject": "evolver:firm_e_momentum_ii_v",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.39991050379777887,
+  "run_date": "2026-09-14",
+  "note": "generation 4, purge gap 150 bars, rho=-0.325 p=0.400 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:firm_f_bonds",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 1.0,
+  "run_date": "2026-09-14",
+  "note": "generation 5, purge gap 150 bars, rho=+0.000 p=1.000 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:firm_g_commodities",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.7689913445466948,
+  "run_date": "2026-09-14",
+  "note": "generation 5, purge gap 150 bars, rho=+0.119 p=0.769 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:firm_h_global_ii",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.7905713364946152,
+  "run_date": "2026-09-14",
+  "note": "generation 5, purge gap 150 bars, rho=-0.108 p=0.791 n=8 | look 1, needs p<0.0500 | ranks nothing",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "evolver:selection_rule",
+  "test": "in-sample fitness rank predicts held-out rank (within-cohort, purged)",
+  "p": 0.356,
+  "run_date": "2026-09-14",
+  "note": "offline re-derivation on a snapshot; 48 cohorts (firm x generation), 384 candidates, purge gap 150 bars, fitted/holdout overlap 0. mean within-cohort rho +0.0170 (t=+0.259, 25/48 cohorts positive); 500-draw within-cohort permutation null. Reproduction run: rho +0.0146, p=0.418 \u2014 differs only by the evolver's mutation RNG. NB pooling the same candidates across cohorts gives rho +0.5972 (p<1e-4), a Simpson artefact of between-firm differences, not a result. See EVOLUTION_REDERIVED_2026-09-14.md",
+  "verdict": "FAIL"
  },
  {
   "subject": "scanner_example",
