@@ -201,6 +201,24 @@ WINDOW_GENES: tuple = (
 )
 
 
+#: Which measurement regime the scores written now belong to.
+#:
+#: **Bump this whenever a change makes new fitness numbers incomparable with
+#: old ones**, and say why in a migration comment. It is not a schema version
+#: and it is not a release number: it answers only "may these two stored
+#: numbers be subtracted?"
+#:
+#: 1 — everything before 2026-09-14. The holdout overlapped the fitted window
+#:     by up to 42% of its bars, and fitness had no benchmark in it.
+#: 2 — the fitted window and the holdout abut with a purge gap between them,
+#:     and fitness is excess over max(own-universe buy-and-hold, cash).
+#:
+#: The in-memory equivalent is `BacktestResult.comparable_with`, which refuses
+#: mismatched windows and mismatched hurdles. This is the same refusal for
+#: numbers that have been written down, where the context is long gone.
+MEASUREMENT_EPOCH = 2
+
+
 def max_lookback_bars() -> int:
     """The furthest back any analyst can reach for a genome inside its ranges.
 
@@ -321,6 +339,30 @@ class Evolver:
         for _ in range(max(1, self.brain.population - 1)):
             out.append(Candidate(genome=self.mutate(base, rng), parent=base))
         return out
+
+    def mark_epoch(self, genome_id, epoch: int = MEASUREMENT_EPOCH,
+                   reason: str = "") -> None:
+        """Stamp a stored genome with the regime its score was measured under.
+
+        Every row, not only the ones carrying a held-out score: an unmarked row
+        is indistinguishable from a pre-fix one, and the backfill in migration
+        025 deliberately does not supply a default for exactly that reason.
+
+        Never fails a run, for the same reason `_keep_holdout` does not — but
+        note the asymmetry that costs: a *missing* stamp is a row a later
+        reader cannot place, so the failure here is quieter than it looks. It
+        is accepted only because the alternative is a stopped village.
+        """
+        if genome_id is None:
+            return
+        try:
+            self.store.db.insert("genome_epoch", {
+                "genome_id": genome_id,
+                "epoch": int(epoch),
+                "reason": reason or "purged holdout, benchmark-hurdled fitness",
+            })
+        except Exception:               # noqa: BLE001
+            pass
 
     def _keep_holdout(self, genome_id, candidate, fitted_bars: int,
                       holdout_bars: int) -> None:
@@ -549,6 +591,7 @@ class Evolver:
             "strategy_genomes",
             _genome_row(firm, generation, incumbent, best, incumbent),
         )
+        self.mark_epoch(parent_id)
         self._keep_holdout(parent_id, incumbent, fitted_bars, holdout_bars)
         for candidate in candidates:
             if candidate is incumbent:
@@ -558,6 +601,7 @@ class Evolver:
                 {**_genome_row(firm, generation, candidate, best, incumbent),
                  "parent_id": parent_id},
             )
+            self.mark_epoch(genome_id)
             self._keep_holdout(genome_id, candidate, fitted_bars, holdout_bars)
 
         if not self.brain.promote_winners:

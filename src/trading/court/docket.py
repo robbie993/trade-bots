@@ -168,7 +168,7 @@ class StrategyCourt:
         """
         genome = self.evolver.normalise({**BASE_GENOME, **(case.evidence.genome or {})})
         firm = self.store.get_firm(case.firm_key) if case.firm_key else None
-        return self.store.db.insert(
+        genome_id = self.store.db.insert(
             "strategy_genomes",
             {
                 "firm_id": firm.id if firm else None,
@@ -181,6 +181,12 @@ class StrategyCourt:
                 "created_at": utcnow_iso(),
             },
         )
+        # A court candidate's fitness came from the same backtester the evolver
+        # uses, so it belongs to the same measurement regime and has to be
+        # stamped with it. Without this an admitted genome is unmarked, and an
+        # unmarked row is indistinguishable from a pre-fix one.
+        self.evolver.mark_epoch(genome_id, reason="court candidate")
+        return genome_id
 
     def _persist(self, case: StrategyCase, submitted_by: str) -> int:
         evidence = case.evidence

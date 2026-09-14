@@ -111,3 +111,83 @@ def test_the_village_result_fails_its_own_ledger(tmp_path):
                          [(i * 37) % 280 for i in range(280)])
     ledger = PValueLedger(path=str(tmp_path / "l.json"))
     assert not ledger.context("evolver:firm_x", p)["survives_bonferroni_05"]
+
+
+# =========================================================================
+# stored scores carry the regime they were measured under
+# =========================================================================
+def test_the_backfill_marks_everything_already_stored_as_pre_fix(db):
+    """Rows written before 2026-09-14 measured a different quantity: the
+    holdout overlapped the fitted window by up to 42% of its bars, and fitness
+    had no benchmark in it. Nothing on the row said so, and subtracting across
+    that boundary gives a difference that is mostly the bug.
+    """
+    from src.db.connection import utcnow_iso
+
+    for i in range(3):
+        db.insert("strategy_genomes", {
+            "firm_id": None, "generation": 1, "genome": "{}",
+            "fitness": i, "trades": 5, "selected": False,
+            "notes": "written before the fix", "created_at": utcnow_iso(),
+        })
+    # `init-db` runs every migration again, which is when the backfill sees them.
+    db.init_schema()
+    rows = db.query("SELECT epoch, reason FROM genome_epoch")
+    assert len(rows) == 3
+    assert {r["epoch"] for r in rows} == {1}
+    assert all("holdout overlapped" in r["reason"] for r in rows)
+
+
+def test_the_backfill_is_idempotent_and_never_relabels(db, store):
+    """Every migration re-runs on every `init-db`. Migration 024's first draft
+    was three bare ALTERs that would have thrown on the second run; this one
+    must survive being run repeatedly *and* must not drag an epoch-2 row back
+    down to 1.
+    """
+    from src.db.connection import utcnow_iso
+    from src.trading.brain.evolver import MEASUREMENT_EPOCH, Evolver
+    from src.trading.config import TradingConfig
+
+    genome_id = db.insert("strategy_genomes", {
+        "firm_id": None, "generation": 1, "genome": "{}", "fitness": 1,
+        "trades": 5, "selected": False, "notes": "", "created_at": utcnow_iso(),
+    })
+    Evolver(store, TradingConfig()).mark_epoch(genome_id)
+    assert db.query_one(
+        "SELECT epoch FROM genome_epoch WHERE genome_id = ?", (genome_id,)
+    )["epoch"] == MEASUREMENT_EPOCH
+
+    for _ in range(3):
+        db.init_schema()
+
+    rows = db.query("SELECT epoch FROM genome_epoch WHERE genome_id = ?", (genome_id,))
+    assert len(rows) == 1, "the backfill duplicated a row"
+    assert rows[0]["epoch"] == MEASUREMENT_EPOCH, "the backfill relabelled a fixed row"
+
+
+def test_a_genome_written_now_is_stamped_with_the_current_epoch(store, firm_record,
+                                                                market_data):
+    """The stamp has to reach the rows the evolver actually writes, or the
+    fence is a table nobody stands behind."""
+    from src.trading.brain.evolver import BASE_GENOME, MEASUREMENT_EPOCH, Evolver
+    from src.trading.config import BrainConfig, TradingConfig
+
+    evolver = Evolver(store, TradingConfig(brain=BrainConfig(purge_bars=0)))
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.genome = dict(BASE_GENOME)
+    evolver.evolve(firm, market_data, generation=1)
+
+    written = store.db.query("SELECT id FROM strategy_genomes")
+    stamped = store.db.query("SELECT genome_id, epoch FROM genome_epoch")
+    assert written, "nothing was written"
+    assert {r["genome_id"] for r in stamped} == {r["id"] for r in written}, \
+        "a stored genome went unstamped, and unmarked must not mean pre-fix"
+    assert {r["epoch"] for r in stamped} == {MEASUREMENT_EPOCH}
+
+
+def test_the_epoch_constant_is_ahead_of_the_backfill():
+    """If these ever match, the fence marks nothing: every new row would be
+    stamped with the same value the backfill gives the old ones."""
+    from src.trading.brain.evolver import MEASUREMENT_EPOCH
+
+    assert MEASUREMENT_EPOCH > 1
