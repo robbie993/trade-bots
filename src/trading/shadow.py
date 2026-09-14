@@ -40,7 +40,9 @@ test that rejected three firm genomes on 31 August.
 
 from __future__ import annotations
 
+import json
 import os
+import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -139,10 +141,46 @@ def _seed(bar: str, index: int) -> int:
     falsehood: the same bar would grade different genomes on every restart, the
     arm names would never recur, and no arm could ever accumulate the evidence
     it is supposed to be judged on. A digest is stable across processes.
+
+    Kept for replaying a single bar. **It is not what names the cohort** — see
+    `_cohort_seed`, which exists because seeding from the bar had the very
+    effect the paragraph above was written to prevent, one level up.
     """
     import hashlib
 
     digest = hashlib.sha256(f"{bar}|{index}".encode()).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def _cohort_seed(genome: dict, index: int) -> int:
+    """A seed for one arm that is the *same on every bar*.
+
+    Seeding a mutant from the bar gave every bar a fresh set of genomes, and
+    because the mutated genes are continuous floats, a fresh set of genomes is
+    a fresh set of *names*. Measured on the live desk on 2026-09-14: **517
+    distinct arms across 183 bars, of which exactly one had ever appeared on
+    more than one bar.**
+
+    That makes `adopt_best(min_trades=20)` unreachable by construction. No arm
+    can reach twenty trades if no arm survives its own bar, so the desk could
+    open positions forever and never be allowed to conclude anything. It had
+    run thirteen days and opened 644 of them.
+
+    This is the same failure `_seed`'s docstring describes — "the arm names
+    would never recur, and no arm could ever accumulate the evidence it is
+    supposed to be judged on" — fixed there for restarts and left in place
+    across bars.
+
+    So the cohort is seeded from the incumbent genome instead. The same
+    neighbours are graded every bar and pool their trades under one name, and
+    the cohort refreshes only when the incumbent itself moves — which is
+    correct, because a new incumbent deserves new neighbours.
+    """
+    import hashlib
+
+    fingerprint = json.dumps(
+        {k: genome.get(k) for k in sorted(GENE_DEFAULTS)}, sort_keys=True)
+    digest = hashlib.sha256(f"{fingerprint}|{index}".encode()).digest()
     return int.from_bytes(digest[:4], "big")
 
 
@@ -265,7 +303,10 @@ class ShadowDesk:
         """
         out = {"live": dict(self.genome)}
         for i in range(1, ARMS):
-            mutant = _mutate(self.genome, _seed(bar, i))
+            # Seeded from the incumbent, not from `bar`. See `_cohort_seed`:
+            # seeding from the bar minted a new cohort every bar, so no arm
+            # ever reached the twenty trades `adopt_best` requires.
+            mutant = _mutate(self.genome, _cohort_seed(self.genome, i))
             # **Every gene that varies has to be in the name.** The name is the
             # arm's identity, and results are pooled under it. `shadow_confidence`
             # is mutated across a huge range — 1.3 to 39.8 on one observed bar,
@@ -539,12 +580,96 @@ class ShadowDesk:
             })
         return sorted(out, key=lambda r: -r["mean"])
 
-    def adopt_best(self, min_trades: int = 20) -> Optional[dict]:
+    def max_statistic_null(self, min_trades: int = 20, iterations: int = 200,
+                           seed: int = 0) -> Optional[dict]:
+        """Where the *best of all the arms* lands when no arm has any edge.
+
+        `min_trades` guards one arm's sample. It says nothing about how many
+        arms were searched, and the best of many arms is a different quantity
+        from any one of them: run enough neighbours and one of them wins on
+        noise alone. That is the max-of-N problem, and this is the correction
+        `gatekeeper_godmode_run.py:704` already applies across 1,410 arms.
+
+        The construction preserves the *shape of the search* and destroys only
+        the thing being tested. Every closed shadow trade is pooled and dealt
+        back out to the arms, each arm keeping exactly the number of trades it
+        really had, and the best arm's mean is recorded. Repeat, and the
+        distribution of that maximum is what a winner has to beat — not the
+        distribution of a single arm.
+
+        Holding the per-arm counts fixed is what makes it a control rather than
+        a different experiment: an arm with three trades has a wilder mean than
+        one with forty, and reshuffling the counts would compare the real
+        leaderboard against a null with a different amount of luck available.
+
+        `None` when there is nothing to say — fewer than two qualifying arms,
+        or no closed trades. A null computed from an empty pool would be a
+        number, and a number here reads as a verdict.
+        """
+        try:
+            rows = self.store.db.query(
+                "SELECT arm, realized FROM shadow_trades WHERE desk = ? "
+                "AND source = 'shadow' AND closed_at IS NOT NULL", (DESK,)) or []
+        except Exception:  # noqa: BLE001
+            return None
+
+        by_arm: dict = {}
+        for row in rows:
+            by_arm.setdefault(str(row["arm"]), []).append(float(row["realized"] or 0))
+        sizes = [len(v) for v in by_arm.values() if len(v) >= min_trades]
+        if len(sizes) < 2:
+            return None
+        pool = [v for values in by_arm.values() for v in values]
+        if not pool:
+            return None
+
+        rng = random.Random(seed)
+        bests = []
+        for _ in range(max(1, int(iterations))):
+            deal = pool[:]
+            rng.shuffle(deal)
+            at, best = 0, None
+            for n in sizes:
+                chunk = deal[at:at + n]
+                at += n
+                if not chunk:
+                    continue
+                mean = sum(chunk) / len(chunk)
+                if best is None or mean > best:
+                    best = mean
+            if best is not None:
+                bests.append(best)
+        if not bests:
+            return None
+        bests.sort()
+        return {
+            "arms": len(sizes),
+            "iterations": len(bests),
+            "median": bests[len(bests) // 2],
+            "p95": bests[int(0.95 * (len(bests) - 1))],
+            "max": bests[-1],
+        }
+
+    def adopt_best(self, min_trades: int = 20, iterations: int = 200,
+                   seed: int = 0) -> Optional[dict]:
         """Promote the winning arm, but only once it has earned the right.
 
-        `min_trades` is the guard that stops this being a random walk. Without
-        it the desk would chase whichever neighbour got lucky on its first
-        trade, which is not learning — it is drift with a leaderboard.
+        Two guards, and they answer different questions.
+
+        `min_trades` is the guard on one arm's sample. Without it the desk
+        would chase whichever neighbour got lucky on its first trade, which is
+        not learning — it is drift with a leaderboard.
+
+        **The max-statistic null is the guard on the search itself**, and it
+        was missing. The desk grades `TRADE_SHADOW_ARMS` neighbours every bar
+        and adopts the top one, so the winner is the maximum over the cohort,
+        and the maximum of many noisy means is positive almost every time.
+        A winner now has to clear the 95th percentile of where the best arm
+        lands when the arms are pure noise; otherwise it is the best of N and
+        nothing more, and the desk says so rather than promoting it.
+
+        Refusing when the null cannot be computed is deliberate. An
+        unmeasurable search is not a passed one.
         """
         board = [r for r in self.leaderboard() if r["n"] >= min_trades]
         if len(board) < 2:
@@ -552,7 +677,15 @@ class ShadowDesk:
         best = board[0]
         if best["arm"] == "live":
             return None
-        return best
+
+        null = self.max_statistic_null(min_trades=min_trades,
+                                       iterations=iterations, seed=seed)
+        if null is None:
+            return None
+        if float(best["mean"]) <= null["p95"]:
+            return None
+        return {**best, "null_p95": null["p95"], "null_median": null["median"],
+                "null_iterations": null["iterations"]}
 
     def record(self, source: str = "shadow") -> dict:
         """What this desk made, and what the real account made, side by side."""

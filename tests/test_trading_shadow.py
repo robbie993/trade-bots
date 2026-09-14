@@ -290,3 +290,121 @@ def test_a_whole_chain_of_stale_quotes_is_refused_not_traded():
     assert [q for q in chain if q.is_fresh()] == [], (
         "a weekend chain must leave nothing to trade"
     )
+
+
+# =========================================================================
+# the cohort has to survive its own bar
+# =========================================================================
+def test_the_same_arms_are_graded_on_every_bar():
+    """The bug that made the whole desk unable to conclude anything.
+
+    `arms()` seeded each mutant from the *bar*, and the mutated genes are
+    continuous floats, so every bar produced a new set of genomes and
+    therefore a new set of names. Measured on the live desk 2026-09-14: **517
+    distinct arms over 183 bars, exactly one of which had ever appeared on
+    more than one bar.** `adopt_best(min_trades=20)` was unreachable by
+    construction — no arm survives long enough to reach twenty trades — so the
+    desk opened 644 positions across thirteen days and could never be allowed
+    to learn from any of them.
+    """
+    desk = _desk()
+    first = set(desk.arms("2026-09-01T14:30:00Z"))
+    later = set(desk.arms("2026-09-08T19:45:00Z"))
+    assert first == later, "the cohort changed between bars, so no arm can accumulate"
+    assert len(first) > 1, "a cohort of one grades nothing"
+
+
+def test_a_new_incumbent_gets_new_neighbours():
+    """The cohort is pinned to the incumbent, not frozen forever. When the
+    live genome moves, its neighbourhood should move with it — otherwise the
+    desk keeps grading the neighbours of a genome it no longer runs."""
+    desk = _desk()
+    before = set(desk.arms("2026-09-01T14:30:00Z"))
+    desk.genome = {**desk.genome, "shadow_strike_sd": 2.25}
+    after = set(desk.arms("2026-09-01T14:30:00Z"))
+    assert before != after
+
+
+# =========================================================================
+# the max-of-N guard
+# =========================================================================
+class _FakeDb:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def query(self, sql, params=None):
+        return self._rows
+
+
+class _FakeStore:
+    def __init__(self, rows):
+        self.db = _FakeDb(rows)
+
+
+def _desk_with(rows) -> ShadowDesk:
+    desk = _desk()
+    desk.store = _FakeStore(rows)
+    return desk
+
+
+def _rows(per_arm):
+    out = []
+    for arm, values in per_arm.items():
+        for v in values:
+            out.append({"arm": arm, "realized": v})
+    return out
+
+
+def test_the_null_holds_each_arms_trade_count_fixed():
+    """An arm with three trades has a wilder mean than one with forty.
+    Reshuffling the counts would compare the real leaderboard against a null
+    with a different amount of luck available in it."""
+    desk = _desk_with(_rows({"a": [1.0] * 25, "b": [-1.0] * 25, "c": [0.5] * 30}))
+    null = desk.max_statistic_null(min_trades=20, iterations=50, seed=1)
+    assert null is not None
+    assert null["arms"] == 3
+    assert null["iterations"] == 50
+    assert null["median"] <= null["p95"] <= null["max"]
+
+
+def test_a_winner_that_is_only_the_best_of_n_is_refused():
+    """Pure noise, many arms. Somebody always wins; nobody has an edge."""
+    import random as _r
+
+    rng = _r.Random(4)
+    per_arm = {f"arm{i}": [rng.gauss(0, 50) for _ in range(25)] for i in range(12)}
+    desk = _desk_with(_rows(per_arm))
+    # The leaderboard will happily name a winner...
+    board = desk.leaderboard()
+    assert board and board[0]["mean"] != 0
+    # ...and the null says it is what the best of twelve noisy arms looks like.
+    assert desk.adopt_best(min_trades=20, iterations=200, seed=2) is None
+
+
+def test_a_genuine_edge_still_clears_the_null():
+    """The guard must not be unfalsifiable. One arm that really is better
+    than the rest has to survive it."""
+    import random as _r
+
+    rng = _r.Random(5)
+    per_arm = {f"arm{i}": [rng.gauss(0, 20) for _ in range(30)] for i in range(6)}
+    per_arm["winner"] = [rng.gauss(400, 20) for _ in range(30)]
+    desk = _desk_with(_rows(per_arm))
+    adopted = desk.adopt_best(min_trades=20, iterations=200, seed=3)
+    assert adopted is not None and adopted["arm"] == "winner"
+    assert adopted["mean"] > adopted["null_p95"]
+
+
+def test_a_null_that_cannot_be_computed_refuses_rather_than_passes():
+    """An unmeasurable search is not a passed one."""
+    desk = _desk_with(_rows({"a": [10.0] * 25}))     # one qualifying arm only
+    assert desk.max_statistic_null(min_trades=20, iterations=50, seed=1) is None
+    assert desk.adopt_best(min_trades=20) is None
+    assert _desk_with([]).max_statistic_null(min_trades=20) is None
+
+
+def test_the_null_is_deterministic_for_a_seed():
+    desk = _desk_with(_rows({"a": [1.0] * 25, "b": [2.0] * 25, "c": [3.0] * 25}))
+    a = desk.max_statistic_null(min_trades=20, iterations=60, seed=9)
+    b = desk.max_statistic_null(min_trades=20, iterations=60, seed=9)
+    assert a == b
