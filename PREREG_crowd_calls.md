@@ -106,6 +106,54 @@ live order. A scanner informs a decision and never makes one
 records "No scanner shipped on purpose" as a deliberate choice rather than an
 oversight.
 
+## Status — attempted 2026-09-14, could not be run
+
+**No criterion below has been changed, because no number was ever seen.** This
+records an attempt that got as far as the data and stopped there.
+
+The source this document fixes in advance — `RedditSource`, "the keyless public
+JSON endpoint" — **returns HTTP 403 to every request**, on every subreddit
+tried:
+
+```
+reddit:wallstreetbets     0 stories   HTTP 403
+reddit:stocks             0 stories   HTTP 403
+reddit:CryptoCurrency     0 stories   HTTP 403
+reddit:dogecoin           0 stories   HTTP 403
+yahoo-finance            50 stories   ok
+```
+
+Not a TLS fault: `_get` uses the shared certifi context, `verify_mode=2`, and
+the Yahoo feed over the same path returns 50 stories. Reddit no longer serves
+anonymous JSON to this client.
+
+Nor can the test be run retrospectively. **There is no stored corpus.**
+`news.py` persists derived per-symbol scores, never raw posts, and the
+`signals` table holds no Reddit rows at all — the four memecoin symbols carry
+only `example`-publisher data, which is synthetic. So criterion 5 (≥30 bars
+with a call, ≥100 calls) is not merely unmet, it is unreachable: the number of
+obtainable calls is zero.
+
+**This is a blocked experiment, not a null.** A null requires a measurement.
+Recorded here in the same words as the rest of the file, because "we ran it and
+found nothing" and "we could not run it" are different claims and the second
+one decays into the first if nobody writes it down.
+
+Unblocking it needs a decision, not work: an authenticated Reddit client, a
+different venue, or a forward collection period against a source that answers.
+Note also that this design implies forward collection — "a post is assigned to
+the bar it was fetched on" only makes sense while fetching — and the document
+never says for how long. That should be fixed here before any arm runs.
+
+### Collateral, found on the way
+
+The same 403 means **two of the village's three live news sources are dead**.
+`build_sources()` defaults to `reddit:wallstreetbets`, `reddit:stocks` and
+Yahoo RSS; the news desk has been running on Yahoo alone. It is *reported* —
+every tick writes `news source quiet — reddit:wallstreetbets: HTTP 403` — so
+this is visible-but-unread rather than silent. The word "quiet" was doing too
+much work for an HTTP error and has been changed.
+
 ## Known limits, stated before the result
 
 * **Reddit is not the crowd.** It is one venue, English-language, with its own

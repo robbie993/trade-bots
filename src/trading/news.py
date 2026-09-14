@@ -462,7 +462,18 @@ class NewsDesk:
                 "source(s), none naming a symbol this village trades"
             )
         for failure in digest.sources_failed[:3]:
-            notes.append(f"news source quiet — {failure}")
+            # "Quiet" is the right word for a source that answered and had
+            # nothing to say, and the wrong one for a source that refused to
+            # answer. Both Reddit sources have returned HTTP 403 to every
+            # request since at least 2026-09-14 — the village's news desk has
+            # been running on Yahoo alone — and a line reading "news source
+            # quiet" is precisely how that goes unread for a month. An error
+            # code is a fault; say so.
+            broken = any(mark in failure for mark in ("HTTP ", "Error", "error"))
+            notes.append(
+                f"news source FAILING — {failure}" if broken
+                else f"news source quiet — {failure}"
+            )
         return notes
 
 
