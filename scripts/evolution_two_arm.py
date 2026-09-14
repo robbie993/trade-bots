@@ -60,7 +60,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config import Config                       # noqa: E402
 from src.db.connection import Database              # noqa: E402
-from src.trading import brain                       # noqa: E402
 from src.trading.brain import evolver as evolver_mod  # noqa: E402
 from src.trading.config import TradingConfig        # noqa: E402
 from src.trading.ecosystem import Ecosystem         # noqa: E402
@@ -128,32 +127,50 @@ def assess(label: str, cohorts: list) -> dict:
             "cohorts": len(cohorts)}
 
 
-def main() -> int:
-    app_config = Config(database_url=os.environ["DATABASE_URL"])
+def build(path: str):
+    """One ecosystem on its own snapshot copy.
+
+    **Each arm needs its own database, and the first version of this script did
+    not give it one.** `evolve` persists adopted genomes, so running arm A and
+    then pointing a second `Ecosystem` at the same file starts arm B from
+    firms that arm A has already mutated through six generations. The comment
+    on that line read "fresh firms", which it was not — the object was fresh
+    and the data was not. Arm B was measuring a different and already-evolved
+    population, so its +0.3320 was not comparable with arm A's +0.1203 and the
+    "both arms carry information" verdict rested on it.
+    """
+    import shutil
+
+    source = f"{SCRATCH}/evo.db"
+    if os.path.abspath(path) != os.path.abspath(source):
+        shutil.copyfile(source, path)
+    app_config = Config(database_url=f"sqlite:///{path}")
     eco = Ecosystem(Database.from_url(app_config.database_url),
                     TradingConfig(), app_config)
     firms = [f for f in eco.store.firms()
              if not f.is_killed and float(f.allocation or 0) >= MIN_ALLOCATION]
+    return eco, firms
+
+
+def main() -> int:
     full = dict(evolver_mod.GENES)
+    eco_a, firms_a = build(f"{SCRATCH}/arm_a.db")
     print("=" * 74)
-    print(f"TWO ARMS — {len(firms)} funded firms, {GENERATIONS} generations each")
+    print(f"TWO ARMS — {len(firms_a)} funded firms, {GENERATIONS} generations each")
+    print("  (each arm runs on its own copy of the snapshot)")
     print("=" * 74)
 
-    print("\nArm A: full vocabulary "
-          f"({len(full)} genes)")
-    arm_a = assess("ARM A — all genes", cohorts_for(eco, firms, GENERATIONS))
+    print(f"\nArm A: full vocabulary ({len(full)} genes)")
+    arm_a = assess("ARM A — all genes", cohorts_for(eco_a, firms_a, GENERATIONS))
 
     # Arm B: same everything, mutation restricted to the four live genes.
     restricted = {k: v for k, v in full.items() if k in LIVE_GENES}
     evolver_mod.GENES = restricted
     try:
         print(f"\nArm B: live genes only ({', '.join(LIVE_GENES)})")
-        # fresh firms: arm A mutated them in the snapshot
-        eco2 = Ecosystem(Database.from_url(app_config.database_url),
-                         TradingConfig(), app_config)
-        firms2 = [f for f in eco2.store.firms()
-                  if not f.is_killed and float(f.allocation or 0) >= MIN_ALLOCATION]
-        arm_b = assess("ARM B — four live genes", cohorts_for(eco2, firms2, GENERATIONS))
+        eco_b, firms_b = build(f"{SCRATCH}/arm_b.db")
+        arm_b = assess("ARM B — four live genes",
+                       cohorts_for(eco_b, firms_b, GENERATIONS))
     finally:
         evolver_mod.GENES = full
 
