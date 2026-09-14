@@ -395,6 +395,45 @@ def read_the_news(sources: Sequence, symbols: Sequence[str],
     return digest
 
 
+def DEFAULT_SOURCES() -> list:
+    """The free, keyless sources that actually answer.
+
+    **Both Reddit sources were dead and the desk did not stop.** `RedditSource`
+    hits `reddit.com/r/<sub>/hot.json`, documented as a public endpoint, and it
+    has been returning **HTTP 403 to every request** — so `wallstreetbets` and
+    `stocks`, two of the three defaults, contributed nothing while the village
+    ran on Yahoo alone. `old.reddit.com` does not rescue it either: that host
+    answers, but with an HTML page rather than JSON, which is worse than a 403
+    because it looks like success to anything counting bytes.
+
+    Reddit is kept in the `reddit:` spec — the parser below still builds one,
+    and it will work the day an authenticated client or a reachable host
+    exists. It is simply not a *default* any more, because a default that
+    cannot answer is a source of silence dressed as coverage.
+
+    **Crypto feeds are here because the village trades crypto.** Measured on
+    the seven-coin universe: the old defaults returned 50 stories and **zero
+    readings**; adding CoinDesk and CoinTelegraph gave 105 stories and a BTC
+    reading drawn from nine of them. Yahoo, CNBC and MarketWatch are equity
+    desks — they do not name a coin often enough to price one.
+
+    Each was checked for a payload that *parses*, not merely for bytes
+    returned. That distinction is what the `old.reddit.com` result cost.
+    """
+    return [
+        # Equities and general market.
+        RssSource("yahoo-finance", "https://finance.yahoo.com/news/rssindex"),
+        RssSource("cnbc-markets",
+                  "https://search.cnbc.com/rs/search/combinedcms/view.xml"
+                  "?partnerId=wrss01&id=20910258"),
+        RssSource("marketwatch",
+                  "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
+        # Crypto, for the desks that trade it.
+        RssSource("coindesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        RssSource("cointelegraph", "https://cointelegraph.com/rss"),
+    ]
+
+
 def build_sources(spec: str = "") -> list:
     """Sources from `TRADE_NEWS_SOURCES`, or a sensible free default.
 
@@ -404,12 +443,7 @@ def build_sources(spec: str = "") -> list:
     """
     spec = (spec or os.environ.get("TRADE_NEWS_SOURCES", "")).strip()
     if not spec:
-        return [
-            RedditSource("wallstreetbets"),
-            RedditSource("stocks"),
-            RssSource("yahoo-finance",
-                      "https://finance.yahoo.com/news/rssindex"),
-        ]
+        return list(DEFAULT_SOURCES())
     out: list = []
     for part in (p.strip() for p in spec.split(",") if p.strip()):
         if part.lower().startswith("reddit:"):
