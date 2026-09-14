@@ -101,9 +101,28 @@ def score(evidence) -> Finding:
 
 
 def performance(evidence) -> Finding:
-    if evidence.return_pct > ZERO:
-        return _for("performance", MEDIUM, f"up {evidence.return_pct}% on capital")
-    return _against("performance", MEDIUM, f"down {evidence.return_pct}% on capital")
+    """Up against *what*. The raise panel's second opinion on performance.
+
+    This read `return_pct > 0` and voted MEDIUM for a raise on the strength of
+    it. Up 1.21% is a reason to add capital only if holding the same universe
+    did worse; if the universe did +30%, the firm lost money in the way that
+    matters and the panel was being told the opposite. It is the same missing
+    benchmark found in the evaluator, the allocator and the promotion gate —
+    this is the fourth place, and the only one where the *council* acts on it
+    without a human.
+
+    Measured before the change: across the 30 rulings where this juror voted,
+    it voted **for 30 times and against none**, because no firm had ever been
+    below zero. It was not a test the panel could fail.
+
+    The `score` juror is already excess-based, so a raise now needs the firm to
+    have beaten its universe twice over rather than once plus a formality.
+    """
+    excess = D(evidence.return_pct) - D(evidence.benchmark_pct)
+    against = f"{evidence.return_pct}% against a benchmark of {evidence.benchmark_pct}%"
+    if excess > ZERO:
+        return _for("performance", MEDIUM, f"beat its universe by {excess}% ({against})")
+    return _against("performance", MEDIUM, f"trailed its universe by {-excess}% ({against})")
 
 
 def drawdown(evidence) -> Finding:

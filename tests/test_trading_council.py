@@ -211,6 +211,65 @@ def test_a_close_call_comes_back_to_a_human(council):
     assert "waits for a human" in ruling.reason
 
 
+# -------------------------------------------------------------------------
+# The `performance` juror. It read `return_pct > 0` and voted MEDIUM for a
+# raise on the strength of it, which is the missing benchmark found in the
+# evaluator, the allocator and the promotion gate — here in the one body that
+# acts on it without a human. Across the 30 stored rulings where it voted, it
+# voted for 30 times and against none: no firm had ever been below zero, so it
+# was not a test the panel could fail.
+#
+# These ask whether a firm that lost to its own universe can still collect the
+# vote, not whether the juror returns a Finding.
+# -------------------------------------------------------------------------
+def _finding(ruling, juror):
+    return next(f for f in ruling.findings if f.juror == juror)
+
+
+def test_a_firm_that_trails_its_universe_does_not_get_the_performance_vote(council):
+    """Up 6% is not a reason for more capital when holding the same names did +30%."""
+    ruling = council.rule(raise_evidence(return_pct=D("6"), benchmark_pct=D("30")))
+    finding = _finding(ruling, "performance")
+    assert finding.is_against
+    assert "trailed its universe by 24" in finding.reason
+
+
+def test_a_firm_that_beats_its_universe_still_gets_the_vote(council):
+    ruling = council.rule(raise_evidence(return_pct=D("6"), benchmark_pct=D("2")))
+    finding = _finding(ruling, "performance")
+    assert finding.is_for
+    assert "beat its universe by 4" in finding.reason
+
+
+def test_a_losing_firm_that_lost_less_than_its_universe_is_credited(council):
+    """The defensive case, and the one a raw-return juror gets exactly backwards."""
+    ruling = council.rule(raise_evidence(return_pct=D("-2"), benchmark_pct=D("-20")))
+    assert _finding(ruling, "performance").is_for
+
+
+def test_trailing_the_universe_can_cost_a_firm_its_raise(council):
+    """The vote is worth MEDIUM (40) against a margin of 20, so it can decide."""
+    winner = council.rule(raise_evidence(score=D("55"), return_pct=D("6"),
+                                         benchmark_pct=D("2")))
+    trailer = council.rule(raise_evidence(score=D("55"), return_pct=D("6"),
+                                          benchmark_pct=D("30")))
+    assert winner.verdict != trailer.verdict
+    assert trailer.for_weight < winner.for_weight
+
+
+def test_the_benchmark_is_stored_on_the_ruling(council):
+    """A stored ruling has to be re-readable; `evidence_digest` promises it."""
+    ruling = council.rule(raise_evidence(return_pct=D("6"), benchmark_pct=D("30")))
+    assert ruling.evidence.to_dict()["benchmark_pct"] == "30"
+
+
+def test_the_benchmark_changes_the_digest():
+    """Two firms up 6% are not the same fact if their universes differ."""
+    assert digest_of(raise_evidence(return_pct=D("6"), benchmark_pct=D("2"))) != digest_of(
+        raise_evidence(return_pct=D("6"), benchmark_pct=D("30"))
+    )
+
+
 # =========================================================================
 # killing and resuming
 # =========================================================================

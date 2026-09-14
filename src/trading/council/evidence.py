@@ -37,6 +37,12 @@ class CouncilEvidence:
     closed_trades: int = 0
     score: Decimal = ZERO
     return_pct: Decimal = ZERO
+    # What holding the firm's own universe over the same window returned. The
+    # `performance` juror argues from the difference, and carrying it on the
+    # evidence is what lets a stored ruling be re-read: without it, "up 1.21%"
+    # is not enough to reconstruct why the panel voted the way it did, and the
+    # `evidence_digest` promises exactly that reconstruction.
+    benchmark_pct: Decimal = ZERO
     drawdown_pct: Decimal = ZERO
     win_rate_pct: Decimal = ZERO
     equity: Decimal = ZERO
@@ -131,6 +137,7 @@ def gather(eco, approval, market=None) -> CouncilEvidence:
         evidence.closed_trades = card.closed_trades
         evidence.score = D(card.score)
         evidence.return_pct = D(card.return_pct)
+        evidence.benchmark_pct = D(getattr(card, "benchmark_pct", 0) or 0)
         evidence.drawdown_pct = D(card.drawdown_pct)
         evidence.win_rate_pct = D(card.win_rate_pct)
         evidence.equity = D(card.equity)
