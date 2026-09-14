@@ -209,3 +209,31 @@ also 2 of the 8 firms the evolution re-derivation ran on.
   that was misleading, not the rows.
 - **Confidence at decision:** **Confirmed** — counted from the ledger.
 - **Review date:** if the orphan count changes, the cascade is back.
+
+---
+
+### D-V008 · The conscience is not in the backtest; do not wire it in yet
+- **Date:** 2026-09-14
+- **Question:** Does fitness measure the strategy the village actually runs?
+- **Evidence:** Two `venue.execute` call sites exist. The live one is gated by
+  `heart.consider`; `backtest.py:255` is not, and a backtest never sets
+  `ethics_verdict`. The risk manager *is* applied in both (it lives inside
+  `firm.propose`). Measured over 57,247 proposals: 7,478 passed risk, and the
+  conscience blocked **5,276 of those** — the backtester executes 7,478 where
+  the live village executes 2,202. **The conscience removes 70.6% of what the
+  backtest trades**, and the blocks are overwhelmingly `liberty` (order too
+  large against typical daily volume).
+- **Decision:** Record it. **Do not wire the conscience into the backtester.**
+- **Reason:** Two reasons, and the second is the stronger. First, it would
+  change every fitness number in the system and require `MEASUREMENT_EPOCH` to
+  go to 3, discarding the epoch-2 data gathered today — the first clean data
+  the village has ever had. Second, it should not be done on the same day the
+  selection rule was shown to carry no information: making fitness more
+  faithful is only worth the disruption if fitness is being used to choose
+  something, and right now it demonstrably is not.
+- **Confidence at decision:** **Confirmed** for the gap and its size — counted
+  from the ledger, and the two call sites were enumerated rather than assumed.
+  **Observed** for the claim that the bias flatters: the blocked trades are
+  illiquid by construction, but their counterfactual P&L was not computed.
+- **Review date:** before the next attempt to improve evolution, and before any
+  firm becomes a promotion candidate. Whichever comes first.
