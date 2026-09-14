@@ -334,6 +334,12 @@ class DataConfig:
     # fills at mid for free is a backtest that always wins.
     slippage_bps: Decimal = field(default_factory=lambda: _env_decimal("TRADE_SLIPPAGE_BPS", "5"))
     fee_bps: Decimal = field(default_factory=lambda: _env_decimal("TRADE_FEE_BPS", "2"))
+    # What idle cash earns, annualised, in percent. The second half of the
+    # fitness hurdle: a genome has to beat both holding its own universe and
+    # doing nothing at all. Zero by default, which makes "beat cash" read "at
+    # minimum, make money" — the same conservative default the hive uses.
+    cash_yield_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_CASH_YIELD_PCT", "0"))
 
 
 @dataclass(frozen=True)

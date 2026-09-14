@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
-from src.money import D
+from src.money import D, ZERO
 from src.trading.backtest import Backtester
 from src.trading.brain.evolver import BASE_GENOME, GENES, Evolver
 from src.trading.brain.learning import Learner, Lesson
@@ -166,6 +166,131 @@ def test_fitness_penalises_drawdown(feed):
     calm = BacktestResult(firm_key="a", return_pct=D("10"), max_drawdown_pct=D("2"), closed_trades=20)
     wild = BacktestResult(firm_key="b", return_pct=D("10"), max_drawdown_pct=D("40"), closed_trades=20)
     assert calm.fitness > wild.fitness
+
+
+# =========================================================================
+# the hurdle — was it worth doing, not merely did it go up
+# =========================================================================
+def test_a_firm_that_loses_to_its_own_universe_scores_negative(feed):
+    """The gap this closes.
+
+    `return_pct - maxDD/2` scored a firm that made +0.5% while the thing it
+    traded made +10% as a *positive* result, and the evolver selected for it.
+    Every fitness this repository reported measured "did it go up", never "was
+    it worth doing".
+    """
+    from src.trading.backtest import BacktestResult
+
+    lagging = BacktestResult(
+        firm_key="a", return_pct=D("0.5"), max_drawdown_pct=ZERO,
+        closed_trades=40, benchmark_pct=D("10"),
+    )
+    assert lagging.return_pct > 0
+    assert lagging.excess_pct == D("-9.50")
+    assert lagging.fitness < 0
+
+
+def test_both_hurdles_not_either(feed):
+    """Taken from hive_mind/lock.py:670 — beating the index alone is cleared
+    by sitting in cash through a falling market, and beating cash alone was
+    never enough to justify the risk of being here."""
+    from src.trading.backtest import BacktestResult
+
+    # Beat a falling universe, still lost money. Cash is the binding hurdle.
+    beat_the_market_lost_money = BacktestResult(
+        firm_key="a", return_pct=D("-5"), max_drawdown_pct=ZERO,
+        closed_trades=40, benchmark_pct=D("-20"), cash_hurdle_pct=ZERO,
+    )
+    assert beat_the_market_lost_money.hurdle_pct == ZERO
+    assert beat_the_market_lost_money.fitness < 0
+
+    # Beat cash, lost to the universe. Now the benchmark is the binding one.
+    made_money_lost_to_the_market = BacktestResult(
+        firm_key="b", return_pct=D("5"), max_drawdown_pct=ZERO,
+        closed_trades=40, benchmark_pct=D("20"), cash_hurdle_pct=ZERO,
+    )
+    assert made_money_lost_to_the_market.hurdle_pct == D("20")
+    assert made_money_lost_to_the_market.fitness < 0
+
+    # Clearing both is the only way through.
+    cleared = BacktestResult(
+        firm_key="c", return_pct=D("25"), max_drawdown_pct=ZERO,
+        closed_trades=40, benchmark_pct=D("20"), cash_hurdle_pct=D("2"),
+    )
+    assert cleared.fitness > 0
+
+
+def test_an_unpriceable_benchmark_falls_back_to_cash_and_never_to_zero(feed):
+    """A benchmark nobody could measure must not quietly become a benchmark of
+    nothing — that is the bug the hurdle exists to close, reintroduced by the
+    back door."""
+    from src.trading.backtest import BacktestResult
+
+    result = BacktestResult(
+        firm_key="a", return_pct=D("3"), max_drawdown_pct=ZERO, closed_trades=40,
+        benchmark_pct=None, cash_hurdle_pct=D("4"), hurdle_note="could not price WIF",
+    )
+    assert result.hurdle_pct == D("4")        # cash, not zero
+    assert result.fitness < 0
+    assert "could not price" in result.summary()
+
+
+def test_a_universe_that_only_partly_prices_is_refused_not_averaged(feed, trading_config):
+    """Pricing two legs of four and calling it the benchmark is a survivorship
+    filter, and it hands the genome a lower bar than the thing it traded."""
+    from src.trading.backtest import Backtester
+
+    bt = Backtester(trading_config)
+    pct, note = bt._hold_pct({"SPY": D(100)}, {"SPY": D(110)}, ["SPY", "GHOST"])
+    assert pct is None
+    assert "GHOST" in note
+
+
+def test_two_results_with_different_hurdles_refuse_to_be_subtracted(feed):
+    """One scored against a priced benchmark and one against the cash
+    fallback are measured off different bars; the difference would read the
+    missing benchmark as performance."""
+    import pytest
+
+    from src.trading.backtest import BacktestResult
+
+    priced = BacktestResult(firm_key="a", bars=100, return_pct=D("5"),
+                            closed_trades=40, benchmark_pct=D("3"))
+    unpriced = BacktestResult(firm_key="b", bars=100, return_pct=D("5"),
+                              closed_trades=40, benchmark_pct=None)
+    assert not priced.comparable_with(unpriced)
+    with pytest.raises(ValueError, match="cash fallback"):
+        priced.minus(unpriced)
+    # Same provenance still subtracts fine.
+    other = BacktestResult(firm_key="c", bars=100, return_pct=D("9"),
+                           closed_trades=40, benchmark_pct=D("3"))
+    assert other.minus(priced) > 0
+
+
+def test_the_benchmark_is_the_firms_own_universe_not_spy(feed, trading_config):
+    """A crypto desk that made 5% while BTC made 50% is a bad genome, and
+    measuring it against an equity index would answer a question nobody
+    asked."""
+    from src.trading.backtest import Backtester
+
+    bt = Backtester(trading_config)
+    result = bt.run("crypto", ["BTC-USD"], MarketData(feed, ["BTC-USD"]),
+                    genome=BASE_GENOME)
+    assert result.benchmark_pct is not None, result.hurdle_note
+
+    def move(symbol):
+        """That symbol's own move across the scored window, entry costs and
+        all — the warmup is 90 bars, so the hold starts at bar 90."""
+        closes = MarketData(feed, [symbol]).closes(symbol)
+        entry = closes[90] * (D(1) + D(trading_config.data.slippage_bps) / D(10_000))
+        shares = (D(1) - D(trading_config.data.fee_bps) / D(10_000)) / entry
+        return (shares * closes[-1] - D(1)) * D(100)
+
+    btc, spy = move("BTC-USD"), move("SPY")
+    assert abs(result.benchmark_pct - btc) < D("0.01"), "it did not hold BTC"
+    # And the two really are different, or the test proves nothing.
+    assert abs(btc - spy) > D(5)
+    assert abs(result.benchmark_pct - btc) < abs(result.benchmark_pct - spy)
 
 
 # =========================================================================

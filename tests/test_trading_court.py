@@ -179,6 +179,35 @@ def test_backtest_jurors_abstain_without_a_backtest(tmp_path, trading_config):
         assert findings[juror].abstained
 
 
+def test_the_return_juror_argues_from_excess_not_from_the_raw_return(trading_config):
+    """A submission that made +8% while the universe it traded made +54% used
+    to arrive at the bench with a strong argument *for* the defence."""
+    from src.trading.backtest import BacktestResult
+
+    jury = Jury(trading_config)
+    lagging = BacktestResult(firm_key="x", bars=100, return_pct=D("8"),
+                             closed_trades=40, benchmark_pct=D("54"))
+    finding = jury._return(lagging)
+    assert finding.is_against, "losing to its own universe by 46% read as a win"
+    assert "lost to its hurdle" in finding.reason
+
+    beating = BacktestResult(firm_key="y", bars=100, return_pct=D("60"),
+                             closed_trades=40, benchmark_pct=D("54"))
+    assert jury._return(beating).is_for
+
+
+def test_the_return_juror_says_so_when_there_is_no_benchmark(trading_config):
+    """Falling back to the cash hurdle is a real weakening of the argument and
+    the finding has to carry it, or a reader cannot tell the two apart."""
+    from src.trading.backtest import BacktestResult
+
+    result = BacktestResult(firm_key="x", bars=100, return_pct=D("8"),
+                            closed_trades=40, benchmark_pct=None,
+                            hurdle_note="could not price WIF")
+    finding = Jury(trading_config)._return(result)
+    assert "no benchmark" in finding.reason and "WIF" in finding.reason
+
+
 def test_the_determinism_juror_catches_disagreement(trading_config, feed):
     from src.trading.backtest import BacktestResult
 

@@ -46,15 +46,66 @@ class BacktestResult:
     fees: Decimal = ZERO
     equity_curve: list = field(default_factory=list)
     bars: int = 0
+    #: What buying and holding this firm's own universe returned over exactly
+    #: these bars, equal-weighted. `None` when it could not be priced, which
+    #: is a refusal rather than a zero — see `hurdle_pct`.
+    benchmark_pct: Optional[Decimal] = None
+    #: What idle cash earned over the same bars. Always computable, because it
+    #: is a function of the bar count and a rate, so the hurdle degrades to
+    #: this rather than to nothing when the benchmark cannot be priced.
+    cash_hurdle_pct: Decimal = ZERO
+    #: Why the benchmark leg is missing, when it is. Empty when it is present.
+    hurdle_note: str = ""
+
+    @property
+    def hurdle_pct(self) -> Decimal:
+        """The bar this genome had to clear to have been worth running.
+
+        **Both hurdles, not either.** Taken from
+        `/Users/robbie/trade-bots-hive/hive_mind/lock.py:670`, which put it
+        best: *"Beating the index alone is cleared by sitting in cash through
+        a falling market; beating cash alone was never enough to justify the
+        risk of being here."* `max` is what makes it both — clearing the
+        higher of the two means clearing each.
+
+        The benchmark is buy-and-hold of **the firm's own universe**, not SPY.
+        A crypto desk that made 5% while BTC made 50% is a bad genome, and
+        measuring it against an equity index would answer a question nobody
+        asked. `benchmark.py` compares the *village* to SPY, which is a
+        different question — whether any of this beats indexing — and it keeps
+        its own default.
+
+        When the benchmark cannot be priced this falls back to the cash
+        hurdle and `hurdle_note` says so. That is a real weakening and it is
+        recorded rather than hidden; what it must never do is fall back to
+        zero, which is the bug this whole property exists to close.
+        """
+        cash = D(self.cash_hurdle_pct)
+        if self.benchmark_pct is None:
+            return cash
+        return max(cash, D(self.benchmark_pct))
+
+    @property
+    def excess_pct(self) -> Decimal:
+        """Return over the hurdle. The number that answers the question."""
+        return percent(D(self.return_pct) - self.hurdle_pct)
 
     @property
     def fitness(self) -> Decimal:
         """One number the evolver can sort on.
 
-        Return, penalised by the drawdown it took to get there and by having
-        too few trades to mean anything. A genome that made 40% in three
-        trades is not fitter than one that made 25% in ninety, and this is
-        where that judgement is written down.
+        Excess return over the hurdle, penalised by the drawdown it took to
+        get there and by having too few trades to mean anything. A genome that
+        made 40% in three trades is not fitter than one that made 25% in
+        ninety, and this is where that judgement is written down.
+
+        **It used to have no hurdle at all**, and that was the single largest
+        correctness gap in the village: `return_pct - maxDD/2` scores a firm
+        that returned +0.5% while its own universe returned +10% as a
+        *positive* result, and the evolver would happily select for it
+        generation after generation. Every fitness number this repository has
+        ever reported was a measure of "did it go up", never "was it worth
+        doing".
 
         **Only ever compare this against another fitness measured over the
         same number of bars.** It is a window-sized quantity, not a rate:
@@ -70,7 +121,7 @@ class BacktestResult:
         hour. Use `comparable_with` before trusting any difference, and rank
         within a window rather than comparing levels across two.
         """
-        base = D(self.return_pct) - D(self.max_drawdown_pct) / D(2)
+        base = self.excess_pct - D(self.max_drawdown_pct) / D(2)
         if self.closed_trades < 10:
             # Not a penalty for being new — a refusal to reward a small sample.
             base = base * D(self.closed_trades) / D(10)
@@ -85,24 +136,39 @@ class BacktestResult:
         window while drawdown scales nearer its square root, so no single
         divisor makes two windows comparable, and offering one would hide the
         problem behind a number that looks principled.
+
+        The hurdles must match too. One genome scored against a priced
+        benchmark and another against the cash fallback are measured off
+        different bars, and subtracting them would read the missing benchmark
+        as performance.
         """
-        return self.bars == other.bars and self.bars > 0
+        return (self.bars == other.bars and self.bars > 0
+                and (self.benchmark_pct is None) == (other.benchmark_pct is None))
 
     def minus(self, other: "BacktestResult") -> Decimal:
         """`self.fitness - other.fitness`, refusing mismatched windows."""
-        if not self.comparable_with(other):
+        if self.bars != other.bars or self.bars <= 0:
             raise ValueError(
                 f"fitness over {self.bars} bars is not comparable with "
                 f"{other.bars} bars — max drawdown grows with the window, so "
                 f"the difference would mostly be length. Rank within a window "
                 f"instead."
             )
+        if not self.comparable_with(other):
+            raise ValueError(
+                "one of these was scored against a priced benchmark and the "
+                "other against the cash fallback, so the difference would "
+                "partly be the missing benchmark rather than the genome"
+            )
         return self.fitness - other.fitness
 
     def summary(self) -> str:
+        bench = (f"hold {self.benchmark_pct}%" if self.benchmark_pct is not None
+                 else f"no benchmark ({self.hurdle_note or 'unpriced'})")
         return (
             f"{self.firm_key}: {fmt_money(self.start_capital)} -> "
             f"{fmt_money(self.final_equity)} ({self.return_pct}%), "
+            f"vs {bench} = {self.excess_pct}% excess, "
             f"max drawdown {self.max_drawdown_pct}%, {self.closed_trades} closed trades, "
             f"win rate {self.win_rate_pct}%, sharpe {self.sharpe}, "
             f"fees {fmt_money(self.fees)}, fitness {self.fitness}"
@@ -165,8 +231,23 @@ class Backtester:
         fees = ZERO
         fill_count = 0
 
+        # Buy-and-hold of this firm's own universe, entered at the first bar
+        # it was scored on and never sold. Read through `market.mark`, the
+        # same price source the firm's own fills cross, so the two sides of
+        # the comparison cannot disagree about what a bar was worth.
+        entry_marks: dict = {}
+        exit_marks: dict = {}
+
         for index in range(first, last):
             market.seek(index)
+            if index == first:
+                for symbol in record.universe:
+                    try:
+                        mark = D(market.mark(symbol))
+                    except Exception:  # noqa: BLE001 - an unpriced leg is a refusal
+                        continue
+                    if mark > 0:
+                        entry_marks[symbol] = mark
             open_positions = [p for p in positions.values() if p.is_open]
             for proposal in firm.propose(market, open_positions):
                 if not proposal.is_executable:
@@ -198,6 +279,16 @@ class Backtester:
             curve.append(equity)
             record.high_water_mark = max(record.high_water_mark, equity)
 
+        for symbol in entry_marks:
+            try:
+                mark = D(market.mark(symbol))
+            except Exception:  # noqa: BLE001
+                continue
+            if mark > 0:
+                exit_marks[symbol] = mark
+
+        benchmark_pct, hurdle_note = self._hold_pct(entry_marks, exit_marks,
+                                                    record.universe)
         final_equity = curve[-1] if curve else start_capital
         return BacktestResult(
             firm_key=firm_key,
@@ -217,7 +308,61 @@ class Backtester:
             fees=fees,
             equity_curve=curve,
             bars=len(curve),
+            benchmark_pct=benchmark_pct,
+            cash_hurdle_pct=self._cash_pct(len(curve)),
+            hurdle_note=hurdle_note,
         )
+
+    # -- the hurdles -------------------------------------------------------
+    def _hold_pct(self, entry: dict, exit_: dict, universe) -> tuple:
+        """Equal-weighted buy-and-hold of the firm's own universe, in percent.
+
+        Returns ``(pct, note)``; ``pct`` is ``None`` when the benchmark cannot
+        be priced and ``note`` says why. A benchmark nobody could measure must
+        not quietly become a benchmark of zero — that is the same refusal
+        `benchmark.py` makes, for the same reason.
+
+        **Every leg must price, not merely some of them.** A universe of four
+        where only the two that rose could be priced is not a benchmark, it is
+        a survivorship filter, and it would hand the genome a hurdle lower
+        than the thing it actually traded.
+
+        Entry crosses the spread and pays a fee, exactly as the firm's own
+        fills do. There is no exit cost, because the alternative being modelled
+        is that you bought it and are still holding it — charging an exit the
+        firm has not paid would tilt the comparison the firm's way.
+        """
+        wanted = [s for s in (universe or ())]
+        if not wanted:
+            return None, "the firm has no universe to hold"
+        missing = [s for s in wanted if s not in entry or s not in exit_]
+        if missing:
+            return None, f"could not price {', '.join(sorted(missing)[:4])}"
+
+        slip = D(self.config.data.slippage_bps) / D(10_000)
+        fee = D(self.config.data.fee_bps) / D(10_000)
+        legs = []
+        for symbol in wanted:
+            paid = entry[symbol] * (D(1) + slip)
+            if paid <= 0:
+                return None, f"{symbol} had no usable entry price"
+            shares = (D(1) - fee) / paid
+            legs.append(shares * exit_[symbol] - D(1))
+        return percent(sum(legs, ZERO) / D(len(legs)) * D(100)), ""
+
+    def _cash_pct(self, bars: int) -> Decimal:
+        """What idle cash earned over `bars`, compounded per bar.
+
+        Zero by default, which makes this hurdle read "at minimum, make
+        money". `TRADE_CASH_YIELD_PCT` turns it into a real one. It is a
+        property of the world rather than of the genome, which is why it is a
+        config value and not a gene.
+        """
+        rate = D(self.config.data.cash_yield_pct)
+        if not rate or bars <= 0:
+            return ZERO
+        per_bar = rate / D(100) / self.config.data.resolution.bars_per_year
+        return percent(((D(1) + per_bar) ** int(bars) - D(1)) * D(100))
 
 
 __all__ = ["Backtester", "BacktestResult"]

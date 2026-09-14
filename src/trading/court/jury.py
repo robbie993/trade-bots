@@ -188,15 +188,28 @@ class Jury:
 
     # -- the backtest ------------------------------------------------------
     def _return(self, result) -> Finding:
+        """Excess over the hurdle, never the raw return.
+
+        This juror argued from `return_pct` alone, so a submission that made
+        +8% while the universe it traded made +54% came to the bench with a
+        +24-weight argument *for* the defence. The evolver had the same gap
+        and it is fixed in the same place — `BacktestResult.excess_pct` —
+        so the court and the brain now agree about what a good number is.
+        """
         if result is None:
             return _abstain("return", "not backtested")
-        if result.return_pct > D(5):
-            return _for("return", min(D(60), result.return_pct * D(3)),
-                        f"returned {result.return_pct}% over the sample")
-        if result.return_pct < ZERO:
-            return _against("return", min(D(60), abs(result.return_pct) * D(3)),
-                            f"lost {result.return_pct}% over the sample")
-        return _for("return", 10, f"returned {result.return_pct}% — thin but positive")
+        excess = result.excess_pct
+        against = (f"{result.return_pct}% against a {result.hurdle_pct}% hurdle"
+                   if result.benchmark_pct is not None
+                   else f"{result.return_pct}% (no benchmark: "
+                        f"{result.hurdle_note or 'unpriced'})")
+        if excess > D(5):
+            return _for("return", min(D(60), excess * D(3)),
+                        f"beat its hurdle by {excess}% — {against}")
+        if excess < ZERO:
+            return _against("return", min(D(60), abs(excess) * D(3)),
+                            f"lost to its hurdle by {abs(excess)}% — {against}")
+        return _for("return", 10, f"cleared its hurdle by {excess}% — thin but positive")
 
     def _drawdown(self, result) -> Finding:
         if result is None:
