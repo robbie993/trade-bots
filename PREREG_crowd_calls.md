@@ -181,6 +181,40 @@ better experiment that needs its own prereg. Either is defensible; they are not
 interchangeable, and picking one after seeing a result is the failure this file
 exists to prevent. **Amend here, in writing, before any arm runs.**
 
+## AMENDMENT 1 — the venue, and nothing else
+
+**Written 2026-09-14, and committed before a single arm was run.** The commit
+that adds this paragraph contains no results, which is the only part of
+pre-registration that git can actually enforce. If a later commit changes any
+criterion, that is visible in the history and this document has failed.
+
+**Change:** the source is **StockTwits** (`api.stocktwits.com`, keyless,
+`/streams/symbol/{SYM}.json`, cursor-paged) on DOGE.X, SHIB.X, PEPE.X, WIF.X,
+in place of `RedditSource`. Reddit returns HTTP 403 to every anonymous request
+and has no retrievable corpus; the measurement is otherwise impossible.
+
+**Unchanged — and this is the point of choosing this option:**
+
+- The extractor is still `crowd.extract_calls`, run over StockTwits **message
+  text**. StockTwits' own `entities.sentiment` bull/bear tag is *not* used.
+- All four arms, including arm 2 (`shuffle_symbols`, 500 seeds) and arm 3
+  (mentions) — which only remains a control because the extractor is unchanged.
+- All five criteria, the three horizons, the costs, and the minimum sample.
+
+**Why the tag was rejected despite being the better instrument.** Arm 1 vs arm 3
+exists to ask whether explicit-call extraction beats counting mentions. Against
+a user-declared tag that question is not being asked at all, and arm 3 stops
+being a control. Swapping in a better instrument *and* keeping the arms that
+were designed to test the worse one would make the result unreadable. A
+declared-sentiment experiment is worth running and needs its own document.
+
+**A limit this introduces, stated now rather than after.** StockTwits is a
+retail equities-and-crypto forum with its own demographics and its own bots,
+and it is not Reddit. The "known limits" below were written about Reddit; the
+deletion bias, the sub-bar timestamp smearing and the word-matcher weaknesses
+all still apply, and **the venue-specific population claim now reads "a null
+here is a null about StockTwits."**
+
 ### Collateral, found on the way
 
 The same 403 means **two of the village's three live news sources are dead**.
