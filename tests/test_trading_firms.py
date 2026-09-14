@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,7 @@ from src.trading.firms.analysts import (
     ANALYSTS,
     MacroAnalyst,
     OnChainAnalyst,
+    ReversionAnalyst,
     SentimentAnalyst,
     TechnicalAnalyst,
     build_analysts,
@@ -21,7 +23,30 @@ from src.trading.firms.researchers import DebateRoom
 from src.trading.firms.risk_manager import RiskManager
 from src.trading.firms.spec import FirmSpec, FirmSpecError, load_firm_specs, parse_simple_yaml
 from src.trading.firms.trader import Trader
-from src.trading.models import FirmRecord, Position, RiskVerdict, Side, Signal
+from src.trading.models import Bar, FirmRecord, Position, RiskVerdict, Side, Signal
+
+
+def _reversion_market(bars):
+    """A `MarketData` over one hand-built OHLC series, for exact reversion cases.
+
+    `bars` is a list of `(open, high, low, close)`. Mirrors the `_md` pattern in
+    `test_trading_stale_and_dust.py` rather than the synthetic feed, because
+    the RSI(2)/IBS conjunction needs specific, known values to test against —
+    a random walk cannot be relied on to land on "both legs oversold".
+    """
+    from src.trading.data.market_data import MarketData
+
+    when = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    series = [
+        Bar(symbol="X", as_of=when, open=D(o), high=D(h), low=D(l), close=D(c), volume=D(1))
+        for o, h, l, c in bars
+    ]
+    md = MarketData.__new__(MarketData)
+    md._cursor = -1
+    md.unpriceable = {}
+    md.symbols = ["X"]
+    md._series = lambda s: series
+    return md
 
 
 # =========================================================================
@@ -61,6 +86,54 @@ def test_the_trend_bias_gene_changes_the_reading(market):
     momentum = TechnicalAnalyst().analyse("SPY", market, {"trend_bias": 100})
     reversion = TechnicalAnalyst().analyse("SPY", market, {"trend_bias": 0})
     assert momentum.score != reversion.score
+
+
+def test_reversion_analyst_turns_bullish_when_both_legs_agree_oversold():
+    # 27 unremarkable bars, then two down closes that drag RSI(2) to 0 and a
+    # final bar whose close sits low in its own range (IBS 0.25 < 0.3).
+    base = [(100, 101, 99, 100)] * 27
+    tail = [(100, 100, 98, 99), (99, 99, 96, 97), (97, 98, 94, 95)]
+    market = _reversion_market(base + tail)
+    signal = ReversionAnalyst().analyse("X", market, {})
+    assert signal.score > 0
+    assert "oversold" in signal.note
+    assert "legs agree" in signal.note
+
+
+def test_reversion_analyst_turns_bearish_when_both_legs_agree_overbought():
+    # Mirror image: two up closes push RSI(2) to 100, and the final bar closes
+    # at its own high (IBS 1.0 > 0.3).
+    base = [(100, 101, 99, 100)] * 27
+    tail = [(100, 102, 100, 101), (101, 104, 101, 103), (103, 105, 90, 105)]
+    market = _reversion_market(base + tail)
+    signal = ReversionAnalyst().analyse("X", market, {})
+    assert signal.score < 0
+    assert "overbought" in signal.note
+    assert "legs agree" in signal.note
+
+
+def test_reversion_analyst_damps_toward_silence_when_legs_disagree():
+    # Same RSI(2)-oversold tail in both cases (two down closes, gap 10 either
+    # way), and an IBS leg of the *same magnitude* (gap 5) on either side of
+    # the threshold — agreeing at 0.25 (< 0.3), disagreeing at 0.35 (> 0.3).
+    # Equal magnitudes isolate the agreement bonus: only the sign differs.
+    base = [(100, 101, 99, 100)] * 27
+    agree_tail = [(100, 100, 98, 99), (99, 99, 96, 97), (97, 98, 94, 95)]
+    disagree_tail = [(100, 100, 98, 99), (99, 99, 96, 97), (97, 100, 90, "93.5")]
+    agreeing = ReversionAnalyst().analyse("X", _reversion_market(base + agree_tail), {})
+    disagreeing = ReversionAnalyst().analyse("X", _reversion_market(base + disagree_tail), {})
+    assert "legs disagree" in disagreeing.note
+    assert disagreeing.confidence < agreeing.confidence
+
+
+def test_the_rsi_entry_gene_changes_the_reversion_reading():
+    base = [(100, 101, 99, 100)] * 27
+    # A middling RSI(2): one up close then one down close.
+    tail = [(100, 101, 99, 100), (100, 102, 100, 102), (102, 103, 100, 101)]
+    market = _reversion_market(base + tail)
+    tight = ReversionAnalyst().analyse("X", market, {"rsi_entry": 5})
+    loose = ReversionAnalyst().analyse("X", market, {"rsi_entry": 90})
+    assert tight.score != loose.score
 
 
 def test_proxy_analysts_label_themselves_as_proxies(market):

@@ -18,7 +18,7 @@ from typing import Optional, Protocol
 
 from ...money import D, ZERO, percent
 from ..data.market_data import MarketData
-from ..indicators import momentum_pct, rsi, sma, volatility_pct, zscore
+from ..indicators import average_range, ibs, momentum_pct, rsi, sma, volatility_pct, zscore
 from ..models import Signal
 
 
@@ -136,6 +136,90 @@ class FundamentalAnalyst:
             score,
             confidence,
             f"{verdict}: {percent(premium_pct)}% vs long-run mean (price-based proxy)",
+        )
+
+
+class ReversionAnalyst:
+    """Short-horizon mean reversion: RSI(2), Internal Bar Strength, and the
+    pullback from a recent high, arbitrated by ``rsi_entry``, ``ibs_entry``
+    and ``pullback_atr``.
+
+    Those three genes are VERITAS's own published parameters — the only
+    strategy in this village with real pre-registered evidence behind it (5/5
+    criteria, p<0.002 against 500 random-entry runs; see
+    ``bots/veritas_reversion.py`` and the sibling repo's ``veritas_bot.py``).
+    Before this seat existed the genes sat in the vocabulary and nothing read
+    them: a submission carrying them was scored by ``TechnicalAnalyst`` and
+    ``FundamentalAnalyst`` alone on whatever those two default to, which is a
+    verdict on a different strategy wearing VERITAS's name.
+
+    Connors' rule is a conjunction, not either leg alone — RSI(2) below
+    threshold *and* IBS below threshold. Loosening that to an OR is the first
+    thing a tuner would try, and exactly what the pre-registration forbids. So
+    the two legs are required to agree before the score commits to a
+    direction; when they disagree the reading collapses toward silence rather
+    than averaging into a conviction neither leg alone earned. The pullback
+    distance is a third, independent confirmation — real, but not required by
+    the published variant that was actually tested.
+    """
+
+    name = "reversion"
+    #: RSI(2) needs 3 closes; the pullback and range legs need 25. 30 leaves
+    #: a small margin rather than sitting exactly on the edge of "computable".
+    minimum_bars = 30
+
+    def analyse(self, symbol: str, market: MarketData, genome: dict) -> Signal:
+        if not market.is_ready(symbol, self.minimum_bars):
+            return _silent(self.name, symbol, self.minimum_bars)
+
+        bars = market.history(symbol, self.minimum_bars)
+        closes = [b.close for b in bars]
+        highs = [b.high for b in bars]
+        lows = [b.low for b in bars]
+
+        rsi2 = rsi(closes, 2)
+        strength = ibs(highs[-1], lows[-1], closes[-1])
+        if rsi2 is None or strength is None:
+            return _silent(self.name, symbol, self.minimum_bars)
+
+        rsi_threshold = _genome(genome, "rsi_entry", 10)
+        ibs_threshold = _genome(genome, "ibs_entry", "0.3")
+        atr_mult = _genome(genome, "pullback_atr", "2.5")
+
+        # Positive means oversold (bullish) on that leg, negative overbought.
+        rsi_gap = rsi_threshold - rsi2
+        ibs_gap = (ibs_threshold - strength) * D(100)
+
+        recent_high = max(highs[-10:])
+        avg_rng = average_range(highs, lows, 25)
+        pullback_gap = ZERO
+        if avg_rng is not None and avg_rng > 0:
+            pullback_gap = recent_high - closes[-1] - atr_mult * avg_rng
+
+        agree = (rsi_gap > 0) == (ibs_gap > 0)
+        if agree:
+            core = (rsi_gap * D(3) + ibs_gap) / D(4)
+        else:
+            # The conjunction did not fire. Damped rather than zeroed: a
+            # near-miss on one leg is not the same as two legs in open
+            # contradiction, and the debate can still see which way this
+            # leaned even though VERITAS itself would not have entered.
+            core = (rsi_gap + ibs_gap) / D(6)
+
+        confirm = _clamp(pullback_gap / D(4)) if avg_rng else ZERO
+        score = _clamp(core + confirm * D("0.25"))
+
+        confidence = _clamp_confidence(
+            (abs(rsi_gap) * D(2) + abs(ibs_gap)) / D(3) + (D(15) if agree else ZERO)
+        )
+        verdict = "oversold" if score > 0 else "overbought" if score < 0 else "neutral"
+        return Signal(
+            self.name,
+            symbol,
+            score,
+            confidence,
+            f"{verdict}: RSI(2) {rsi2} vs {rsi_threshold}, IBS {strength} vs {ibs_threshold}"
+            f"{', legs agree' if agree else ', legs disagree'}",
         )
 
 
@@ -380,6 +464,7 @@ EXCLUSIVE: tuple = ("news", "scribe")
 ANALYSTS: dict = {
     "technical": TechnicalAnalyst,
     "fundamental": FundamentalAnalyst,
+    "reversion": ReversionAnalyst,
     "sentiment": SentimentAnalyst,
     "macro": MacroAnalyst,
     "onchain": OnChainAnalyst,
@@ -391,7 +476,8 @@ ANALYSTS: dict = {
 # What people write when they mean `signals`. Aliases rather than extra entries
 # in ANALYSTS so the error message still lists each seat once.
 ALIASES: dict = {"signal": "signals", "scanner": "signals", "scanners": "signals",
-                 "headlines": "news", "newsdesk": "news"}
+                 "headlines": "news", "newsdesk": "news",
+                 "meanreversion": "reversion", "rsi2": "reversion"}
 
 
 def build_analysts(names, board=None) -> list:
@@ -438,6 +524,7 @@ __all__ = [
     "FundamentalAnalyst",
     "MacroAnalyst",
     "OnChainAnalyst",
+    "ReversionAnalyst",
     "SentimentAnalyst",
     "SignalAnalyst",
     "TechnicalAnalyst",

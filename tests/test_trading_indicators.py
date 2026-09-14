@@ -6,7 +6,9 @@ from decimal import Decimal
 
 from src.money import D
 from src.trading.indicators import (
+    average_range,
     drawdown_pct,
+    ibs,
     max_drawdown_pct,
     momentum_pct,
     rsi,
@@ -94,3 +96,29 @@ def test_win_rate_ignores_flat_trades_and_returns_none_when_empty():
     assert win_rate_pct(series(1, -1, 1, 1)) == D("75.00")
     assert win_rate_pct(series(0, 0)) is None
     assert win_rate_pct([]) is None
+
+
+def test_ibs_places_the_close_within_the_bars_own_range():
+    # Closed at the high: maximum strength.
+    assert ibs(D(110), D(100), D(110)) == D(1)
+    # Closed at the low: minimum strength.
+    assert ibs(D(110), D(100), D(100)) == D(0)
+    # Closed in the middle.
+    assert ibs(D(110), D(100), D(105)) == D("0.5")
+    # No range to place the close within.
+    assert ibs(D(100), D(100), D(100)) is None
+    assert ibs(D(99), D(100), D(99)) is None  # a malformed bar, high < low
+
+
+def test_average_range_mirrors_veritas_bots_avg_rng25():
+    highs = series(102, 104, 103)
+    lows = series(100, 101, 99)
+    # (2 + 3 + 4) / 3
+    assert average_range(highs, lows, 3) == D(3)
+    assert average_range(highs, lows, 5) is None  # not enough bars
+    assert average_range([], [], 0) is None
+
+
+def test_average_range_rejects_an_inverted_bar():
+    # A high below its own low is not data the average should silently eat.
+    assert average_range(series(100), series(105), 1) is None

@@ -79,6 +79,37 @@ def test_evidence_reads_a_yaml_genome(tmp_path):
     assert evidence.universe == ("SPY", "QQQ")
 
 
+def test_evidence_reads_declared_analysts_from_python(tmp_path):
+    path = write(
+        tmp_path,
+        "s.py",
+        "GENOME = {'rsi_entry': 10, 'ibs_entry': 0.3}\n"
+        "UNIVERSE = ['SPY']\n"
+        "ANALYSTS = ('technical', 'reversion')\n",
+    )
+    evidence = gather(path)
+    assert evidence.analysts == ("technical", "reversion")
+
+
+def test_evidence_defaults_to_no_declared_analysts(tmp_path):
+    # A file that never mentions ANALYSTS declares none — the court supplies
+    # DEFAULT_ANALYSTS itself rather than evidence.py guessing at one.
+    evidence = gather(write(tmp_path, "s.py", "GENOME = {'fast_window': 10}\n"))
+    assert evidence.analysts == ()
+
+
+def test_evidence_reads_declared_analysts_from_yaml(tmp_path):
+    body = """
+strategy:
+  universe: [SPY]
+  analysts: [reversion, technical]
+  genome:
+    rsi_entry: 10
+"""
+    evidence = gather(write(tmp_path, "s.yaml", body))
+    assert evidence.analysts == ("reversion", "technical")
+
+
 def test_evidence_flags_dangerous_imports_and_calls(tmp_path):
     evidence = gather(
         write(tmp_path, "s.py", "import socket\nGENOME = {}\ndef f():\n    eval('1')\n")
@@ -214,6 +245,48 @@ def test_a_dangerous_file_is_rejected(tmp_path, court, feed):
     case = court.submit(path, feed=feed)
     assert case.ruling.verdict == REJECT
     assert case.genome_id is None
+
+
+def _analysts_seen(court, monkeypatch):
+    """Spy on `court.backtester.run`, returning the list of `analysts=` kwargs
+    it was called with. The bug this closes: before the reversion seat and
+    `Evidence.analysts`, every submission was backtested with
+    `DEFAULT_ANALYSTS` regardless of what its genome actually needed read.
+    """
+    seen = []
+    original = court.backtester.run
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("analysts"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(court.backtester, "run", spy)
+    return seen
+
+
+def test_docket_backtests_with_the_submissions_own_declared_analysts(
+    tmp_path, court, feed, monkeypatch
+):
+    seen = _analysts_seen(court, monkeypatch)
+    path = write(
+        tmp_path,
+        "veritas_like.py",
+        "GENOME = {'rsi_entry': 10, 'ibs_entry': 0.3, 'pullback_atr': 2.5}\n"
+        "UNIVERSE = ['SPY']\n"
+        "ANALYSTS = ('reversion',)\n",
+    )
+    court.submit(path, feed=feed)
+    assert seen and all(a == ("reversion",) for a in seen)
+
+
+def test_docket_falls_back_to_default_analysts_when_none_declared(
+    tmp_path, court, feed, monkeypatch
+):
+    from src.trading.firms.spec import DEFAULT_ANALYSTS
+
+    seen = _analysts_seen(court, monkeypatch)
+    court.submit(write(tmp_path, "good.yaml", GOOD_YAML), feed=feed)
+    assert seen and all(a == DEFAULT_ANALYSTS for a in seen)
 
 
 def test_a_profitable_strategy_is_admitted_as_an_unselected_candidate(

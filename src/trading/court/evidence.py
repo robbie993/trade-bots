@@ -50,6 +50,16 @@ class Evidence:
     kind: str = ""                       # python | yaml | json
     genome: dict = field(default_factory=dict)
     universe: tuple = ()
+    #: Which analyst seats to backtest this submission with. Empty means the
+    #: file declared none, and the court falls back to `DEFAULT_ANALYSTS` —
+    #: the same default every firm without its own config gets. A submission
+    #: that names its own seats (`ANALYSTS = (...)` in Python, `analysts:` in
+    #: YAML/JSON) is read with those instead, the same way `FirmSpec` already
+    #: reads a real firm's config. Without this, a strategy whose genome
+    #: leans on a seat the default three do not include — VERITAS and
+    #: `reversion` was the first case — is backtested by analysts that never
+    #: read its genes, and the verdict is about a different strategy.
+    analysts: tuple = ()
     declared: dict = field(default_factory=dict)
     dangerous_imports: list = field(default_factory=list)
     dangerous_calls: list = field(default_factory=list)
@@ -74,6 +84,7 @@ class Evidence:
             "kind": self.kind,
             "genome": self.genome,
             "universe": list(self.universe),
+            "analysts": list(self.analysts),
             "declared": self.declared,
             "dangerous_imports": self.dangerous_imports,
             "dangerous_calls": self.dangerous_calls,
@@ -154,8 +165,13 @@ def _read_mapping(raw, evidence: Evidence) -> None:
     if isinstance(universe, str):
         universe = [s.strip() for s in universe.split(",") if s.strip()]
     evidence.universe = tuple(str(s).upper() for s in universe)
+    analysts = body.get("analysts") or ()
+    if isinstance(analysts, str):
+        analysts = [a.strip() for a in analysts.split(",") if a.strip()]
+    evidence.analysts = tuple(str(a) for a in analysts)
     evidence.declared = {
-        k: v for k, v in body.items() if k not in ("genome", "universe", "symbols")
+        k: v for k, v in body.items()
+        if k not in ("genome", "universe", "symbols", "analysts")
     }
     if not evidence.genome:
         evidence.notes.append("no genome block found; the court has nothing to backtest")
@@ -214,6 +230,13 @@ def _read_python(text: str, evidence: Evidence) -> None:
                     continue
                 if isinstance(value, (list, tuple)):
                     evidence.universe = tuple(str(s).upper() for s in value)
+            elif target.id.upper() in ("ANALYSTS", "SEATS"):
+                try:
+                    value = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(value, (list, tuple)):
+                    evidence.analysts = tuple(str(a) for a in value)
 
     if not evidence.genome and not evidence.syntax_error:
         evidence.notes.append(

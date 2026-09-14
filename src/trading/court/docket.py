@@ -30,6 +30,7 @@ from ..brain.memory import AgentMemory
 from ..config import TradingConfig
 from ..data.market_data import MarketData
 from ..store import TradingStore
+from ..firms.spec import DEFAULT_ANALYSTS
 from .advocates import Case, Defence, Prosecution
 from .evidence import Evidence, EvidenceError, gather
 from .judge import ACCEPT, Judge, Ruling
@@ -138,6 +139,9 @@ class StrategyCourt:
             feed = build_feed(self.config.data)
 
         genome = self.evolver.normalise({**BASE_GENOME, **evidence.genome})
+        # A submission backtested by analysts that never read its genome is a
+        # verdict on a different strategy — see `Evidence.analysts`.
+        analysts = evidence.analysts or DEFAULT_ANALYSTS
         runs = []
         for _ in range(2):
             try:
@@ -147,6 +151,7 @@ class StrategyCourt:
                         symbols=symbols,
                         market=MarketData(feed, symbols),
                         genome=genome,
+                        analysts=analysts,
                     )
                 )
             except Exception:  # noqa: BLE001 - an unbacktestable file is evidence, not a crash

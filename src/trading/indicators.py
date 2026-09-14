@@ -59,6 +59,39 @@ def rsi(values: Sequence[Decimal], window: int = 14) -> Optional[Decimal]:
     return percent(D(100) - (D(100) / (D(1) + rs)))
 
 
+def ibs(high: Decimal, low: Decimal, close: Decimal) -> Optional[Decimal]:
+    """Internal Bar Strength: where the close sits in the bar's own range.
+
+    0 is the low, 1 is the high. This is the published Connors definition read
+    directly off one bar's high/low/close — no averaging window, no proxy.
+    `None` when the bar has no range to place the close within (high == low).
+    """
+    h, l, c = D(high), D(low), D(close)
+    if h <= l:
+        return None
+    return ((c - l) / (h - l)).quantize(D("0.0001"))
+
+
+def average_range(highs: Sequence[Decimal], lows: Sequence[Decimal], window: int) -> Optional[Decimal]:
+    """Mean high-low range over the trailing window.
+
+    This mirrors ``veritas_bot.py``'s own ``avg_rng25`` exactly — the simple
+    per-bar range, not Wilder's true range (which also charges for a gap from
+    the prior close). VERITAS was pre-registered and passed its five criteria
+    against this definition; substituting true ATR would be a different number
+    sitting behind the same gene name, which is the "different strategy
+    wearing a validated strategy's name" mistake this repository keeps
+    re-discovering (see ``bots/veritas_reversion.py``).
+    """
+    if window <= 0 or len(highs) < window or len(lows) < window:
+        return None
+    h_chunk, l_chunk = highs[-window:], lows[-window:]
+    ranges = [D(h) - D(l) for h, l in zip(h_chunk, l_chunk)]
+    if any(r < 0 for r in ranges):
+        return None
+    return sum(ranges, ZERO) / D(window)
+
+
 def stdev(values: Sequence[Decimal]) -> Optional[Decimal]:
     """Sample standard deviation, via Decimal's sqrt (no float round-trip)."""
     if len(values) < 2:
@@ -178,7 +211,9 @@ def zscore(values: Sequence[Decimal]) -> Optional[Decimal]:
 
 
 __all__ = [
+    "average_range",
     "drawdown_pct",
+    "ibs",
     "max_drawdown_pct",
     "momentum_pct",
     "rsi",
