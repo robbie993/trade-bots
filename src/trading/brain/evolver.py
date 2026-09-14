@@ -86,6 +86,47 @@ GENES: dict = {
     "shadow_strike_sd": (D("0.5"), D("2.5"), False),
     "shadow_spread_cap": (D(2), D(30), False),
     "shadow_confidence": (ZERO, D(80), False),
+    # --- what the real fleet actually uses -------------------------------
+    #
+    # The village could not express any of these, and the consequence was not
+    # that the fleet scored badly — it was that the fleet could not be scored
+    # at all. Submitted to the court, VERITAS had every parameter that makes
+    # it VERITAS dropped with the note "unrecognised parameters (they will be
+    # ignored)", was backtested as the remainder, lost 1.74%, and was
+    # convicted. That verdict was about a strategy wearing its name.
+    #
+    # It also explains why evolution has only ever searched moving-average
+    # and RSI variants: not because that space was chosen, but because it was
+    # the only space the vocabulary could describe.
+    #
+    # Entry thresholds, from VERITAS (RSI2 + Internal Bar Strength reversion).
+    "rsi_entry": (D(2), D(50), False),
+    "ibs_entry": (D("0.05"), D("0.95"), False),
+    "pullback_atr": (D("0.5"), D(5), False),
+    # Portfolio shape. A concurrency cap is a real strategy choice — it sets
+    # how much of the book one idea may own — and every desk here had one
+    # hardcoded.
+    "max_positions": (D(1), D(10), True),
+    # Cross-sectional momentum: how far back to rank, how much of the ranked
+    # universe to hold, and the ceiling on any single name.
+    "lookback": (D(4), D(104), True),
+    "top_fraction": (D("0.05"), D(1), False),
+    "max_per_name": (D("0.05"), D(1), False),
+}
+
+#: Parameters a strategy may legitimately declare that are deliberately NOT
+#: genes, with the reason. Without this the obvious fix to the vocabulary gap
+#: is to add every unrecognised name, and one of them must never be added.
+#:
+#: `bars_per_day` is 26 in VERITAS because a regular session is six and a half
+#: hours of fifteen-minute bars. That is a fact about the resolution, not a
+#: choice about the strategy, and `resolution.py` exists so exactly one place
+#: in this system knows it — the module written after three separate bugs came
+#: from somewhere else deciding how long a bar was. Making it evolvable would
+#: let a genome mutate the length of the trading day, and the resulting
+#: annualisation would be wrong in a way nothing would catch.
+NOT_GENES: dict = {
+    "bars_per_day": "a property of the bar resolution, owned by resolution.py",
 }
 
 BASE_GENOME: dict = {
@@ -124,6 +165,26 @@ BASE_GENOME: dict = {
     "shadow_strike_sd": 1.0,
     "shadow_spread_cap": 15.0,
     "shadow_confidence": 20.0,
+    # The fleet's own shipped values, not invented neutrals. VERITAS really
+    # enters at RSI 10 with IBS below 0.3 and a 2.5-ATR pullback, capped at 4
+    # concurrent positions; the cross-sectional desk really ranks on 52 bars,
+    # holds the top third and caps any one name at 20%. Starting anywhere else
+    # would mean the first generation is already a different strategy from the
+    # one whose evidence justified adding these genes at all.
+    #
+    # Existing firms are unaffected: no analyst reads these, so they sit inert
+    # until a bot that uses them is recruited. Every gene needs a default
+    # regardless — the court reads `BASE_GENOME` to fill what a submission
+    # leaves out, and a gene present in GENES and missing here is a KeyError
+    # that reads as "could not be read: 'rsi_entry'" on every file in the
+    # directory, which is exactly how this was found.
+    "rsi_entry": 10.0,
+    "ibs_entry": 0.3,
+    "pullback_atr": 2.5,
+    "max_positions": 4,
+    "lookback": 52,
+    "top_fraction": 0.34,
+    "max_per_name": 0.20,
 }
 
 

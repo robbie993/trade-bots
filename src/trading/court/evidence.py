@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from ...money import D
-from ..brain.evolver import BASE_GENOME, GENES
+from ..brain.evolver import BASE_GENOME, GENES, NOT_GENES
 
 # Modules a strategy has no business touching. A strategy is a set of numbers
 # and a rule over prices; anything here means it wants to reach the network,
@@ -222,8 +222,19 @@ def _read_python(text: str, evidence: Evidence) -> None:
 
 
 def _check_genes(evidence: Evidence) -> None:
-    """Which parameters are unrecognised, and which are outside their range."""
+    """Which parameters are unrecognised, and which are outside their range.
+
+    A parameter in `NOT_GENES` is neither. It is a declared fact about how the
+    strategy is run — `bars_per_day` is the clearest case — that the village
+    deliberately refuses to evolve, and holding it against a submission would
+    punish a bot for being honest about something the village already knows
+    from its own resolution. It is noted and not charged.
+    """
     for name, value in evidence.genome.items():
+        if name in NOT_GENES:
+            evidence.notes.append(
+                f"{name} declared but not evolved: {NOT_GENES[name]}")
+            continue
         if name not in GENES:
             evidence.unknown_genes.append(name)
             continue
