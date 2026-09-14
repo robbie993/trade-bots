@@ -92,6 +92,23 @@ def test_drawdown_against_a_high_water_mark():
     assert drawdown_pct(D(80), D(0)) == D("0")
 
 
+def test_a_fall_of_more_than_everything_is_capped_at_100():
+    """Negative equity used to print drawdowns in the millions of percent.
+
+    `firm_i_memecoins_ii` carries -$3,749.62 against a near-zero high-water
+    mark, and `trade live-status` printed `Drawdown 2304568.75` in a column
+    headed `<= 10.0%`. The formula is only bounded by 100 while equity stays
+    non-negative, and a wound-up firm's does not.
+    """
+    # Total loss is 100%, and so is worse than total.
+    assert drawdown_pct(D(0), D(100)) == D("100.00")
+    assert drawdown_pct(D(-3749), D("0.16")) == D("100.00")
+    assert drawdown_pct(D(-1), D(100)) == D("100.00")
+    # The ordinary range is untouched.
+    assert drawdown_pct(D(80), D(100)) == D("20.00")
+    assert drawdown_pct(D(1), D(100)) == D("99.00")
+
+
 def test_win_rate_ignores_flat_trades_and_returns_none_when_empty():
     assert win_rate_pct(series(1, -1, 1, 1)) == D("75.00")
     assert win_rate_pct(series(0, 0)) is None

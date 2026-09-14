@@ -181,12 +181,31 @@ def max_drawdown_pct(equity_curve: Sequence[Decimal]) -> Decimal:
 
 
 def drawdown_pct(current: Decimal, high_water_mark: Decimal) -> Decimal:
-    """Current fall from the high-water mark, as a positive percentage."""
+    """Current fall from the high-water mark, as a positive percentage.
+
+    **Capped at 100, because a fall of more than everything is not a fall.**
+    The formula is bounded by 100 only while equity stays non-negative, and a
+    wound-up firm's equity does not: `firm_i_memecoins_ii` carries -$3,749.62
+    against a near-zero high-water mark and this reported a drawdown of
+    **2,304,568.75%**, which `trade live-status` then printed in a column
+    beside "<= 10.0%" as though it were a measurement.
+
+    Nothing decided differently — every thresholdreading this sits far below
+    100 (promotion 10, the kill switch 20-40, the council's juror 5 and 20,
+    and the score caps it at 50), so 100 and 2.3 million both fail everything
+    they touch. The cap changes no decision anywhere. What it changes is
+    whether a human reading a kill reason is looking at a number or at a
+    division artefact, and "Drawdown 2304568.75% exceeds 20%" is not a reason,
+    it is noise wearing one.
+
+    A firm that owes more than it holds reads as 100% down, which is the
+    honest summary of "the stake is gone".
+    """
     hwm = D(high_water_mark)
     if hwm <= 0:
         return ZERO
     fall = (hwm - D(current)) / hwm * D(100)
-    return percent(max(ZERO, fall))
+    return percent(min(D(100), max(ZERO, fall)))
 
 
 def win_rate_pct(pnls: Sequence[Decimal]) -> Optional[Decimal]:
