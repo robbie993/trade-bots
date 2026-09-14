@@ -4,7 +4,7 @@
   "test": "explicit crowd calls predict memecoin return (PREREG_crowd_calls.md)",
   "p": 0.0,
   "run_date": "2026-09-14",
-  "note": "222 calls over 198 bars; arms at (1, 4, 24) bars; 500 shuffle seeds; 89.4 bps round trip; 3/5 criteria",
+  "note": "NULL \u2014 3 of 5 criteria. **The p here is the 1-bar horizon's permutation p ONLY and must not be read as the result.** Criterion 2 (above the shuffle's 95th pct) FAILS at 4 and 24 bars; criterion 3 (beats counting mentions) FAILS at all three. 222 calls over 198 bars, but 188 predate the price window so the analysable sample was n=34. 500 shuffle seeds, 89.4 bps round trip. See PREREG_crowd_calls.md RESULTS.",
   "verdict": "FAIL"
  },
  {
