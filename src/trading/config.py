@@ -221,6 +221,19 @@ class BrainConfig:
     #: not "promote". Same rule as everywhere else in the village.
     min_holdout_bars: int = field(
         default_factory=lambda: _env_int("TRADE_EVO_MIN_HOLDOUT", 20))
+    #: Bars thrown away between the fitted window and the holdout, so that no
+    #: held-out bar computes its indicators out of a bar the genome was
+    #: selected on. -1 means "as wide as the widest lookback the vocabulary
+    #: allows", derived by `evolver.max_lookback_bars()` — the only sane
+    #: default, and the reason this is a sentinel rather than a number here:
+    #: config.py cannot import the gene table without a cycle, and a hardcoded
+    #: copy of it would go stale the first time a window gene moved.
+    #:
+    #: 0 switches it off. That is right only where there are no indicators to
+    #: reach backwards — a test driving a rigged backtester — and wrong
+    #: against real bars, where it silently restores the leak.
+    purge_bars: int = field(
+        default_factory=lambda: _env_int("TRADE_EVO_PURGE", -1))
     #: Market bars between automatic generations. Bars, never ticks — see
     #: src/trading/resolution.py for why that distinction has its own module.
     evolve_every: int = field(default_factory=lambda: _env_int("TRADE_EVOLVE_EVERY", 20))

@@ -224,7 +224,16 @@ def test_a_genome_is_promoted_only_when_it_beats_the_incumbent(
         assert generation.winner.fitness > incumbent.fitness
         assert promoted_genome == generation.winner.genome
     else:
-        assert generation.winner.fitness <= incumbent.fitness
+        # Winning the fit is necessary and not sufficient. A mutant can beat
+        # the incumbent on the fitted bars and still not be adopted, and the
+        # commonest reason on a short feed is that there is no holdout left to
+        # check it against: 180 daily bars cannot spare a 90-bar warmup, a
+        # 150-bar purge gap and a tail as well. Asserting the winner must have
+        # lost made this test a claim about the fixture's length rather than
+        # about promotion, and it broke the moment the gap became real.
+        assert (generation.winner.fitness <= incumbent.fitness
+                or generation.refused), \
+            "a winning mutant was not promoted and no reason was recorded"
 
 
 def test_promotion_can_be_switched_off(store, firm_record, feed, trading_config):

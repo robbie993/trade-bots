@@ -14,6 +14,50 @@ from src.trading.brain.evolver import BASE_GENOME, Evolver
 from src.trading.config import BrainConfig, TradingConfig
 
 
+def _unpurged(**brain):
+    """A config with the purge gap switched off.
+
+    The tests below drive a *rigged* backtester: it reads one gene out of the
+    genome and answers from a lookup table. Nothing computes an indicator, so
+    there is no lookback to reach backwards across a boundary and nothing for
+    a purge gap to protect. Left on, the derived gap (as wide as
+    `value_window`, 150 bars) exceeds what the 180-bar fixture can spare and
+    every one of these collapses to "insufficient data" — which would be the
+    tests measuring the fixture's length rather than the control flow they are
+    about.
+
+    Switched off *explicitly and by name*, so that a reader can tell these
+    apart from a run against real bars, where 0 is never the right answer.
+    `test_the_purge_gap_is_on_by_default` is what holds the default honest.
+
+    `mutation_rate=1` is here for a different reason, and it is a scar.
+    `mutate` draws one `rng.random()` per gene from a single stream, walking
+    `GENES` in insertion order. Every one of these tests scores a candidate
+    purely by its `fast_window`, so they quietly depend on that gene clearing
+    the rate at this seed — and when seven genes were added to the table the
+    stream shifted, `fast_window` stopped being drawn, all eight candidates
+    scored identically, and three tests failed with "no mutant beat the
+    incumbent", which names neither the gene nor the seed nor the cause.
+    At rate 1 every gene moves every time and the tests stop depending on
+    where in the table a gene happens to sit.
+    """
+    brain.setdefault("mutation_rate", Decimal(1))
+    return TradingConfig(brain=BrainConfig(purge_bars=0, **brain))
+
+
+def _varied(gen, gene="fast_window"):
+    """Fail loudly when the population never moved the gene under test.
+
+    Without this the symptom of a shifted RNG stream is "no mutant beat the
+    incumbent" — a sentence about fitness, for a problem that is entirely
+    about mutation. Half an hour went into that mistranslation once.
+    """
+    values = {int(Decimal(str(c.genome[gene]))) for c in gen.candidates}
+    assert len(values) > 1, (
+        f"the population never varied {gene} (all {values}), so this test "
+        f"scored eight identical candidates and measured nothing")
+
+
 # =========================================================================
 # chosen on one half of history, adopted on the other
 # =========================================================================
@@ -57,7 +101,7 @@ def test_a_genome_that_only_fits_the_past_is_refused(store, firm_record, market_
     has already seen. Promote on that alone and the loop is an overfitting
     machine that reports the overfit as progress.
     """
-    evolver = Evolver(store, TradingConfig())
+    evolver = Evolver(store, _unpurged())
     # Every mutant scores brilliantly on the fit and terribly on the tail.
     _rigged(evolver,
             fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
@@ -67,13 +111,14 @@ def test_a_genome_that_only_fits_the_past_is_refused(store, firm_record, market_
     firm.genome = dict(BASE_GENOME)
 
     gen = evolver.evolve(firm, market_data, generation=1)
+    _varied(gen)
     assert gen.promoted is False
     assert "held-out" in gen.refused
     assert "fitted to the past" in gen.refused
 
 
 def test_a_genome_that_wins_both_is_adopted(store, firm_record, market_data):
-    evolver = Evolver(store, TradingConfig())
+    evolver = Evolver(store, _unpurged())
     _rigged(evolver,
             fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
             holdout_scores={w: 100 for w in range(3, 31)} | {10: 1})
@@ -81,6 +126,7 @@ def test_a_genome_that_wins_both_is_adopted(store, firm_record, market_data):
     firm.genome = dict(BASE_GENOME)
 
     gen = evolver.evolve(firm, market_data, generation=1)
+    _varied(gen)
     assert gen.promoted is True, gen.refused
     assert gen.refused == ""
     assert store.require_firm_by_id(firm_record.id).genome != BASE_GENOME
@@ -89,8 +135,7 @@ def test_a_genome_that_wins_both_is_adopted(store, firm_record, market_data):
 def test_too_short_a_holdout_refuses_rather_than_guesses(store, firm_record, market_data):
     """A village that has been running for an afternoon has nothing to hold
     out, and the answer to that is the same as everywhere else here."""
-    config = TradingConfig(brain=BrainConfig(min_holdout_bars=10_000))
-    evolver = Evolver(store, config)
+    evolver = Evolver(store, _unpurged(min_holdout_bars=10_000))
     _rigged(evolver, fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
             holdout_scores={w: 100 for w in range(3, 31)})
     firm = store.require_firm_by_id(firm_record.id)
@@ -104,7 +149,7 @@ def test_too_short_a_holdout_refuses_rather_than_guesses(store, firm_record, mar
 def test_the_candidates_are_fitted_without_seeing_the_tail(store, firm_record, market_data):
     """The split has to actually reach the backtester, or none of the above
     means anything."""
-    evolver = Evolver(store, TradingConfig())
+    evolver = Evolver(store, _unpurged())
     seen = []
 
     class Watching:
@@ -121,6 +166,126 @@ def test_the_candidates_are_fitted_without_seeing_the_tail(store, firm_record, m
     assert fits, "nothing was fitted"
     assert all(steps is not None and steps > 0 for _, steps in fits), \
         "the fit ran over the whole history, tail included"
+
+
+# =========================================================================
+# the fitted window and the holdout must not touch
+# =========================================================================
+def _windows(evolver, market, firm):
+    """The bar ranges the backtester was actually asked for.
+
+    Resolved the way `backtest.run` resolves them — `steps` counts from the
+    warmup, not from zero — because that gap between what the evolver meant
+    and what the backtester did is the whole bug.
+    """
+    seen = []
+
+    class Watching:
+        warmup = 90
+
+        def run(self, **kw):
+            seen.append((kw.get("start"), kw.get("steps")))
+            return _Result(1)
+
+    evolver.backtester = Watching()
+    evolver.evolve(firm, market, generation=1)
+
+    total = market.length()
+    fitted, held = [], []
+    for start, steps in seen:
+        first = Watching.warmup if start is None else max(int(start), Watching.warmup)
+        last = total if steps is None else min(total, first + steps)
+        (held if start is not None else fitted).append((first, last))
+    return fitted, held, total
+
+
+def test_the_fitted_window_never_reaches_into_the_holdout(store, firm_record, market_data):
+    """The bug this split had from the start.
+
+    `split` was an index and was passed as `steps`; the backtester counts
+    steps from its warmup, so the fitted window ran `warmup` bars past the
+    split and into the tail. On the live village that put **90 of the 216
+    held-out bars — 42% — inside the window the candidates were scored on**,
+    and on this 180-bar fixture the holdout was 100% contained in it. Every
+    "held-out" number the evolver has ever reported was partly a re-read of
+    the bars it was chosen on.
+    """
+    evolver = Evolver(store, _unpurged())
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.genome = dict(BASE_GENOME)
+
+    fitted, held, _ = _windows(evolver, market_data, firm)
+    assert fitted and held, "nothing was fitted, or nothing was held out"
+    for f_first, f_last in fitted:
+        for h_first, h_last in held:
+            overlap = min(f_last, h_last) - max(f_first, h_first)
+            assert overlap <= 0, (
+                f"fitted [{f_first},{f_last}) overlaps holdout "
+                f"[{h_first},{h_last}) by {overlap} bars")
+
+
+def test_the_purge_gap_is_on_by_default_and_is_as_wide_as_the_widest_lookback(
+        store, firm_record, market_data):
+    """Abutting windows are not enough: the holdout's first bars still compute
+    their indicators out of the fitted bars. The gap is what stops that, and
+    it has to be at least as wide as the furthest an analyst can reach.
+    """
+    from src.trading.brain.evolver import max_lookback_bars
+
+    evolver = Evolver(store, TradingConfig())        # the shipped default
+    assert evolver.purge_bars() == max_lookback_bars() > 0
+    # `value_window` tops out at 150, and nothing may reach further than the
+    # gap that is supposed to cover it.
+    from src.trading.brain.evolver import GENES, WINDOW_GENES
+
+    for gene in WINDOW_GENES:
+        assert int(GENES[gene][1]) <= evolver.purge_bars(), \
+            f"{gene} can reach past the purge gap"
+
+
+def test_a_holdout_that_cannot_be_purged_is_refused_rather_than_leaked(
+        store, firm_record, market_data):
+    """180 bars cannot spare a 150-bar gap on top of a 90-bar warmup and a
+    54-bar tail. The honest answer is the village's usual one, not a holdout
+    that quietly overlaps."""
+    evolver = Evolver(store, TradingConfig())        # gap on, as shipped
+    _rigged(evolver, fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
+            holdout_scores={w: 100 for w in range(3, 31)} | {10: 1})
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.genome = dict(BASE_GENOME)
+
+    assert evolver._split(market_data, firm.universe) == (0, 0, 0)
+    gen = evolver.evolve(firm, market_data, generation=1)
+    assert gen.promoted is False
+
+
+def test_the_gap_comes_out_of_the_fitted_side_so_the_fraction_keeps_its_meaning(store):
+    """`holdout_fraction` says 30% is held out. It has to still be 30%.
+
+    Carving the gap out of the holdout instead would leave the knob reading
+    0.30 while delivering 9% — a config constant describing different data,
+    which is a failure this repository has hit enough times to have a name
+    for.
+    """
+    from src.trading.config import DataConfig
+
+    config = TradingConfig(
+        brain=BrainConfig(holdout_fraction=Decimal("0.30")),
+        data=DataConfig(source="synthetic", seed=12345, history_days=720),
+    )
+    evolver = Evolver(store, config)
+    from src.trading.data.feeds import SyntheticFeed
+    from src.trading.data.market_data import MarketData
+
+    symbols = ["SPY", "QQQ"]
+    market = MarketData(SyntheticFeed(seed=12345, days=720), symbols)
+    fitted, holdout_start, holdout_bars = evolver._split(market, symbols)
+
+    total = market.length()
+    assert holdout_bars == int(total * Decimal("0.30"))
+    assert holdout_start + holdout_bars == total
+    # And the gap really is between them, not inside either.
+    assert holdout_start - (90 + fitted) == evolver.purge_bars()
 
 
 # =========================================================================

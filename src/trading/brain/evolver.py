@@ -187,6 +187,46 @@ BASE_GENOME: dict = {
     "max_per_name": 0.20,
 }
 
+#: Genes whose value is *a number of bars of price history*, as opposed to a
+#: percentage, a bias or a trust weight. These are what decide how far back an
+#: analyst reaches when it scores a single bar, and therefore how wide the gap
+#: between a fitted window and its holdout has to be.
+#:
+#: Listed explicitly rather than matched on a `_window` suffix, because
+#: `lookback` has no suffix and `shadow_dte_max` has the wrong kind of unit —
+#: it is days to an option's expiry, not bars of history to read back over.
+#: Guessing from names is how a gap silently stops covering the widest gene.
+WINDOW_GENES: tuple = (
+    "fast_window", "slow_window", "rsi_window", "value_window", "lookback",
+)
+
+
+def max_lookback_bars() -> int:
+    """The furthest back any analyst can reach for a genome inside its ranges.
+
+    Derived, never hardcoded. A new window gene added to `GENES` and listed in
+    `WINDOW_GENES` widens the purge gap automatically; a hardcoded 150 would
+    have gone on describing the old vocabulary while the new one leaked.
+
+    Both halves matter. `value_window` tops out at 150 bars, which is the
+    widest gene; the analysts also carry their own hardcoded floors
+    (`FundamentalAnalyst.minimum_bars` is 90), and a seat that reaches further
+    than any gene would otherwise be invisible here.
+    """
+    widest = 0
+    for name in WINDOW_GENES:
+        bounds = GENES.get(name)
+        if bounds:
+            widest = max(widest, int(bounds[1]))
+    try:
+        from ..firms.analysts import ANALYSTS
+
+        for seat in ANALYSTS.values():
+            widest = max(widest, int(getattr(seat, "minimum_bars", 0) or 0))
+    except Exception:               # noqa: BLE001 - a gap is not worth a crash
+        pass
+    return widest
+
 
 @dataclass
 class Candidate:
@@ -307,7 +347,8 @@ class Evolver:
         except Exception:               # noqa: BLE001
             pass
 
-    def _record_rank_test(self, firm, generation: int, candidates) -> str:
+    def _record_rank_test(self, firm, generation: int, candidates,
+                          purge_bars: int = 0) -> str:
         """Ask whether this generation's ranking predicted anything, and count
         the asking.
 
@@ -340,7 +381,17 @@ class Evolver:
                 test="in-sample fitness rank predicts held-out rank",
                 p=p,
                 run_date=datetime.now(timezone.utc).date().isoformat(),
-                note=f"generation {generation}, {note}",
+                # The gap goes in the note because it is the reason the number
+                # means anything. A rho measured across a leaking boundary and
+                # one measured across a purged boundary are different claims,
+                # and the ledger is where a later reader finds out which this
+                # was. It rides here rather than in a `genome_holdout` column
+                # because that table is created with `CREATE TABLE IF NOT
+                # EXISTS` and every migration re-runs on `init-db` — adding a
+                # column to it would not reach the databases already running,
+                # and the insert would fail into `_keep_holdout`'s swallowed
+                # exception, losing the whole diagnostic row silently.
+                note=f"generation {generation}, purge gap {purge_bars} bars, {note}",
                 verdict="PASS" if (rho > 0 and ctx["survives_bonferroni_05"])
                         else "FAIL",
             )
@@ -348,25 +399,67 @@ class Evolver:
         except Exception:               # noqa: BLE001 - never fail a run
             return ""
 
-    def _split(self, market: MarketData, symbols) -> tuple:
-        """Where the fitted history ends and the held-out tail begins.
+    def purge_bars(self) -> int:
+        """Bars discarded between the fitted window and the holdout.
 
-        Returns ``(split_index, holdout_bars)``. A split of zero means there
-        is not enough history to divide at all, in which case everything is
-        fitted and nothing can be adopted — which is the correct answer for a
-        village that has been running for an afternoon.
+        `TRADE_EVO_PURGE` overrides it; -1 (the default) means derive it from
+        the vocabulary. Zero is legitimate and is what a test with a rigged
+        backtester wants — there are no indicators there to reach backwards —
+        but it is never the right answer against real bars.
+        """
+        configured = int(getattr(self.brain, "purge_bars", -1))
+        return max(0, configured) if configured >= 0 else max_lookback_bars()
+
+    def _split(self, market: MarketData, symbols) -> tuple:
+        """Where the fitted window ends, where the holdout begins, how long it is.
+
+        Returns ``(fitted_bars, holdout_start, holdout_bars)``. Zero fitted
+        bars means there is not enough history to divide at all, in which case
+        everything is fitted and nothing can be adopted — the correct answer
+        for a village that has been running for an afternoon.
+
+        **Two separate ways the old split leaked, both fixed here.**
+
+        *One: the fitted window ran straight through the split point.* `split`
+        was computed as an index (`total - holdout`) and then handed to the
+        backtester as `steps`. The backtester counts steps from its warmup,
+        not from zero, so the fitted window was `[warmup, warmup + split)` —
+        `warmup` bars longer than intended, reaching `warmup` bars past the
+        split and into the tail. Measured on the live village: the fitted
+        window was [90, 594) and the "holdout" [504, 720), so **90 of the 216
+        held-out bars, 42% of them, were bars the candidates had been scored
+        on.** On a 180-bar test fixture the holdout was 100% contained in the
+        fitted window. `fitted_bars` is now the count the backtester actually
+        wants — bars *after* the warmup — so the two windows abut instead of
+        overlapping.
+
+        *Two: no purge gap.* Even with the windows abutting, the holdout's
+        first bars compute their indicators out of the fitted bars — up to
+        `value_window` of them, 150 at the top of its range. The gap discards
+        that many bars between the two so no held-out score is a function of a
+        bar the genome was selected on. It costs real history and it is worth
+        it: without it "held out" is a claim the arithmetic does not support.
+
+        The gap comes out of the *fitted* side. `holdout_fraction` keeps
+        meaning what it says — that share of history is held out — rather than
+        quietly describing a window a third of its documented size, which is
+        the failure mode this repository has hit often enough to name.
         """
         data = MarketData(market.feed, symbols)
         data.register(list(symbols))
         total = data.length()
         fraction = D(self.brain.holdout_fraction)
         if total < 2 or fraction <= 0 or fraction >= 1:
-            return 0, 0
+            return 0, 0, 0
+        warmup = max(0, int(getattr(self.backtester, "warmup", 0) or 0))
         holdout = int(D(total) * fraction)
-        split = total - holdout
-        if split <= 0:
-            return 0, 0
-        return split, holdout
+        gap = self.purge_bars()
+        holdout_start = total - holdout
+        # Bars the backtester will actually score, counted from its warmup.
+        fitted_bars = holdout_start - gap - warmup
+        if fitted_bars <= 0 or holdout <= 0:
+            return 0, 0, 0
+        return fitted_bars, holdout_start, holdout
 
     # -- evolution ---------------------------------------------------------
     def evolve(
@@ -397,7 +490,8 @@ class Evolver:
         symbols = firm.universe or market.symbols
         capital = firm.initial_allocation or self.config.firm.allocation
 
-        split, holdout_bars = self._split(market, symbols)
+        fitted_bars, holdout_start, holdout_bars = self._split(market, symbols)
+        gap = self.purge_bars()
 
         def score(genome, start=None, steps=None):
             # A fresh cursor per run: every genome sees identical bars.
@@ -416,7 +510,7 @@ class Evolver:
 
         for candidate in candidates:
             # Fitted on the early bars only, so the tail stays unseen.
-            candidate.result = score(candidate.genome, steps=split or None)
+            candidate.result = score(candidate.genome, steps=fitted_bars or None)
             candidate.fitness = candidate.result.fitness
 
         gen = Generation(number=generation, candidates=candidates)
@@ -440,8 +534,8 @@ class Evolver:
         if enough_holdout:
             for candidate in candidates:
                 candidate.holdout_fitness = score(
-                    candidate.genome, start=split).fitness
-            self._record_rank_test(firm, generation, candidates)
+                    candidate.genome, start=holdout_start).fitness
+            self._record_rank_test(firm, generation, candidates, gap)
 
         # (the rank test above is recorded before anything is adopted, so the
         # ledger counts the look whether or not the generation liked itself)
@@ -455,7 +549,7 @@ class Evolver:
             "strategy_genomes",
             _genome_row(firm, generation, incumbent, best, incumbent),
         )
-        self._keep_holdout(parent_id, incumbent, split, holdout_bars)
+        self._keep_holdout(parent_id, incumbent, fitted_bars, holdout_bars)
         for candidate in candidates:
             if candidate is incumbent:
                 continue
@@ -464,7 +558,7 @@ class Evolver:
                 {**_genome_row(firm, generation, candidate, best, incumbent),
                  "parent_id": parent_id},
             )
-            self._keep_holdout(genome_id, candidate, split, holdout_bars)
+            self._keep_holdout(genome_id, candidate, fitted_bars, holdout_bars)
 
         if not self.brain.promote_winners:
             gen.refused = "promotion is switched off"
