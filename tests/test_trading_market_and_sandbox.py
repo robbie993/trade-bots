@@ -228,6 +228,74 @@ def test_the_sandbox_can_read_everything(sandbox):
     assert sandbox.reader.positions(1) == []
 
 
+# -------------------------------------------------------------------------
+# The query passthrough. `test_the_sandbox_cannot_reach_raw_sql` above asserts
+# that the *attribute* `db` is refused — and it is — while `SandboxWriter`
+# carried a `query` pair that took raw SQL and ran it. `writer.query("UPDATE
+# firms SET equity = 1.0")` wrote, committed and survived a reconnect, through
+# the object whose whole purpose is that it cannot.
+#
+# So these ask the guarantee rather than the plumbing: not "does query work"
+# but "is there a statement that writes and is not refused". They check the
+# ledger afterwards, because an exception that arrives *after* the write has
+# landed would still pass a `pytest.raises` on its own.
+# -------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE firms SET cash = 1.0",
+        "DELETE FROM firms",
+        "INSERT INTO firms (firm_key) VALUES ('ghost')",
+        "DROP TABLE firms",
+        "ALTER TABLE firms ADD COLUMN backdoor TEXT",
+        "CREATE TABLE evil (id INTEGER)",
+        # A read opener with a write verb behind it.
+        "WITH doomed AS (SELECT id FROM firms) DELETE FROM firms",
+        # Two statements: the first is a perfectly good read.
+        "SELECT 1; UPDATE firms SET cash = 1.0",
+        # Not a read opener at all.
+        "PRAGMA journal_mode = DELETE",
+        "VACUUM",
+    ],
+)
+def test_the_sandbox_query_refuses_every_statement_that_could_write(sandbox, store, sql):
+    before = {f.firm_key: f.cash for f in store.firms()}
+    with pytest.raises(SandboxViolation):
+        sandbox.writer.query(sql)
+    with pytest.raises(SandboxViolation):
+        sandbox.writer.query_one(sql)
+    # The refusal has to come before the write, not after it.
+    assert {f.firm_key: f.cash for f in store.firms()} == before
+
+
+@pytest.mark.parametrize(
+    "sql, params",
+    [
+        ("SELECT * FROM alliances ORDER BY id", ()),
+        ("SELECT * FROM sandbox_events WHERE event_type = ? LIMIT ?", ("sabotage", 5)),
+        ("SELECT cash FROM firms WHERE firm_key = ?", ("alpha",)),
+        # A literal containing a write verb is text, not a statement.
+        ("SELECT * FROM sandbox_events WHERE event_type = 'delete me'", ()),
+        # `formed_at` is not `form`, and `broken_by` is not `break`.
+        ("SELECT * FROM alliances ORDER BY formed_at DESC", ()),
+        ("SELECT broken_by FROM alliances WHERE status = 'broken'", ()),
+        ("WITH mine AS (SELECT id FROM alliances) SELECT * FROM mine", ()),
+    ],
+)
+def test_the_sandbox_can_still_read_anything(sandbox, sql, params):
+    """The fence is on the verb, not on the table — reads stay unrestricted."""
+    sandbox.writer.query(sql, params)
+
+
+def test_the_sandbox_still_reads_its_own_tables_through_the_real_calls(sandbox, tokens):
+    """The callers that go through `query` in anger keep working."""
+    sandbox.alliances.form("pact", "alpha", ["beta"])
+    assert [a.name for a in sandbox.alliances.all()] == ["pact"]
+    assert sandbox.alliances.get("pact").name == "pact"
+    assert sandbox.alliances.all(status="active") != []
+    assert sandbox.intrigue.events() != []
+
+
 # =========================================================================
 # alliances and intrigue
 # =========================================================================

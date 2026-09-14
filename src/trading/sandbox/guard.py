@@ -18,15 +18,36 @@ So the sandbox is handed two objects and nothing else:
                     any attribute not on the allow-list — including ``db``,
                     so nobody can reach around it to raw SQL.
 ``SandboxWriter``   inserts and updates restricted to ``alliances`` and
-                    ``sandbox_events``. Any other table raises.
+                    ``sandbox_events``. Any other table raises. Its ``query``
+                    pair takes SQL, so the statement itself is checked too.
 
 Both are enforced by ``__getattr__``, not by convention, so a future edit that
 tries to write through the sandbox fails loudly at the first call rather than
 silently corrupting a firm's books.
+
+**The query passthrough was the hole in exactly that claim.** ``_check(table)``
+guarded ``insert`` and ``update``, and ``query`` handed its string straight to
+``Database.query``, which is ``cursor.execute`` and does not care what verb it
+is given. So ``writer.query("UPDATE firms SET equity = 1.0")`` wrote, and
+committed, and survived a reconnect — through the object whose entire purpose
+is that it cannot do that. The test named
+``test_the_sandbox_cannot_reach_raw_sql`` asserted that the *attribute* ``db``
+was refused, which it was, while the raw-SQL door on the same object stood
+open. That is the difference between asking "did the code run" and asking "is
+the guarantee true", and it is why ``read_only_sql`` now checks the statement
+rather than trusting the caller to only pass reads.
+
+The check refuses anything it cannot *prove* is a read: comments and string
+literals are stripped, the first keyword must open a read, no write verb may
+appear anywhere (which is what stops ``WITH ... DELETE``), and a statement
+separator is refused outright. Erring toward refusal is the right direction
+here — a false refusal is a loud failure in a cosmetic subsystem, a false
+acceptance is a silently corrupted ledger.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from ...db.connection import Database
@@ -57,9 +78,69 @@ READABLE = frozenset(
 # The only tables the sandbox may write.
 WRITABLE_TABLES = frozenset({"alliances", "sandbox_events"})
 
+# Statements that can only read. `values` is here for the dialect that allows
+# a bare VALUES list as a query; `explain` reports a plan without running it.
+READ_OPENERS = frozenset({"select", "with", "explain", "values"})
+
+# Any of these anywhere in a statement disqualifies it. `with` is a read
+# opener, but `WITH x AS (...) DELETE FROM firms` is not a read — scanning the
+# whole statement rather than just its first word is what catches that.
+WRITE_WORDS = frozenset(
+    {
+        "insert", "update", "delete", "replace", "upsert", "merge", "truncate",
+        "create", "drop", "alter", "rename", "reindex", "vacuum",
+        "attach", "detach", "pragma", "copy", "call",
+        "begin", "commit", "rollback", "savepoint", "release",
+        "grant", "revoke",
+    }
+)
+
+_COMMENTS = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+_LITERALS = re.compile(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", re.DOTALL)
+_WORDS = re.compile(r"[a-z_]+")
+
 
 class SandboxViolation(RuntimeError):
     """The sandbox tried to reach outside itself."""
+
+
+def read_only_sql(sql: str) -> str:
+    """Return `sql` unchanged if it can only read; raise otherwise.
+
+    Deliberately conservative. It strips comments and quoted text first so
+    that a literal like ``'delete me'`` or a column quoted as ``"update"``
+    cannot trip it, then works on the bare words that are left.
+    """
+    bare = _LITERALS.sub(" ", _COMMENTS.sub(" ", sql or ""))
+
+    # One statement only. SQLite's `execute` already refuses a second one, but
+    # that is a property of one driver and this has to hold for both.
+    if ";" in bare.strip().rstrip(";"):
+        raise SandboxViolation(
+            "the sandbox may not run more than one statement at a time — see "
+            "src/trading/sandbox/guard.py for why."
+        )
+
+    words = _WORDS.findall(bare.lower())
+    if not words:
+        raise SandboxViolation("the sandbox was handed a statement with no SQL in it")
+
+    if words[0] not in READ_OPENERS:
+        raise SandboxViolation(
+            f"the sandbox may only read; {words[0].upper()} is not one of "
+            f"{', '.join(sorted(w.upper() for w in READ_OPENERS))} — see "
+            "src/trading/sandbox/guard.py for why."
+        )
+
+    found = sorted(set(words) & WRITE_WORDS)
+    if found:
+        raise SandboxViolation(
+            f"the sandbox may not run {', '.join(w.upper() for w in found)} — "
+            "it reads the ledger and writes only to "
+            f"{', '.join(sorted(WRITABLE_TABLES))}. See "
+            "src/trading/sandbox/guard.py for why."
+        )
+    return sql
 
 
 class ReadOnlyStore:
@@ -106,11 +187,16 @@ class SandboxWriter:
         self._db.update(table, row_id, values)
 
     def query(self, sql: str, params=()) -> list:
-        """Reads are unrestricted — the sandbox is allowed to *look* anywhere."""
-        return self._db.query(sql, params)
+        """*Reads* are unrestricted — the sandbox may look at any table it likes.
+
+        It is the reading that is unrestricted, not the statement. This used to
+        pass the string straight through, which made the table allow-list above
+        decorative: `cursor.execute` runs whatever verb it is given.
+        """
+        return self._db.query(read_only_sql(sql), params)
 
     def query_one(self, sql: str, params=()) -> Optional[dict]:
-        return self._db.query_one(sql, params)
+        return self._db.query_one(read_only_sql(sql), params)
 
 
 def sandbox_handles(store: TradingStore):
@@ -120,9 +206,12 @@ def sandbox_handles(store: TradingStore):
 
 __all__ = [
     "READABLE",
+    "READ_OPENERS",
     "ReadOnlyStore",
     "SandboxViolation",
     "SandboxWriter",
     "WRITABLE_TABLES",
+    "WRITE_WORDS",
+    "read_only_sql",
     "sandbox_handles",
 ]
