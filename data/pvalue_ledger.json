@@ -76,8 +76,8 @@
   "test": "in-sample fitness rank predicts held-out rank (within-cohort, purged)",
   "p": 0.356,
   "run_date": "2026-09-14",
-  "note": "offline re-derivation on a snapshot; 48 cohorts (firm x generation), 384 candidates, purge gap 150 bars, fitted/holdout overlap 0. mean within-cohort rho +0.0170 (t=+0.259, 25/48 positive); 500-draw within-cohort permutation null. Reproduction +0.0146/p=0.418 (RNG). Restricted to the 6 funded firms: rho +0.0014, t=+0.024, p=0.472, 36 cohorts \u2014 cleaner, so the null does not rest on unfunded heirs. NB pooling across cohorts gives +0.5972 full / +0.8818 funded-only: a Simpson artefact that STRENGTHENS as the real effect weakens. See EVOLUTION_REDERIVED_2026-09-14.md",
-  "verdict": "FAIL"
+  "note": "WITHDRAWN \u2014 DO NOT CITE. This p is from one 720-bar window and the window slides (AlpacaFeed.keep_bars=720). The identical script with identical arguments gave rho +0.0014/p=0.472 at 14:30 and rho +0.1351/p=0.006 at 17:00; nine runs across the afternoon move from ~0.00 to ~+0.15. The measurement is not of a fixed quantity and settles neither direction. The permutation null cannot detect this \u2014 it conditions on the cohorts it is handed. See DECISIONS.md D-V010.",
+  "verdict": "WITHDRAWN"
  },
  {
   "subject": "scanner_example",

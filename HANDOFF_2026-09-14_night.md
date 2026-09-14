@@ -159,23 +159,48 @@ another run agree". A sliding data window and fresh mutation draws are
 invisible to it. It is the same shape as the morning's Simpson artefact: a
 p-value computed over the wrong population, reported with three decimal places.
 
-`scripts/evolution_repeatability.py` runs the identical arm four times on
-independent fresh snapshots and reports the spread of the statistic itself.
-**It was still running at hand-off**, and its output is block-buffered because
-I launched it without `-u` — read `$EVO_SCRATCH/repeat.log` or just re-run it.
+**RESOLVED before hand-off, and it went the other way. D-V001 is withdrawn.**
 
-**How to read it when it lands:**
+The repeatability batch and a like-for-like re-run of the original script:
 
-- run-to-run sd **comparable to the effect** → neither number above is evidence,
-  a single run cannot settle this, and **D-V001 needs restating** as "the
-  measurement cannot resolve an effect this size" rather than "no information".
-- run-to-run sd **small** → +0.0014 and +0.1203 cannot both be right, something
-  systematic differs between the two scripts, and it must be found before
-  either is believed.
+```
+14:20  rederive (48 cohorts, 8 firms)   +0.0170   p 0.356
+14:25  reproduction                     +0.0146   p 0.418
+14:30  rederive (36 cohorts, funded)    +0.0014   p 0.472
+15:48  two-arm arm A                    +0.1203   p 0.024
+16:05  repeatability run 1              +0.1638   p 0.000
+16:12  repeatability run 2              +0.1647   p 0.000
+16:19  repeatability run 3              +0.1399   p 0.006
+16:26  repeatability run 4              +0.1267   p 0.018
+17:00  rederive, SAME script as 14:30   +0.1351   p 0.006
+```
 
-**D-V001 stands unchanged until then.** It has two independent runs and a
-separate live code path behind it; one contradicting run from a script with a
-known confound does not overturn it. But it is no longer safe.
+The 14:30 and 17:00 rows are **the same script with the same arguments**, and
+they disagree about the verdict. The afternoon says no information; the evening
+says information, comfortably.
+
+**Mechanism: `AlpacaFeed.keep_bars = 720`.** The feed holds the most recent 720
+bars, so every new 15-minute bar pushes the oldest out and *both* the fitted
+window and the holdout slide. Each run measures a different holdout period. The
+within-batch drift shows it directly — +0.1638, +0.1647, +0.1399, +0.1267 across
+four runs 25 minutes apart is a window moving, not noise around a constant.
+
+**So D-V001 is withdrawn and is NOT replaced by "evolution works".** Both
+claims are unsupported. The finding is that the measurement is not of a fixed
+quantity. See `DECISIONS.md` D-V010.
+
+Two things worth carrying forward from how this was missed:
+
+- **The permutation null could never have caught it.** It conditions on the
+  cohorts it is handed and shuffles inside them, so it prices the ranking
+  *within* one window and is silent about the window. It returned p=0.006 and
+  p=0.472 for the same question with equal confidence.
+- **"Reproduced" was applied to the wrong axis.** D-V001 earned that rung from
+  runs minutes apart — which shared the window. Reproduction across a shared
+  nuisance parameter is not reproduction, and the ladder in `DECISIONS.md` did
+  not save me from it.
+
+**The remedy is item §7.1 below**: pin the bars and walk forward.
 
 **Other flags:**
 
@@ -245,8 +270,24 @@ moves it toward the village looking worse. On a one-year window it would be
 
 ## 7. What to do next
 
-**1. Finish the repeatability run and settle §5.** Everything about evolution
-is provisional until this lands. Re-run with `-u`. This is the blocker.
+**1. Pin the bars, then walk forward. This is the blocker.** §5 is resolved and
+the answer is that no evolution verdict currently exists. The measurement runs
+against a live feed whose 720-bar window slides under it, so it answers "does
+in-sample rank predict rank on whatever the last 216 bars happen to be *right
+now*". Dump the bars to a fixture and drive the analysis from `CsvFeed`
+(`src/trading/data/feeds.py` already has one), then run the identical statistic
+across several *fixed, non-overlapping* windows and report the distribution —
+how many windows are individually significant, and how wide the spread is.
+
+That single change does three things at once: it makes any result reproducible,
+it turns "significant on one window" into a claim that can be checked, and it
+is the walk-forward the sibling repo says is the largest gap here (§7.4). Until
+it exists, **do not quote any evolution number, including every one committed
+on 2026-09-14.**
+
+Note the same defect reaches the live village: `Evolver._record_rank_test` runs
+every generation against the same sliding feed, so the per-generation rows in
+`data/pvalue_ledger.json` carry it too.
 
 **2. Decide on the news scorer, and treat it as urgent-ish.** The defaults went
 from one working source to five this session, so a known-defective scorer is

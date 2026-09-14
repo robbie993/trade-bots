@@ -1,9 +1,32 @@
 # Evolution, re-derived on a clean apparatus — 2026-09-14
 
+> ## WITHDRAWN the same night. Do not cite the conclusion below.
+>
+> Everything in this document was measured on **one 720-bar window**, and the
+> window slides: `AlpacaFeed.keep_bars = 720`, so every new 15-minute bar
+> pushes the oldest out and both the fitted range and the holdout move.
+>
+> The identical script, same arguments, same six funded firms, same 36 cohorts:
+>
+> | when | rho | p |
+> |---|---|---|
+> | 14:30 | **+0.0014** | 0.472 |
+> | 17:00 | **+0.1351** | 0.006 |
+>
+> Nine runs across one afternoon go from ~0.00 (failing the null) to ~+0.15
+> (clearing it). **The null claimed below is withdrawn, and is not replaced by
+> the opposite claim** — the measurement is not of a fixed quantity and settles
+> neither. See `DECISIONS.md` D-V010.
+>
+> The method here — within-cohort statistic, purge gap, permutation null — is
+> still right, and §4 on the pooled Simpson artefact stands. What is wrong is
+> treating one window's answer as the answer.
+
 Closes item §7.1 of `HANDOFF_2026-09-14_evening.md`, which was the stated
 blocker on everything else.
 
 **The null survives. The selection rule carries no out-of-sample information.**
+*(Superseded — see the box above.)*
 
 ---
 
