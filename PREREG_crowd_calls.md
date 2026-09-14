@@ -145,6 +145,42 @@ Note also that this design implies forward collection — "a post is assigned to
 the bar it was fetched on" only makes sense while fetching — and the document
 never says for how long. That should be fixed here before any arm runs.
 
+### A venue that works, measured 2026-09-14
+
+The sample is **not** the obstacle. StockTwits answers keyless, and its cursor
+pages backwards:
+
+```
+DOGE.X : 4 pages -> 120 messages spanning 48.4 hours
+         108 of 120 carry an explicit bull/bear tag
+         88 distinct 15-minute bars covered
+all four symbols (DOGE.X, SHIB.X, PEPE.X, WIF.X) return messages
+```
+
+Criterion 5 asks for ≥30 bars carrying a call and ≥100 calls. **DOGE alone
+clears both in four requests**, and history is reachable rather than
+forward-only. 4chan `/biz/` also answers (201 threads); Bluesky's public
+search returns 403.
+
+**The choice of venue is still not made here, and the reason is not caution.**
+Two of the fixed points above would change meaning, and which one you accept
+decides what the experiment answers:
+
+- *Using StockTwits' own bull/bear tag* replaces `extract_calls` with a
+  user-declared label. That is a **better** instrument than the word matcher —
+  it retires the "sarcasm, quoting, and *I should have bought DOGE*" limitation
+  listed below outright — but it means `crowd.py` is not under test at all, and
+  **arm 3 stops being a control.** Arm 1 vs arm 3 exists to ask whether the
+  extraction beats counting mentions. Against a declared tag, that question is
+  not being asked.
+- *Running `extract_calls` over StockTwits message text* keeps every arm and
+  every criterion exactly as written, and only the venue changes.
+
+The second preserves this document. The first is a different and arguably
+better experiment that needs its own prereg. Either is defensible; they are not
+interchangeable, and picking one after seeing a result is the failure this file
+exists to prevent. **Amend here, in writing, before any arm runs.**
+
 ### Collateral, found on the way
 
 The same 403 means **two of the village's three live news sources are dead**.

@@ -237,3 +237,31 @@ also 2 of the 8 firms the evolution re-derivation ran on.
   illiquid by construction, but their counterfactual P&L was not computed.
 - **Review date:** before the next attempt to improve evolution, and before any
   firm becomes a promotion candidate. Whichever comes first.
+
+---
+
+### D-V009 · An on-chain seat needs a hypothesis, not an endpoint
+- **Date:** 2026-09-14
+- **Question:** The handoff (§7.6) records the on-chain analyst as blocked on a
+  data source. Which keyless sources actually answer?
+- **Evidence:** Probed and verified parsing, not merely reachable:
+  `blockchair` (BTC and ETH stats, and it covers Dogecoin), `mempool.space`
+  (BTC fees), `blockstream` (tip height), Solana mainnet RPC (`getEpochInfo`
+  returns), `etherscan` without a key, `defillama` (467 chains). The current
+  `OnChainAnalyst` is a volume-per-unit-of-move proxy whose docstring already
+  says it has never seen a blockchain.
+- **Decision:** Record the working sources. **Do not wire an on-chain seat.**
+- **Reason:** The block was described as "needs a node or an indexer", and that
+  turns out not to be the binding constraint — several indexers answer keyless.
+  The binding constraint is that **no hypothesis has been stated**: which
+  on-chain quantity is claimed to predict which return, over what horizon,
+  against what control. The universe makes this concrete rather than abstract —
+  DOGE is its own chain, SHIB and PEPE are ERC-20, WIF is SPL — so "an on-chain
+  seat" is three integrations, and which three depends entirely on the
+  hypothesis. Wiring one now would add a fourth unmeasured analyst to a village
+  whose existing analysts have no measured edge, on the day its selection rule
+  was shown to carry no information.
+- **Confidence at decision:** **Confirmed** for which endpoints answer — each
+  was parsed, not pinged. n/a for anything about signal, because nothing was
+  measured.
+- **Review date:** when a hypothesis exists and has a prereg. Not before.
