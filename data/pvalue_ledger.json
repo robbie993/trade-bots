@@ -1,5 +1,13 @@
 [
  {
+  "subject": "crowd:stocktwits_calls",
+  "test": "explicit crowd calls predict memecoin return (PREREG_crowd_calls.md)",
+  "p": 0.0,
+  "run_date": "2026-09-14",
+  "note": "222 calls over 198 bars; arms at (1, 4, 24) bars; 500 shuffle seeds; 89.4 bps round trip; 3/5 criteria",
+  "verdict": "FAIL"
+ },
+ {
   "subject": "evolver:firm_a_etf_ii_v_ii",
   "test": "in-sample fitness rank predicts held-out rank",
   "p": 0.6872847751762754,

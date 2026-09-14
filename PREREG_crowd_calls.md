@@ -241,3 +241,73 @@ much work for an HTTP error and has been changed.
 * **Four symbols is a narrow cross-section.** With four names, one coin's
   regime can carry the whole result, so arm 1 vs arm 2 is reported per symbol
   as well as pooled.
+
+---
+
+# RESULTS — 2026-09-14
+
+**Run after amendment 1 was committed, with no criterion altered.** Reproduce
+with `CROWD_PAGES=30 python scripts/run_crowd_prereg.py`.
+
+## The answer: 3 of 5. A null.
+
+```
+ARMS — mean net return per call, after the 89.4 bps round trip
+
+ horizon    n    arm1 calls   arm2 median   arm2 p95   arm3 mentions
+  1 bar    34      -1.0266%     -1.0747%   -1.0285%        -0.9383%
+  4 bar    34      -1.0222%     -1.1684%   -1.1311%        -0.9916%
+ 24 bar    34      -1.2930%     -1.2982%   -1.0770%        -1.3148%
+
+arm 4 (equal-weight buy and hold over the window): -5.67%
+```
+
+```
+[PASS]  1. arm1 beats arm2's median, net of costs
+[FAIL]  2. arm1 above the 95th percentile of 500 shuffles
+[FAIL]  3. arm1 beats arm3 (mentions)
+[PASS]  4. same sign at 1, 4 and 24 bars
+[PASS]  5. >=30 bars with a call and >=100 calls
+```
+
+**Fewer than five of five is a null.** Not promising, not directionally
+encouraging. The two that failed are the two that decide: it cannot clear its
+own shuffled control at the 95th percentile, and it does not beat counting
+mentions — which is the arm that asks whether `extract_calls` contributed
+anything. At 1 and 4 bars, mentions are *better*.
+
+Every arm loses roughly 1%, which is roughly the round trip. The signal, if
+any, is smaller than the cost of acting on it.
+
+Counted in `data/pvalue_ledger.json` as `crowd:stocktwits_calls`.
+
+## Two criteria turned out weaker than they read
+
+Found by running the document, and **left unchanged** — rewriting a criterion
+after seeing the number it produced is the one thing this file forbids.
+
+**Criterion 5 counted the wrong population.** It asks for ≥30 bars with a call
+and ≥100 calls, and got 198 bars and 222 calls. But **188 of those 222 calls
+fell outside the price window** — StockTwits returned far more message history
+than the feed returns price history (720 fifteen-minute bars, 2026-09-07 to
+09-14). The analysable sample was **n=34**. The criterion guaranteed corpus
+size when what needed guaranteeing was *priced* sample. A future version should
+count calls that have a forward return, not calls.
+
+n=34 is a real weakness and it is not an excuse: the decisive failures are
+criteria 2 and 3, which compare arms drawn from the same 34 observations, so
+the comparison is like-for-like even where the level is noisy.
+
+**Criterion 4 does not require the sign to be positive.** "Same sign at 1, 4 and
+24 bars" passed — all three are *negative*. A consistently losing arm satisfies
+a consistency test. That is a real hole, and the honest reading is that
+criterion 4 contributed nothing here.
+
+## What this licenses
+
+Nothing is wired. `crowd.py` remains apparatus, which is what the opening
+paragraph said it would remain until this document was answered. It has now
+been answered: on StockTwits, over one week, explicit word-form crowd calls do
+not predict memecoin returns net of costs, and do not beat counting mentions.
+
+A null here is a null about StockTwits — as amendment 1 stated in advance.
