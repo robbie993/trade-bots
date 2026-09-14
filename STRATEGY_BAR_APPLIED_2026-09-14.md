@@ -126,3 +126,88 @@ be claimed:
 
 Still owed from §7.5: the per-gene ablation ("does each gene earn its place?")
 and the ATLAS/DECISIONS confidence ladder.
+
+---
+
+# Addendum — does each gene earn its place? (§7.5, item 3)
+
+`scripts/gene_ablation.py`. For each funded firm, each gene is reset from the
+value the firm carries to its `BASE_GENOME` default and the firm is re-scored
+on the identical window. The change is that gene's contribution.
+
+```
+gene               firms  dead       mean       best      worst
+slow_window            6     1    +0.5400    +2.3200    -0.2200
+trend_bias             6     1    +0.2600    +1.7850    -1.0100
+fast_window            6     1    -0.0983    +0.0500    -0.4600
+rsi_window             4     1    +0.0100    +0.2300    -0.0950
+value_window           6     6    +0.0000    +0.0000    +0.0000
+top_fraction           2     2    +0.0000    +0.0000    +0.0000
+stop_loss_pct          5     5    +0.0000    +0.0000    +0.0000
+signal_trust           5     5    +0.0000    +0.0000    +0.0000
+shadow_strike_sd       4     4    +0.0000    +0.0000    +0.0000
+shadow_spread_cap      4     4    +0.0000    +0.0000    +0.0000
+shadow_dte_min         2     2    +0.0000    +0.0000    +0.0000
+shadow_dte_max         1     1    +0.0000    +0.0000    +0.0000
+shadow_confidence      4     4    +0.0000    +0.0000    +0.0000
+scribe_trust           5     5    +0.0000    +0.0000    +0.0000
+rsi_entry              2     2    +0.0000    +0.0000    +0.0000
+pullback_atr           2     2    +0.0000    +0.0000    +0.0000
+news_trust             5     5    +0.0000    +0.0000    +0.0000
+max_positions          1     1    +0.0000    +0.0000    +0.0000
+max_per_name           2     2    +0.0000    +0.0000    +0.0000
+ibs_entry              2     2    +0.0000    +0.0000    +0.0000
+fair_band_pct          6     6    +0.0000    +0.0000    +0.0000
+calm_vol_pct           6     6    +0.0000    +0.0000    +0.0000
+
+gene-firm pairs ablated    : 86
+pairs that changed NOTHING : 68   (79%)
+```
+
+**Four genes move fitness. Seventeen do not.** The four are the original
+technical ones — `fast_window`, `slow_window`, `rsi_window`, `trend_bias`.
+
+This belongs beside the evolution null rather than replacing it. The evolver
+has been searching a twenty-one dimensional space in which most dimensions are
+flat: `mutate` draws a value, the holdout ranks it, the court scores a
+submission on it, and for most genes none of that touches a single trade.
+
+## Two different reasons a gene is flat, and only one is a defect
+
+**Flat because the seat is absent — correct.** The `shadow_*` genes are read by
+the shadow desk, not the backtester. `rsi_entry`, `ibs_entry` and
+`pullback_atr` need a `reversion` seat, and no funded firm holds one. These
+bite the moment the seat is there, and the zero is the right answer.
+
+**Flat because nothing reads them at all — a defect.** Four genes have no
+reader in any trading path:
+
+| gene | what would have to exist |
+|---|---|
+| `max_positions` | `RiskManager` preferring the genome over `TRADE_MAX_POSITIONS` |
+| `lookback` | a cross-sectional analyst that ranks on it |
+| `top_fraction` | a cross-sectional analyst holding a ranked slice |
+| `max_per_name` | position sizing capping one name from the genome |
+
+**The morning handoff was wrong about two of these.** It records that
+`lookback` and `max_positions` "are different — already read by
+`market_data.py` and `risk_manager.py`, so those two bite already." They do
+not. `risk_manager.py:115` reads `self.limits.max_positions`, which is fed
+from `TRADE_MAX_POSITIONS` in `config.py` and never from a genome;
+`market_data.history(symbol, lookback)` is a parameter name. Both are name
+collisions read as readers — the identical mistake that left `rsi_entry`
+without an analyst for a month, and found the identical way, by grepping for
+who actually reads the thing rather than for whether the word appears.
+
+## What was done about it
+
+Not wired up — that is a behaviour change to a live village and a separate
+decision. Instead the four are declared in `UNREAD_GENES` beside the existing
+`NOT_GENES`, with what each would need, and
+`test_every_gene_is_read_by_something_or_declared_unread` greps for a real
+reader and fails on any gene that has neither one nor a declaration. It also
+fails if a declaration outlives the problem, so the list cannot rot into
+fiction. Verified to fail when an entry is removed, rather than assumed to.
+
+Deleting the genes was the other option and is worse: it would silently change
+every stored genome.

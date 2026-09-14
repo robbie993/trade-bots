@@ -370,3 +370,53 @@ def test_promotion_can_be_switched_off(store, firm_record, feed, trading_config)
     before = store.require_firm_by_id(firm_record.id).genome
     Evolver(store, config).evolve(firm_record, MarketData(feed, ["SPY"]), generation=1)
     assert store.require_firm_by_id(firm_record.id).genome == before
+
+
+# =========================================================================
+# The vocabulary has to be words something reads
+# =========================================================================
+def test_every_gene_is_read_by_something_or_declared_unread():
+    """A gene nothing reads is a dead word that widens the search for free.
+
+    Measured 2026-09-14: 68 of 86 gene-firm ablations changed fitness by
+    exactly zero, and four genes turned out to have no reader anywhere. Two of
+    those four were believed to be read — the morning handoff recorded that
+    `lookback` and `max_positions` "bite already" — because `risk_manager` has
+    a `self.limits.max_positions` fed from an env var and `market_data` has a
+    `lookback` *parameter*. Name collisions read as readers.
+
+    So this greps for a real reader, and requires anything without one to be
+    declared in `UNREAD_GENES` with what would have to be written. A new gene
+    added with no analyst behind it fails here rather than in six weeks.
+    """
+    import pathlib
+    import re
+
+    from src.trading.brain.evolver import UNREAD_GENES
+
+    root = pathlib.Path(__file__).resolve().parents[1] / "src" / "trading"
+    # The evolver defines the vocabulary and the importer only maps foreign
+    # spellings onto it; neither counts as acting on a gene.
+    skip = {"brain/evolver.py", "importer.py"}
+    sources = [p for p in root.rglob("*.py")
+               if str(p.relative_to(root)) not in skip]
+    blobs = {p: p.read_text(encoding="utf-8", errors="ignore") for p in sources}
+
+    unread = []
+    for gene in GENES:
+        pattern = re.compile(rf"""["']{re.escape(gene)}["']""")
+        if not any(pattern.search(text) for text in blobs.values()):
+            unread.append(gene)
+
+    undeclared = sorted(set(unread) - set(UNREAD_GENES))
+    assert not undeclared, (
+        f"genes with no reader and no entry in UNREAD_GENES: {undeclared}. "
+        "Either wire one up or declare it, with what would have to be written."
+    )
+
+    # And the declaration must not outlive the problem.
+    fixed = sorted(set(UNREAD_GENES) - set(unread))
+    assert not fixed, (
+        f"UNREAD_GENES still lists {fixed}, but something reads them now — "
+        "delete the entry so the list keeps meaning what it says."
+    )

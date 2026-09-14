@@ -129,6 +129,42 @@ NOT_GENES: dict = {
     "bars_per_day": "a property of the bar resolution, owned by resolution.py",
 }
 
+#: Genes in the vocabulary that **nothing reads**, with what would have to be
+#: written for each to start mattering.
+#:
+#: Measured 2026-09-14 by `scripts/gene_ablation.py`: reset each gene to its
+#: default on each funded firm and re-score. **68 of 86 gene-firm pairs (79%)
+#: changed fitness by exactly zero**, and only four genes moved it at all —
+#: `fast_window`, `slow_window`, `rsi_window`, `trend_bias`. The evolver has
+#: been searching a twenty-one dimensional space in which most dimensions are
+#: flat, which is worth knowing beside the finding that its selection rule
+#: carries no out-of-sample information.
+#:
+#: Most of the flat ones are flat *for a reason* and are not listed here: the
+#: `shadow_*` genes are read by the shadow desk rather than the backtester,
+#: and `rsi_entry`/`ibs_entry`/`pullback_atr` need a `reversion` seat that no
+#: funded firm holds. Those bite when the seat is there. The four below never
+#: bite, anywhere, for anyone.
+#:
+#: The morning handoff of 2026-09-14 said `lookback` and `max_positions` "are
+#: different — already read by `market_data.py` and `risk_manager.py`, so those
+#: two bite already". They are not and they do not. `risk_manager` reads
+#: `self.limits.max_positions`, which comes from `TRADE_MAX_POSITIONS` in
+#: config.py and never from a genome; `market_data.history(symbol, lookback)`
+#: is a *parameter name*. Both were name collisions read as readers — the same
+#: mistake that left `rsi_entry` with no analyst for a month, found the same
+#: way, by grepping for who actually reads the thing.
+#:
+#: Listed rather than deleted because deleting them would silently change every
+#: stored genome, and listed rather than left alone because a vocabulary that
+#: quietly contains dead words makes every search over it look wider than it is.
+UNREAD_GENES: dict = {
+    "max_positions": "needs RiskManager to prefer the genome over TRADE_MAX_POSITIONS",
+    "lookback": "needs a cross-sectional analyst; no seat ranks on it today",
+    "top_fraction": "needs a cross-sectional analyst that holds a ranked slice",
+    "max_per_name": "needs position sizing to cap a single name from the genome",
+}
+
 BASE_GENOME: dict = {
     "fast_window": 10,
     "slow_window": 30,
@@ -696,4 +732,5 @@ def _genome_row(firm, generation: int, candidate, best, incumbent) -> dict:
     }
 
 
-__all__ = ["BASE_GENOME", "Candidate", "Evolver", "GENES", "Generation"]
+__all__ = ["BASE_GENOME", "Candidate", "Evolver", "GENES", "Generation",
+           "NOT_GENES", "UNREAD_GENES"]
