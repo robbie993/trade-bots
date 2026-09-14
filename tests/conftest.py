@@ -240,11 +240,22 @@ def ecosystem(db, tmp_path, firms_yaml, notifier):
     from src.trading.config import DataConfig, TradingConfig
     from src.trading.ecosystem import Ecosystem
 
+    from src.trading.config import AutonomyConfig
+
     config = TradingConfig(
         firms_config=firms_yaml,
         audit_vault=tmp_path / "vault",
         vendor_dir=tmp_path / "vendor",
         data=DataConfig(source="synthetic", seed=12345, history_days=180),
+        # **Pinned, because `AutonomyConfig.mode` defaults to the environment.**
+        # `TRADE_AUTONOMY` is set to `council` in this repository's own `.env`,
+        # which `src/config.py` loads on import — so two tests named
+        # `test_in_human_mode_*` failed on any machine that had the village
+        # configured, and passed on one that did not. A test whose result
+        # depends on the developer's ambient environment is not measuring the
+        # code. The `autonomous` fixture in test_trading_council.py pins the
+        # other mode for the same reason.
+        autonomy=AutonomyConfig(mode="human"),
     )
     app_config = Config(
         database_url=db.url, notification_log=tmp_path / "notifications.log"
