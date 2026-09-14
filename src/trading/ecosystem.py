@@ -44,6 +44,7 @@ from .data.market_data import MarketData
 from .data.feeds import build_feed
 from .execution import build_venue
 from .execution.live import LiveTradingNotApproved, VenueNotConfigured
+from .execution.paper import MarketClosed
 from .firms import bankruptcy
 from .firms.firm import Firm
 from .firms.spec import FirmSpec, load_firm_specs
@@ -1070,7 +1071,8 @@ class Ecosystem:
 
             try:
                 fill = venue.execute(proposal, market.mark(proposal.symbol))
-            except (LiveTradingNotApproved, VenueNotConfigured) as exc:
+            except (LiveTradingNotApproved, VenueNotConfigured,
+                    MarketClosed) as exc:
                 # Refusing to trade is a safe outcome and is recorded as one.
                 proposal.status = ProposalStatus.BLOCKED.value
                 self.store.set_proposal_status(proposal.id, ProposalStatus.BLOCKED.value)
