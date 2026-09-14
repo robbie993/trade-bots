@@ -55,12 +55,49 @@ class BacktestResult:
         too few trades to mean anything. A genome that made 40% in three
         trades is not fitter than one that made 25% in ninety, and this is
         where that judgement is written down.
+
+        **Only ever compare this against another fitness measured over the
+        same number of bars.** It is a window-sized quantity, not a rate:
+        `max_drawdown_pct` can only grow as a window lengthens, so a longer
+        window scores worse for reasons that have nothing to do with the
+        genome. Measured on 40 random genomes, the same population scored
+        -0.950 over 216 bars and -1.921 over 720 — a gap of 0.972, larger
+        than any real effect found anywhere in this village. Splitting that
+        by running equal-length windows at different times put the regime
+        component at +0.051, so effectively all of it was window length.
+
+        That gap was read as "evolution beats random by 0.6" for about an
+        hour. Use `comparable_with` before trusting any difference, and rank
+        within a window rather than comparing levels across two.
         """
         base = D(self.return_pct) - D(self.max_drawdown_pct) / D(2)
         if self.closed_trades < 10:
             # Not a penalty for being new — a refusal to reward a small sample.
             base = base * D(self.closed_trades) / D(10)
         return D(base).quantize(D("0.0001"))
+
+    def comparable_with(self, other: "BacktestResult") -> bool:
+        """Whether two fitnesses may be subtracted at all.
+
+        Equal bar counts, or the difference is dominated by window length
+        rather than by anything either genome did. There is deliberately no
+        normalisation offered here: return scales roughly linearly with the
+        window while drawdown scales nearer its square root, so no single
+        divisor makes two windows comparable, and offering one would hide the
+        problem behind a number that looks principled.
+        """
+        return self.bars == other.bars and self.bars > 0
+
+    def minus(self, other: "BacktestResult") -> Decimal:
+        """`self.fitness - other.fitness`, refusing mismatched windows."""
+        if not self.comparable_with(other):
+            raise ValueError(
+                f"fitness over {self.bars} bars is not comparable with "
+                f"{other.bars} bars — max drawdown grows with the window, so "
+                f"the difference would mostly be length. Rank within a window "
+                f"instead."
+            )
+        return self.fitness - other.fitness
 
     def summary(self) -> str:
         return (

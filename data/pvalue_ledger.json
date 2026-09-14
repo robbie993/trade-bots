@@ -1,0 +1,26 @@
+[
+ {
+  "subject": "evolver:firm_b_stocks_ii_vi_ii",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 5.975119561140371e-06,
+  "run_date": "2026-09-14",
+  "note": "generation 1, rho=+0.880 p=0.000 n=8 | look 1, needs p<0.0500 | survives its own history",
+  "verdict": "PASS"
+ },
+ {
+  "subject": "scanner_example",
+  "test": "direction vs 4-bar forward return",
+  "p": 0.75,
+  "run_date": "2026-09-01",
+  "note": "692 readings, 49.3% hit rate",
+  "verdict": "FAIL"
+ },
+ {
+  "subject": "scanner_news",
+  "test": "direction vs 4-bar forward return",
+  "p": 0.78,
+  "run_date": "2026-09-01",
+  "note": "53 readings, 47.2% hit rate",
+  "verdict": "FAIL"
+ }
+]

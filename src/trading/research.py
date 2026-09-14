@@ -21,6 +21,7 @@ expect after twenty looks.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Optional
@@ -84,8 +85,18 @@ class PValueLedger:
     This records the looks, so the twentieth is read as the twentieth.
     """
 
+    #: Where the ledger lives when no path is given. An env var rather than a
+    #: constant because the evolver now records a look every generation, and
+    #: the first test run after that shipped wrote `evolver:alpha`,
+    #: `evolver:beta` and `evolver:test_firm` into the real ledger — test
+    #: fixtures counted as real looks against real subjects. A ledger whose
+    #: job is counting how often you looked cannot be polluted by the suite
+    #: that checks the counting. `conftest` points this at a tmp path.
+    ENV_PATH = "TRADE_PVALUE_LEDGER"
+
     def __init__(self, path: Optional[str] = None):
-        self.path = str(path or Path(__file__).resolve().parents[2]
+        self.path = str(path or os.environ.get(self.ENV_PATH)
+                        or Path(__file__).resolve().parents[2]
                         / "data" / "pvalue_ledger.json")
         try:
             self.rows = json.load(open(self.path)) if os.path.exists(self.path) else []
@@ -141,4 +152,55 @@ class PValueLedger:
         return "\n".join(out) or "  (no tests recorded)"
 
 
-__all__ = ["GuardFailure", "PValueLedger", "date_span", "intersect_spans"]
+def spearman(xs, ys) -> tuple:
+    """Rank correlation and a two-sided p, as `(rho, p, n)`.
+
+    The test that separates a strategy from a curve fit: does the ranking a
+    rule produces on the bars it saw predict the ranking on bars it did not?
+    Coval, Hirshleifer and Shumway's load-bearing result was this and not
+    their headline — top-decile performance in the first half predicting the
+    second half. A difference in means cannot do the same job, because it is
+    dominated by whichever window each side was measured on.
+
+    Run once on this village's whole genome population it returned rho=+0.056
+    on n=280: the selection rule carries no out-of-sample information.
+
+    `p` comes from the usual t transform read against a normal, which is
+    close enough above roughly n=20 and conservative below it. Ties are given
+    average ranks.
+    """
+    xs, ys = list(xs), list(ys)
+    n = len(xs)
+    if n < 3 or n != len(ys):
+        return (0.0, 1.0, n)
+
+    def ranked(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        out = [0.0] * len(v)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            share = (i + j) / 2.0
+            for k in range(i, j + 1):
+                out[order[k]] = share
+            i = j + 1
+        return out
+
+    rx, ry = ranked(xs), ranked(ys)
+    mx, my = sum(rx) / n, sum(ry) / n
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    den = (sum((a - mx) ** 2 for a in rx) * sum((b - my) ** 2 for b in ry)) ** 0.5
+    if den == 0:
+        return (0.0, 1.0, n)          # everything tied: no ranking to test
+    rho = num / den
+    if abs(rho) >= 1:
+        return (rho, 0.0, n)
+    t = rho * ((n - 2) / (1 - rho * rho)) ** 0.5
+    p = math.erfc(abs(t) / (2 ** 0.5))
+    return (rho, min(1.0, max(0.0, p)), n)
+
+
+__all__ = ["GuardFailure", "PValueLedger", "date_span", "intersect_spans",
+           "spearman"]

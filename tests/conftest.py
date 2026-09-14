@@ -54,6 +54,13 @@ def _hermetic_env(monkeypatch, tmp_path):
     monkeypatch.setenv("TRADE_HEARTBEAT", str(tmp_path / "loop.beat"))
     import src.trading.heartbeat as _hb
     monkeypatch.setattr(_hb, "HEARTBEAT", tmp_path / "loop.beat")
+    # Same reasoning, for the p-value ledger. The evolver records a look every
+    # generation now, and the first suite run after that wrote `evolver:alpha`,
+    # `evolver:beta` and `evolver:test_firm` into the operator's real ledger —
+    # so fixture firms were inflating the look count that decides whether a
+    # real result means anything. The one file whose job is counting looks must
+    # not be writable by the tests that exercise the counting.
+    monkeypatch.setenv("TRADE_PVALUE_LEDGER", str(tmp_path / "pvalues.json"))
 
 
 @pytest.fixture

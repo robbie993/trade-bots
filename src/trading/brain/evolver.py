@@ -221,6 +221,72 @@ class Evolver:
             out.append(Candidate(genome=self.mutate(base, rng), parent=base))
         return out
 
+    def _keep_holdout(self, genome_id, candidate, fitted_bars: int,
+                      holdout_bars: int) -> None:
+        """Write the second exam beside the first.
+
+        It lived on the in-memory Candidate and was discarded every
+        generation, which is why the one question that separates a strategy
+        from a curve fit had to be answered by re-running 280 backtests.
+
+        Both bar counts go with it: fitness is window-sized, so without them
+        a later reader cannot tell whether a difference between the two
+        numbers is the genome or the window. Never fails a run — a missing
+        diagnostic row is worth less than a stopped village.
+        """
+        if genome_id is None or candidate.holdout_fitness is None:
+            return
+        try:
+            self.store.db.insert("genome_holdout", {
+                "genome_id": genome_id,
+                "holdout_fitness": candidate.holdout_fitness,
+                "holdout_bars": holdout_bars,
+                "fitted_bars": fitted_bars,
+            })
+        except Exception:               # noqa: BLE001
+            pass
+
+    def _record_rank_test(self, firm, generation: int, candidates) -> str:
+        """Ask whether this generation's ranking predicted anything, and count
+        the asking.
+
+        The evolver has always sorted candidates by in-sample fitness and
+        adopted the top one. Whether that sort carries any out-of-sample
+        information was never checked, and when it finally was — across the
+        whole stored population — it did not: Spearman +0.056 on n=280.
+
+        So the question is asked every generation now, and recorded in the
+        ledger that knows how many times it has been asked. The look is
+        counted whether the answer flatters the generation or not, because a
+        ledger that only hears about the good runs is worse than no ledger.
+        Failing to write it must never fail a run — evolution is allowed to
+        proceed, it is just no longer allowed to proceed unmeasured.
+        """
+        from datetime import datetime, timezone
+
+        from ..research import PValueLedger
+
+        try:
+            rho, p, n = _spearman_of(candidates)
+            if n < 3:
+                return ""
+            ledger = PValueLedger()
+            subject = f"evolver:{firm.firm_key}"
+            ctx = ledger.context(subject, p)
+            note = _rank_note(rho, p, n, ctx)
+            ledger.record(
+                subject=subject,
+                test="in-sample fitness rank predicts held-out rank",
+                p=p,
+                run_date=datetime.now(timezone.utc).date().isoformat(),
+                note=f"generation {generation}, {note}",
+                verdict="PASS" if (rho > 0 and ctx["survives_bonferroni_05"])
+                        else "FAIL",
+            )
+            return note
+        except Exception:               # noqa: BLE001 - never fail a run
+            return ""
+
     def _split(self, market: MarketData, symbols) -> tuple:
         """Where the fitted history ends and the held-out tail begins.
 
@@ -297,12 +363,27 @@ class Evolver:
         best = max(candidates, key=lambda c: c.fitness)
         gen.winner = best
 
-        # The second exam, on bars neither of them was chosen against.
+        # The second exam, on bars nobody was chosen against.
+        #
+        # Every candidate sits it, not just the incumbent and the winner. The
+        # adopt decision only ever needed those two, which is why it was
+        # written that way — but the far more important question is whether
+        # the *ranking* means anything, and that needs the whole population.
+        # Answering it once, retrospectively, cost 280 re-run backtests: the
+        # in-sample rank predicted the held-out rank with a Spearman of
+        # +0.056 (n=280, t=+0.94), which is no information at all. Sitting
+        # the whole cohort makes that a standing readout rather than an
+        # archaeology project, so the next claim that evolution is working
+        # can be checked against the generation that made it.
         enough_holdout = holdout_bars >= self.brain.min_holdout_bars
-        if enough_holdout and best is not incumbent:
-            for candidate in (incumbent, best):
+        if enough_holdout:
+            for candidate in candidates:
                 candidate.holdout_fitness = score(
                     candidate.genome, start=split).fitness
+            self._record_rank_test(firm, generation, candidates)
+
+        # (the rank test above is recorded before anything is adopted, so the
+        # ledger counts the look whether or not the generation liked itself)
 
         # The incumbent goes in first so the mutants can point at it. Every
         # mutant in a generation *is* a mutation of that one genome, and
@@ -313,14 +394,16 @@ class Evolver:
             "strategy_genomes",
             _genome_row(firm, generation, incumbent, best, incumbent),
         )
+        self._keep_holdout(parent_id, incumbent, split, holdout_bars)
         for candidate in candidates:
             if candidate is incumbent:
                 continue
-            self.store.db.insert(
+            genome_id = self.store.db.insert(
                 "strategy_genomes",
                 {**_genome_row(firm, generation, candidate, best, incumbent),
                  "parent_id": parent_id},
             )
+            self._keep_holdout(genome_id, candidate, split, holdout_bars)
 
         if not self.brain.promote_winners:
             gen.refused = "promotion is switched off"
@@ -381,6 +464,24 @@ class Evolver:
             "SELECT * FROM strategy_genomes WHERE firm_id = ? ORDER BY id DESC LIMIT ?",
             (firm_id, limit),
         )
+
+
+def _spearman_of(candidates) -> tuple:
+    """`(rho, p, n)` for in-sample rank against held-out rank in one cohort."""
+    from ..research import spearman
+
+    pairs = [(float(c.fitness), float(c.holdout_fitness)) for c in candidates
+             if c.fitness is not None and c.holdout_fitness is not None]
+    return spearman([a for a, _ in pairs], [b for _, b in pairs])
+
+
+def _rank_note(rho: float, p: float, n: int, ctx: dict) -> str:
+    """One line saying whether this generation's ranking ranked anything."""
+    verdict = ("ranks nothing" if p > 0.05 or rho <= 0
+               else "survives its own history" if ctx["survives_bonferroni_05"]
+               else "nominally positive, fails the look count")
+    return (f"rho={rho:+.3f} p={p:.3f} n={n} | look {ctx['tests_including_this']}, "
+            f"needs p<{ctx['bonferroni_floor']:.4f} | {verdict}")
 
 
 def _genome_row(firm, generation: int, candidate, best, incumbent) -> dict:
