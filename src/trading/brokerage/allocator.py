@@ -87,6 +87,21 @@ class AllocationChange:
         )
 
 
+def _basis(card) -> str:
+    """How the score's return term was computed, for the reason string.
+
+    A capital move has to be justifiable from its own row, and "score 62"
+    cannot distinguish *beat its universe by 6%* from *went up 6% while its
+    universe went up 30%* — which were the same score until 2026-09-14. The
+    evaluator computes this and the components it lives in are not persisted,
+    so it is copied onto the event that actually moves the money.
+    """
+    try:
+        return str((card.components or {}).get("return_basis", "basis unrecorded"))
+    except Exception:               # noqa: BLE001 - a reason string is not worth a crash
+        return "basis unrecorded"
+
+
 class Allocator:
     def __init__(
         self,
@@ -156,7 +171,8 @@ class Allocator:
                         firm.id,
                         current,
                         target,
-                        f"score {card.score} at or above {self.config.good_score}",
+                        f"score {card.score} at or above {self.config.good_score}"
+                        f" ({_basis(card)})",
                         bar=bar,
                     )
                 )
@@ -195,6 +211,7 @@ class Allocator:
                         current,
                         money(current - withdrawable),
                         f"score {card.score} at or below {self.config.poor_score}"
+                        f" ({_basis(card)})"
                         + (
                             f" (cut limited to {fmt_money(withdrawable)} of uninvested cash)"
                             if withdrawable < current - target

@@ -2,8 +2,22 @@
 
 This is the ``clawock`` principle from the build document, kept as the house
 rule of the whole layer: the model proposes, Python grades. No part of a
-firm's score comes from a language model, and every component of it is stored
-next to the score, so a capital cut can be re-derived from a row months later.
+firm's score comes from a language model.
+
+**On what is actually stored.** This paragraph used to say "every component of
+it is stored next to the score, so a capital cut can be re-derived from a row
+months later". That was not true: `to_row` has never carried `components` and
+`firm_performance` has no column for them, so they were computed and thrown
+away on every tick. It is the same shape of claim as migration 024's "safe to
+subtract" — a guarantee in prose that the data did not support.
+
+What is true, and is enough: `firm_performance` stores the score and every
+*input* to it — return, drawdown, win rate, Sharpe — so the arithmetic can be
+replayed. And an actual capital move records the score **and the basis the
+return term was computed on** in its `allocation_change` event, which is the
+row a cut has to be justified from. Per move rather than per tick, because
+moves are rare and ticks are every sixty seconds against a database already
+past 300MB.
 
 The score is a plain weighted sum in the 0-100 range:
 

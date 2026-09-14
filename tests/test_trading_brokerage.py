@@ -607,3 +607,28 @@ def test_a_universe_that_only_partly_prices_gives_no_benchmark(store, trading_co
     firm = store.require_firm_by_id(firm_record.id)
     firm.universe = ["SPY", "GHOST"]
     assert evaluator._benchmark_pct(firm, market_data) is None
+
+
+def test_a_capital_move_records_how_its_score_was_computed(store, firm_record,
+                                                           market, trading_config):
+    """A cut has to be justifiable from its own row, and "score 62" cannot
+    distinguish "beat its universe by 6%" from "went up 6% while its universe
+    went up 30%" — which were the same score until 2026-09-14.
+
+    The evaluator's components are not persisted (`firm_performance` has no
+    column for them, despite a docstring that long claimed otherwise), so the
+    basis is copied onto the event that actually moves the money.
+    """
+    from src.trading.brokerage.allocator import _basis
+
+    beat = Scorecard(firm_key="a", firm_id=1, return_pct=D("12"), benchmark_pct=D("4"))
+    beat.score, beat.components = Evaluator(store, trading_config).score(beat)
+    assert "excess over own universe" in _basis(beat)
+
+    blind = Scorecard(firm_key="b", firm_id=1, return_pct=D("12"))
+    blind.score, blind.components = Evaluator(store, trading_config).score(blind)
+    assert _basis(blind) == "raw return (no benchmark)"
+
+    # And it never raises on a card that has no components at all.
+    assert _basis(Scorecard(firm_key="c", firm_id=1)) in (
+        "basis unrecorded", "raw return (no benchmark)")
