@@ -330,10 +330,16 @@ four unread genes (D-V002), an on-chain seat (D-V009 — the endpoints answer;
 what is missing is a hypothesis), and deleting the 26 orphan heirs (D-V007).
 
 **7. Reading still owed.** Most of the 643 Python files and **all ~100 chat
-transcripts**. The 12 PREREGs, `STRATEGY_BAR.md`, `ATLAS.md`, `DECISIONS.md`
-and 6 `insider_research` result files were read this session and what transfers
-is in `TRANSFER_FROM_TRADE_2026-09-14.md`. The transcripts remain the largest
-unread thing in the project and nobody has opened them.
+transcripts**. Read this session: the 12 PREREGs, `STRATEGY_BAR.md`,
+`ATLAS.md`, `DECISIONS.md`, 6 `insider_research` result files (transfers in
+`TRANSFER_FROM_TRADE_2026-09-14.md`), and — added late, at Robbie's prompting —
+**all 15 fleet dossiers in `inbox/fleet_dossiers/` and `bots/README.md`**. The
+transcripts remain the largest unread thing in the project.
+
+### What the fleet dossiers changed (§10)
+
+Robbie asked for a scanner that is not crypto-only. Reading the drop for data
+sources turned up something larger — see §10.
 
 ---
 
@@ -386,3 +392,67 @@ Both corrections share a shape worth naming for whoever reads this next:
 **the first measurement of a thing was taken on too little, and read as
 settled.** Nine runs and a 26-headline sample are not much either; they are
 simply more than one run and 16 headlines.
+
+
+---
+
+## 10. The scanner seat: the data was never the problem
+
+Added after §9, from reading `bots/README.md`, all 15 dossiers, and
+`config/firm_config.yaml`. Prompted by Robbie: *"i dont want scanner just off
+crypto"*.
+
+**All-stocks data is already live.** `.env` sets `TRADE_DATA_SOURCE=alpaca` and
+`TRADE_ALPACA_FEED=sip` — the full tape, every US stock and crypto. The drop
+README is explicit that Alpaca is the one to reach for on a mixed universe
+because it is the only source covering both halves. `yahoo` is a keyless
+fallback for stocks/ETFs/indices, and sources chain per symbol.
+
+**The village has never run a real screener.** One scanner is registered and it
+is `bots/example_scanner.py`, a demonstration. Every one of the 3,380 `signals`
+rows with publisher `example` comes from it. That is also why
+`PREREG_crowd_calls.md` had no historical corpus to fall back on when Reddit
+returned 403 — the four memecoin symbols carried nothing but synthetic demo
+readings.
+
+**The config understated the blast radius by 4x.** It claimed `firm_a_etf` was
+the only firm listening to scanners. Four carry the `signals` seat:
+`firm_a_etf`, `firm_d_value`, `firm_f_bonds`, `firm_g_commodities` — the last
+being the firm nearest the promotion gate. Corrected in the config.
+
+**And the memecoin universe was the venue's empty corner.** StockTwits message
+volume, measured 2026-09-14:
+
+```
+DOGE.X 4.4/hr   SHIB.X 1.0   PEPE.X 0.3   WIF.X 0.1   -> all four 5.8/hr
+NVDA  26.9/hr   SPY   52.5   TSLA  10.9   AMD   9.1   -> ten equities 131/hr
+```
+
+~23x the traffic on ten equity names than on the whole memecoin universe. The
+memecoin config comment argues — correctly — that the research effect should be
+*strongest* on low-cap recently-negative assets. What nobody checked is whether
+the venue carries enough traffic on those four names to measure it. It does
+not. `PREREG_crowd_calls_equities.md` is the same question with the universe
+fixed to the 29 equities the village already trades, written as a new document
+because changing a completed null's universe is what the original forbids.
+
+**Three fleet findings worth not re-deriving**, from the dossiers:
+
+- **Never test a screen on scanner's universe.** Its 78 hand-written names are
+  worth **+26.9%/yr of pure hindsight** against a random-name control. Any
+  backtest scored on them measures the list. Its own dossier says the screen has
+  never been tested on a universe someone else chose.
+- **The Form 4 insider signal is real and unreachable.** Filing-close to
+  next-open is +0.786% (t=+32.13), **83% of the whole capture**, and 82.5% of
+  filings arrive after the close. Every strategy in that study traded the
+  +0.141% leftovers.
+- **KEYSTONE/VERITAS is the fleet's best-evidenced strategy and it is
+  equities** — 5/5 pre-registered criteria, p<0.002 against 500 random-entry
+  runs, no alpha decay, 645/645 trades matched on an independent rebuild. It
+  needs ~1.89 years to reach significance and says so in every post.
+
+**Open security item carried from `fomo.md`:** the Solana wallet key for
+`B5bTpihXkNa12YbcXbEiDRycLPijMZQHtQXzJzAh2D9` (~1.13 SOL) was pasted into a
+chat transcript on 2026-08-02 and **has not been rotated**. It is a privy
+embedded wallet, so fomo.family can spend it whenever Robbie is logged in.
+Rotation is Robbie's to do; Claude does not move funds.
