@@ -320,3 +320,45 @@ also 2 of the 8 firms the evolution re-derivation ran on.
   walked forward across several windows, reporting the distribution rather than
   one draw. Until then no evolution verdict may be quoted, including the ones
   committed earlier today.
+
+---
+
+### D-V011 · The news scorer defect is real, small, and the obvious fix is not better
+- **Date:** 2026-09-14 (night)
+- **Question:** The scorer reads the whole headline rather than the clause about
+  the named symbol. The night handoff (§7.2) called fixing it urgent-ish,
+  because this session widened the news defaults from one working source to
+  five and so increased exposure to it. Fix it, or revert the widening?
+- **Evidence:** measured on the live corpus — 144 stories across the five
+  sources, 26 naming a symbol the village trades. Whole-headline scoring
+  disagrees with a ±6-word window on **4 of 26 (15%)**, with **one outright
+  sign flip**. But the direction of the error is not uniform:
+
+  | headline | whole | windowed |
+  |---|---|---|
+  | "Bitcoin climbs to $78,000 as crypto sits out the AI selloff" | −1 | **+2** |
+  | "Live updates: Bitcoin climbs near $79,000 as stocks narrow declines" | 0 | **+2** |
+  | "Gold prices today, Monday…: Gold **sinks** following…" | **−3** | 0 |
+  | "Silver prices today…: Silver **slides** as rates…" | **−2** | 0 |
+
+  The windowed version fixes the two Bitcoin cases and **breaks** the two metals
+  cases: those headlines open with a date-stamped prefix, so the first ticker
+  match sits ~8 words from the verb and a ±6-word window excludes the only
+  directional word in the sentence.
+- **Decision:** **Do not change the scorer, and do not revert the news
+  widening.** Supersedes the night handoff's §7.2, which recommended one or the
+  other.
+- **Reason:** The obvious fix trades two errors for two different errors. It is
+  not a fix, it is a different bias — and shipping it would have moved live
+  signal values while claiming an improvement that the measurement does not
+  support. A real fix has to consider every occurrence of the ticker rather
+  than the first, or find the nearest directional word at any distance, and
+  that is a design task with its own before/after measurement. The widening
+  stays because 15% with one sign flip in 26 is modest against going from one
+  live source to five, and from zero crypto readings to some.
+- **Confidence at decision:** **Observed** — one snapshot of 144 stories, 26
+  usable. The rate is not established across time and the metals cases suggest
+  it varies by publisher's headline house style, which is exactly the kind of
+  thing one snapshot cannot see.
+- **Review date:** before any redesign of `score_text`, and with a sample drawn
+  across several days rather than one afternoon.
