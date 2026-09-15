@@ -200,7 +200,11 @@ Two things worth carrying forward from how this was missed:
   nuisance parameter is not reproduction, and the ladder in `DECISIONS.md` did
   not save me from it.
 
-**The remedy is item §7.1 below**: pin the bars and walk forward.
+**DONE before hand-off. See §11 — the remedy was run and it answers the
+question.** Pinned bars, eight non-overlapping windows: mean +0.0077, sd
+0.1366, 4/8 positive, 1/8 significant. The selection rule does not carry
+out-of-sample information, and every number produced today sits inside the
+range those eight windows span.
 
 **Other flags:**
 
@@ -270,8 +274,16 @@ moves it toward the village looking worse. On a one-year window it would be
 
 ## 7. What to do next
 
-**1. Pin the bars, then walk forward. This is the blocker.** §5 is resolved and
-the answer is that no evolution verdict currently exists. The measurement runs
+**1. ~~Pin the bars, then walk forward.~~ DONE — see §11.** The evolution
+verdict now exists and is *Validated*: the selection rule carries no
+out-of-sample information, measured across eight non-overlapping pinned
+windows. What remains of this item is narrower: the crypto desk was missing
+(`FeedNotConfigured` on BTC/ETH/SOL at 15-minute resolution), so the verdict
+covers the five equity-universe firms only. Fixing the pinned crypto fetch and
+re-running would close that gap.
+
+The original wording of this item follows, because it is still the right
+description of *why* the measurement was broken. The measurement runs
 against a live feed whose 720-bar window slides under it, so it answers "does
 in-sample rank predict rank on whatever the last 216 bars happen to be *right
 now*". Dump the bars to a fixture and drive the analysis from `CsvFeed`
@@ -456,3 +468,59 @@ because changing a completed null's universe is what the original forbids.
 chat transcript on 2026-08-02 and **has not been rotated**. It is a privy
 embedded wallet, so fomo.family can spend it whenever Robbie is logged in.
 Rotation is Robbie's to do; Claude does not move funds.
+
+
+---
+
+## 11. Both experiments landed after §10 — two nulls
+
+**Evolution, walked forward on pinned bars. `DECISIONS.md` D-V012.**
+
+```
+w0 -0.1458 (0.974)   w4 -0.0432 (0.706)
+w1 +0.0144 (0.428)   w5 -0.0726 (0.854)
+w2 +0.1253 (0.060)   w6 -0.1101 (0.932)
+w3 +0.2726 (0.000)   w7 +0.0209 (0.406)
+
+mean +0.0077   sd 0.1366   range -0.1458..+0.2726   4/8 positive   1/8 significant
+```
+
+**The selection rule does not carry out-of-sample information.** The sd between
+windows is seventeen times the mean, and that single fact explains the whole
+day: the afternoon's +0.0014 and the evening's +0.1351 both sit inside this
+range, and **window 3 alone would have produced a headline of +0.2726 at
+p=0.000.** The sliding feed was handing over one of these eight at a time.
+
+Confidence **Validated** — eight non-overlapping windows on pinned data is the
+walk-forward rung D-V001 claimed and had not earned. Scope: BTC/ETH/SOL failed
+the pinned 15-minute fetch, so this covers the five equity-universe firms.
+
+**Crowd calls on equities: 1 of 5. `PREREG_crowd_calls_equities.md`.**
+
+```
+ horizon    n    arm1 calls   arm2 median   arm2 p95   arm3 mentions
+  1 bar   381      -0.0073%      -0.0192%    0.0008%       -0.0103%
+  4 bar   369      -0.0274%      -0.0263%    0.0089%       -0.0153%
+ 24 bar   222      -0.0418%      -0.0136%    0.0860%       +0.0178%
+```
+
+A cleaner null than the memecoin run, and worth more: the sample is 6.5x larger
+(222 priced calls against 34) and the cost bar 54x lower (1.64 bps against
+89.4), so neither "too few observations" nor "costs swamped it" survives.
+
+Two things worth carrying:
+
+- **Arm 3 answers what arm 3 is for.** Mentions beat explicit calls at 4 and 24
+  bars, and at 24 bars mentions is *positive* while calls is negative.
+  `crowd.py`'s extraction subtracts value rather than failing to add it.
+- **Criterion 4 failed only because it was repaired first.** All three horizons
+  share a negative sign. Under the memecoin wording this would have **passed**,
+  exactly as it wrongly passed there.
+
+`crowd.py` stays apparatus, wired to nothing. Two universes, two nulls, and on
+the larger one the extraction loses to its own control. Do not ask this on a
+third venue without a better reason than the first two being wrong.
+
+**Where that leaves the session's ledger:** eleven nulls or withdrawals, no
+positive findings, and two of the withdrawals were of claims made earlier the
+same day by me.
