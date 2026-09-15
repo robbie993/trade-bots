@@ -232,9 +232,19 @@ firms:
 # stops running goes silent immediately rather than voting from the grave.
 #
 # One is registered below so the seat is visibly working rather than working
-# once you find the switch. Delete the block for a village with no scanners;
-# `firm_a_etf` is the only firm listening, and it stops listening the moment
-# `signals` comes off its analyst list.
+# once you find the switch. Delete the block for a village with no scanners.
+#
+# **Four firms listen, not one.** This block used to say `firm_a_etf` was the
+# only one; `signals` is on the analyst list of `firm_a_etf`, `firm_d_value`,
+# `firm_f_bonds` and `firm_g_commodities`. That matters because it is the blast
+# radius of registering a scanner, and it was understated by 4x — one of the
+# listeners is `firm_g_commodities`, currently the firm nearest the promotion
+# gate. A scanner registered here is heard by all four on the bar it publishes.
+#
+# The only scanner registered is `example`, a demonstration. Every row in the
+# `signals` table with publisher `example` comes from it — so the village has
+# never run a real screener, and nothing has ever published a reading drawn
+# from live market structure.
 # =========================================================================
 scanners:
   example:
