@@ -122,3 +122,77 @@ license a strategy, a capital allocation, or a live order.
   15-minute bars per symbol; calls older than that window have no forward
   return. This is the defect that reduced the memecoin run to n=34, named here
   in advance so the same surprise cannot be reported as a finding.
+
+---
+
+# RESULTS — 2026-09-14 night
+
+Run after this document was committed, with no criterion altered. Reproduce
+with `CROWD_PAGES=12 python scripts/run_crowd_prereg_equities.py`.
+
+## The answer: 1 of 5. A null, and a cleaner one than the memecoins gave.
+
+```
+8,634 unique messages across 29 streams
+1,113 explicit calls extracted; 222 priced at all horizons; 599 bars with a call
+
+ARMS — mean net return per call, after the 1.64 bps round trip
+
+ horizon    n    arm1 calls   arm2 median   arm2 p95   arm3 mentions
+  1 bar   381      -0.0073%      -0.0192%    0.0008%       -0.0103%
+  4 bar   369      -0.0274%      -0.0263%    0.0089%       -0.0153%
+ 24 bar   222      -0.0418%      -0.0136%    0.0860%       +0.0178%
+
+arm 4 (equal-weight buy and hold over the window): +0.21%
+```
+
+```
+[FAIL]  1. arm1 beats arm2's median, net of costs
+[FAIL]  2. arm1 above the 95th percentile of 500 shuffles
+[FAIL]  3. arm1 beats arm3 (mentions)
+[FAIL]  4. same sign at 1, 4, 24 bars AND that sign is positive
+[PASS]  5. >=30 bars and >=100 priced calls
+```
+
+## Why this null is worth more than the memecoin one
+
+**The sample is 6.5x larger and the cost bar is 54x lower.** 222 priced calls
+against 34; 1.64 bps round trip against 89.4. The two escape hatches available
+to the earlier result — too few observations, costs swamping a real effect —
+are both closed. At these costs an edge of a tenth of a basis point would show,
+and the arms are negative.
+
+**Arm 3 settles the question arm 3 exists to ask.** Counting mentions beats
+extracting explicit calls at 4 and 24 bars, and at 24 bars mentions is
+**positive (+0.0178%) while calls is −0.0418%**. The extraction is not merely
+failing to add value, it is subtracting it — on this venue, over this window,
+`crowd.py`'s entire contribution is worse than ignoring direction and counting
+how often a name comes up.
+
+**Criterion 4 failed because it was repaired first.** All three horizons share
+a sign, and that sign is negative. Under the memecoin document's wording —
+"the effect has the same sign at 1, 4 and 24 bars" — this would have **passed**,
+exactly as it wrongly passed there. The repair was written into this prereg
+before any number was seen, and it turned a false PASS into a true FAIL. That
+is the clearest evidence in this project that the criterion was broken rather
+than merely inelegant.
+
+**Buy and hold beat every trading arm.** +0.21% against three negative arms.
+
+## What this licenses
+
+`crowd.py` stays apparatus, wired to nothing. Two independent universes, two
+nulls, and on the larger one the extraction is worse than the control it was
+built to beat. **Do not wire a crowd scanner**, and do not ask this question a
+third time on a third venue without a reason better than "the last two venues
+were wrong".
+
+Counted in `data/pvalue_ledger.json` as `crowd:stocktwits_equities`.
+
+## Limits, as stated in advance
+
+A null about StockTwits equities over one week. The deletion bias, the
+sub-bar timestamp smearing and the word-matcher weaknesses all still apply.
+891 of the 1,113 extracted calls had no forward return at all three horizons —
+overnight and weekend messages, and calls older than the price window — which
+is the session-bound limitation this document named before running.
