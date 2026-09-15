@@ -289,12 +289,26 @@ Note the same defect reaches the live village: `Evolver._record_rank_test` runs
 every generation against the same sliding feed, so the per-generation rows in
 `data/pvalue_ledger.json` carry it too.
 
-**2. Decide on the news scorer, and treat it as urgent-ish.** The defaults went
-from one working source to five this session, so a known-defective scorer is
-now being fed five times the headlines. Either fix the scoping (the windowed
-approach is already in `crowd.py`) or revert the news widening until it is
-fixed. **Do not leave it as it is** — that combination is mine and it is the
-one change this session that could plausibly make trading worse.
+**2. The news scorer — SETTLED, and the answer is leave it alone.**
+*(This item originally said the opposite; see D-V011.)*
+
+The concern was real: the defaults went from one working source to five this
+session, increasing exposure to a scorer that reads the whole headline rather
+than the clause about the named symbol. Measured on 144 live stories, 26 naming
+a traded symbol: whole-headline and ±6-word-window scoring disagree on **4 of
+26 (15%)**, one outright sign flip.
+
+But the obvious fix is not better. Windowing repairs both Bitcoin cases
+(−1 → +2) and **breaks** both metals cases: "Gold prices today, Monday,
+September 14, 2026: Gold sinks following…" opens with a date-stamped prefix, so
+the first ticker match sits ~8 words from the verb and a ±6-word window
+excludes the only directional word in the sentence (−3 → 0).
+
+Two errors traded for two different errors. **Do not ship the windowed fix**,
+and do not revert the news widening either — 15% with one sign flip is modest
+against going from one live source to five and from zero crypto readings to
+some. A real fix considers every occurrence of the ticker rather than the
+first, and needs its own before/after measurement across several days.
 
 **3. Re-run the two-arm test** now that each arm gets its own snapshot. It is
 the experiment that separates "the search rule is worthless" from "17 of 21
@@ -348,3 +362,27 @@ is six firms, not forty-eight.
 None of that makes money. All of it makes a false claim harder, and one of
 those findings — §5 — makes a claim this session itself produced harder, which
 is the apparatus working as intended.
+
+---
+
+## 9. Two corrections made after §8 was written
+
+Both are corrections to findings produced *earlier in this same session*, which
+is the apparatus doing its job on its own output.
+
+**The evolution verdict was withdrawn** (D-V010). §5 above carries the full
+account. Nothing about evolution is currently known; the walk-forward on pinned
+bars (§7.1) is the measurement that would settle it.
+
+**The news-scorer recommendation was reversed** (D-V011). §7.2 above originally
+said "fix the scoping or revert the widening — do not leave it as it is". On
+measuring properly, the windowed fix repairs two headlines and breaks two
+others, so it is a different bias rather than a fix. The recommendation is now
+to leave both alone. This also softens §8: the news widening is the one
+behavioural change this session made, and the defect it feeds is smaller and
+less one-directional than §8 implies.
+
+Both corrections share a shape worth naming for whoever reads this next:
+**the first measurement of a thing was taken on too little, and read as
+settled.** Nine runs and a 26-headline sample are not much either; they are
+simply more than one run and 16 headlines.
