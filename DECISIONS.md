@@ -362,3 +362,60 @@ also 2 of the 8 firms the evolution re-derivation ran on.
   thing one snapshot cannot see.
 - **Review date:** before any redesign of `score_text`, and with a sample drawn
   across several days rather than one afternoon.
+
+---
+
+### D-V012 · SUPERSEDES D-V010 — measured properly, the selection rule carries no information
+- **Date:** 2026-09-14 (night)
+- **Question:** D-V010 withdrew the evolution verdict because the measurement
+  was window-dependent and settled nothing. Pinned to fixed bars and walked
+  forward, what does it say?
+- **Evidence:** bars fetched once and served as fixed slices; eight
+  **non-overlapping** 720-bar windows; identical statistic, purge gap and
+  within-cohort permutation null in each.
+
+  | window | bars | rho | p |
+  |---|---|---|---|
+  | 0 | 100–820 | −0.1458 | 0.974 |
+  | 1 | 820–1540 | +0.0144 | 0.428 |
+  | 2 | 1540–2260 | +0.1253 | 0.060 |
+  | 3 | 2260–2980 | **+0.2726** | **0.000** |
+  | 4 | 2980–3700 | −0.0432 | 0.706 |
+  | 5 | 3700–4420 | −0.0726 | 0.854 |
+  | 6 | 4420–5140 | −0.1101 | 0.932 |
+  | 7 | 5140–5860 | +0.0209 | 0.406 |
+
+  ```
+  mean rho across windows : +0.0077
+  sd across windows       : 0.1366
+  range                   : -0.1458 .. +0.2726
+  windows positive        : 4/8
+  individually significant: 1/8
+  ```
+- **Decision:** **The selection rule does not carry out-of-sample information.**
+  Pre-registered rule was majority-positive *and* majority-significant; it is
+  4/8 and 1/8. Do not spend compute on more generations.
+- **Reason:** The mean across eight windows is +0.0077 — indistinguishable from
+  zero — and the sd between windows is **0.1366**, seventeen times the mean.
+  4 of 8 positive is a coin flip and 1 of 8 significant is roughly what chance
+  gives. This also explains every number produced earlier in the day: the
+  afternoon's +0.0014 and the evening's +0.1351 are both *inside this range*,
+  and window 3 alone would have produced a headline of +0.2726 at p=0.000.
+  The sliding-feed version was drawing one window at a time and reporting it as
+  the answer.
+- **Why this is not a restatement of D-V001:** D-V001 reached a similar
+  conclusion from one window and called itself *Reproduced*. This reaches it
+  from eight non-overlapping windows on pinned data and reports the spread,
+  which is the thing that makes the claim checkable. Same direction, different
+  epistemic status.
+- **Scope limit, stated rather than buried:** BTC-USD, ETH-USD and SOL-USD
+  returned `FeedNotConfigured` from the pinned 15-minute fetch, so the crypto
+  desk contributed no cohorts. Each window carries 20 cohorts rather than 24 —
+  **this is a verdict about the five funded firms with equity universes**, not
+  about `firm_c_crypto_ii_v`.
+- **Confidence at decision:** **Validated.** Eight non-overlapping windows on
+  pinned data is walk-forward, which is the rung D-V001 claimed and had not
+  earned. Not *Confirmed*: one venue's bars, one 5,860-bar span, one asset
+  class, and the crypto desk is missing.
+- **Review date:** if the genome vocabulary is ever wired up (D-V002), this must
+  be re-run — a search over four live dimensions is a different search.
