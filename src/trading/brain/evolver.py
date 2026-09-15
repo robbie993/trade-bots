@@ -469,7 +469,20 @@ class Evolver:
                 # column to it would not reach the databases already running,
                 # and the insert would fail into `_keep_holdout`'s swallowed
                 # exception, losing the whole diagnostic row silently.
-                note=f"generation {generation}, purge gap {purge_bars} bars, {note}",
+                # The window caveat rides on every row, because without it a
+                # row like "p=0.000 PASS" reads as evidence and is not. This
+                # statistic is measured against whatever bars the feed is
+                # holding, and `AlpacaFeed.keep_bars` slides: eight
+                # non-overlapping windows of the same measurement ran from
+                # -0.1458 to +0.2726, mean +0.0077, sd 0.1366, with 1 of 8
+                # individually significant. A single generation's p-value is
+                # one draw from that spread. See DECISIONS.md D-V012 and
+                # scripts/evolution_walkforward.py.
+                note=(f"generation {generation}, purge gap {purge_bars} bars, "
+                      f"{note} | WINDOW-DEPENDENT: single-window draw against a "
+                      f"sliding feed; walk-forward (D-V012) gives mean rho "
+                      f"+0.0077, sd 0.1366, 1/8 windows significant. Not "
+                      f"standalone evidence."),
                 verdict="PASS" if (rho > 0 and ctx["survives_bonferroni_05"])
                         else "FAIL",
             )
