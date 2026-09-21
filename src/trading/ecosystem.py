@@ -1320,9 +1320,35 @@ class Ecosystem:
                     "automatically the moment anything is wrong with it.",
                 )
             elif approval.action == ApprovalAction.RESUME_FIRM.value and details.get("firm"):
-                result = self.brokerage.resume_firm(
-                    details["firm"], approval.approved_by or "the council"
-                )
+                # A resume that can never succeed must be consumed, not retried.
+                #
+                # `resume_firm` refuses a killed firm, correctly — but the
+                # refusal was a bare raise in the middle of this loop, so it
+                # escaped `apply_approvals`, aborted the whole tick, and left
+                # the row unmarked to be retried on the next one. Approval 227
+                # asked to resume `firm_a_etf_ii_v` on 2026-09-05; the firm had
+                # gone bankrupt, and the row then killed **341 ticks** over the
+                # following eleven days. Every other approval queued behind it
+                # in the same pass went unapplied too, because the loop never
+                # reached them.
+                #
+                # The condition is permanent — a killed firm does not become
+                # un-killed — so the row is marked applied and the refusal is
+                # recorded. A transient failure would deserve a retry; this one
+                # only deserves an answer.
+                try:
+                    result = self.brokerage.resume_firm(
+                        details["firm"], approval.approved_by or "the council"
+                    )
+                except ValueError as exc:
+                    applied.append(f"REFUSED resuming {details['firm']}: {exc}")
+                    self.flow.emit("gate", f"resume refused: {exc}"[:110],
+                                   kind="blocked", firm=details["firm"],
+                                   detail=str(exc))
+                    details["applied"] = True
+                    self.db.update("human_approvals", approval.id,
+                                   {"details": json.dumps(details, default=str)})
+                    continue
                 applied.append(f"resumed {result['firm']}")
                 self._remember_decision(
                     f"resumed {result['firm']}",
