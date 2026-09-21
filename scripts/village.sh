@@ -116,10 +116,19 @@ EOF
   python -m src.main init-db >/dev/null
   python -m src.main trade init >/dev/null
   echo "==> starting"
+  # `-u`, or the log this script just promised you stays empty.
+  #
+  # Redirected to a file, Python block-buffers stdout in 8KB chunks. A tick
+  # prints a few hundred bytes, so `logs/loop.log` keeps whatever it last held
+  # — for this repository, August — while the village ticks away invisibly for
+  # the best part of an hour. `village.sh logs` then shows stale output for a
+  # healthy village, which reads exactly like a dead one. The loop that was
+  # started by hand on 2026-09-18 passed `-u` for this reason; the script it
+  # was started instead of did not.
   start_one "tick loop" "$LOOP_PID" "$LOG_DIR/loop.log" \
-    python -m src.main trade run --interval "$INTERVAL"
+    python -u -m src.main trade run --interval "$INTERVAL"
   start_one "console"   "$WEB_PID"  "$LOG_DIR/web.log" \
-    python -m src.main serve --host "$HOST" --port "$PORT"
+    python -u -m src.main serve --host "$HOST" --port "$PORT"
   # Both processes are given a moment to fall over before this claims they
   # are up. The first version printed the Mission Control URL unconditionally,
   # so a console that died on a busy port looked exactly like one that started
