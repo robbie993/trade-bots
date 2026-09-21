@@ -1,0 +1,6 @@
+# Only stack_bot needs these. They are deliberately kept out of the
+# repository's own requirements.txt, which CI installs.
+numpy>=1.24
+opencv-python>=4.8
+mss>=9.0
+pynput>=1.7
