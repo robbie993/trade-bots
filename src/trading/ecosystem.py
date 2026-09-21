@@ -320,8 +320,18 @@ class Ecosystem:
         Reads scorecards and writes tokens. It cannot move capital, pause a
         firm or touch a position, so a season can be run at any time without
         consequence for the ledger.
+
+        The roster is the firms that are still standing. `store.firms()` takes
+        no status and returns the estate as well as the living, so a season
+        fought over it kept re-entering the dead: by 2026-09-21 that was 38 of
+        50 firms, and a wound-up estate with 30 closed trades still carries a
+        scorecard above the sample gate, so it was not merely padding the
+        pairings — it was competing. `active_firms()` was one line below the
+        call the whole time. Paused firms stay in: a pause is a firm waiting
+        on a human, not a firm that has stopped existing.
         """
-        cards = self.brokerage.evaluator.evaluate_all(self.store.firms(), self.market())
+        living = [f for f in self.store.firms() if not f.is_killed]
+        cards = self.brokerage.evaluator.evaluate_all(living, self.market())
         bouts = self.arena.round_robin(cards, metric)
         milestones = self.arena.award_milestones(cards)
         for fight in bouts:

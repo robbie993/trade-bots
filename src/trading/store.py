@@ -182,10 +182,27 @@ class TradingStore:
         self._save_strike_state(state)
 
     def set_firm_status(self, firm_id: int, status: str, reason: str = "") -> None:
+        """Move a firm between statuses, and keep the death certificate honest.
+
+        Writing `kill_reason`/`killed_at` on the way into KILLED but never
+        clearing them on the way back out left firms that were plainly alive
+        still carrying the cause of a death they had been brought back from.
+        Four of them were sitting in the village on 2026-09-21 — `firm_d_value`
+        and `firm_b_stocks_ii` both reading `active` under "Drawdown 100.00%
+        exceeds 20.0%" from three weeks earlier. Anything asking "when did this
+        firm die" got an answer for a firm that hadn't.
+
+        Only a return to ACTIVE clears them. PAUSED must not: a pause is how a
+        firm waits for a human to rule on the reason it was paused for, and
+        erasing that reason would throw away the question.
+        """
         values = {"status": status, "updated_at": utcnow_iso()}
         if status == FirmStatus.KILLED.value:
             values["kill_reason"] = reason
             values["killed_at"] = utcnow_iso()
+        elif status == FirmStatus.ACTIVE.value:
+            values["kill_reason"] = None
+            values["killed_at"] = None
         self.db.update("firms", firm_id, values)
 
     def set_allocation(self, firm_id: int, allocation: Decimal, cash_delta: Decimal) -> None:

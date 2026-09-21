@@ -172,6 +172,33 @@ def test_round_robin_pairs_everyone_once(firms, arena):
     assert len(arena.bouts()) == 1
 
 
+def test_round_robin_does_not_pair_a_firm_that_cannot_contest(firms, arena):
+    """The 1.44M-row regression: a no-contest is not worth recording.
+
+    `bout` already refused these pairs — the cost was that it refused them one
+    stored row at a time, C(n,2) of them per season, until the bouts table was
+    six hundred times the size of the fills table it existed to comment on.
+    """
+    cards = [
+        card("alpha", firms[0].id, score=D(70)),
+        card("beta", firms[1].id, score=D(40), closed_trades=2, sufficient_data=False),
+    ]
+    assert arena.round_robin(cards) == []
+    assert arena.bouts() == []
+
+
+def test_round_robin_still_settles_the_firms_that_can(firms, arena):
+    """Filtering the gate-blocked pairs must not cost a real bout."""
+    cards = [
+        card("alpha", firms[0].id, score=D(70)),
+        card("beta", firms[1].id, score=D(40)),
+        card("gamma", None, score=D(10), closed_trades=1, sufficient_data=False),
+    ]
+    fights = arena.round_robin(cards)
+    assert len(fights) == 1
+    assert fights[0].decided and fights[0].winner == "alpha"
+
+
 def test_bouts_record_the_numbers_that_decided_them(firms, arena):
     cards = [card("alpha", firms[0].id, score=D(70)), card("beta", firms[1].id, score=D(40))]
     arena.bout("alpha", "beta", cards)

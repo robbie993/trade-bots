@@ -101,7 +101,14 @@ KINDS = ("ok", "blocked", "refused", "alarm")
 
 # How many rows to keep. This is a viewport, not a record: the audit trail is
 # the vault and the event tables, and neither of them is this.
-KEEP = 400
+#
+# It has to be wider than one tick emits, or it stops being a viewport and
+# becomes a race. At 400 it was narrower: a season alone emitted ~1,225 events
+# once the village reached fifty firms, so the buffer turned over three times
+# before a tick finished and the page — polling every two seconds for ids
+# greater than the last it saw — could only ever be shown the arena's tail.
+# The arena no longer floods it, but the margin is the point, not the fix.
+KEEP = 5000
 
 
 @dataclass

@@ -198,6 +198,47 @@ def test_a_killed_flat_firm_is_skipped(ecosystem):
     assert all(p.firm_id != firm.id for p in ecosystem.store.proposals())
 
 
+def test_a_season_does_not_enter_the_dead(ecosystem, monkeypatch):
+    """`store.firms()` returns the estate too, and a season used to fight it.
+
+    A wound-up firm keeps its closed trades, so its scorecard stays above the
+    sample gate and it goes on competing — and winning — long after it stopped
+    existing. By 2026-09-21 the village was 38 dead firms to 12 living.
+    """
+    beta = ecosystem.store.get_firm("beta")
+    ecosystem.store.set_firm_status(beta.id, FirmStatus.BANKRUPT.value)
+
+    seen = {}
+    real = ecosystem.brokerage.evaluator.evaluate_all
+
+    def spy(firms, market):
+        seen["roster"] = [f.firm_key for f in firms]
+        return real(firms, market)
+
+    monkeypatch.setattr(ecosystem.brokerage.evaluator, "evaluate_all", spy)
+    ecosystem.run_season()
+
+    assert seen["roster"] == ["alpha"], "the dead do not compete"
+
+
+def test_a_season_still_enters_a_paused_firm(ecosystem, monkeypatch):
+    """A pause is a firm waiting on a human, not a firm that has stopped existing."""
+    beta = ecosystem.store.get_firm("beta")
+    ecosystem.store.set_firm_status(beta.id, FirmStatus.PAUSED.value)
+
+    seen = {}
+    real = ecosystem.brokerage.evaluator.evaluate_all
+
+    def spy(firms, market):
+        seen["roster"] = [f.firm_key for f in firms]
+        return real(firms, market)
+
+    monkeypatch.setattr(ecosystem.brokerage.evaluator, "evaluate_all", spy)
+    ecosystem.run_season()
+
+    assert sorted(seen["roster"]) == ["alpha", "beta"]
+
+
 def test_the_gateway_narrates_offline_without_a_network(ecosystem):
     from src.trading.models import TradeProposal
 

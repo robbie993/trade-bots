@@ -115,12 +115,27 @@ class Arena:
         return fight
 
     def round_robin(self, cards: Sequence, metric: str = "score") -> list:
-        """Every firm against every other, once."""
-        keys = [c.firm_key for c in cards]
+        """Every firm that can actually fight, against every other, once.
+
+        A firm below the sample gate cannot win or lose: `bout` returns "no
+        contest" before a single token moves. Pairing it anyway cost one row,
+        which was nothing while the village was small — and then it grew to
+        fifty firms, thirty-eight of them dead, and one row became 197,730 a
+        day, every one of them recording the same non-event about the same
+        firms. `bouts` reached 1.44M rows, and because the season emits a flow
+        event per fight it also overwrote the recorder's 400-event viewport
+        three times per tick, so the page showed nothing but no-contests while
+        the four firms that were actually trading scrolled past unseen.
+
+        Skipping them here is exactly equivalent, not merely cheaper: the
+        pairs removed are the ones `bout` would have refused, and a refusal
+        awards nothing, deducts nothing and settles nothing.
+        """
+        eligible = [c for c in cards if getattr(c, "sufficient_data", False)]
         out = []
-        for i, left in enumerate(keys):
-            for right in keys[i + 1 :]:
-                out.append(self.bout(left, right, cards, metric))
+        for i, left in enumerate(eligible):
+            for right in eligible[i + 1 :]:
+                out.append(self.bout(left.firm_key, right.firm_key, cards, metric))
         return out
 
     def _record(self, fight: Bout) -> Bout:

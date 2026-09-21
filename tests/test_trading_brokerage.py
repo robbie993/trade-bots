@@ -533,6 +533,29 @@ def test_a_paused_firm_can_be_resumed_by_a_human(store, firm_record, trading_con
     assert store.require_firm_by_id(firm_record.id).is_active
 
 
+def test_coming_back_to_life_clears_the_death_certificate(store, firm_record):
+    """A living firm must not still be carrying why it died.
+
+    Four firms in the village were `active` under a `kill_reason` and a
+    `killed_at` from weeks earlier, because the status moved back and the two
+    columns never did.
+    """
+    store.set_firm_status(firm_record.id, FirmStatus.KILLED.value, "Drawdown 100%")
+    store.set_firm_status(firm_record.id, FirmStatus.ACTIVE.value)
+
+    firm = store.require_firm_by_id(firm_record.id)
+    assert firm.is_active
+    assert firm.kill_reason in (None, "")
+    assert firm.killed_at is None
+
+
+def test_a_pause_keeps_the_reason_it_was_paused_for(store, firm_record):
+    """A pause is a question awaiting a human. Clearing it discards the question."""
+    store.set_firm_status(firm_record.id, FirmStatus.KILLED.value, "8 consecutive losses")
+    store.set_firm_status(firm_record.id, FirmStatus.PAUSED.value)
+    assert store.require_firm_by_id(firm_record.id).kill_reason == "8 consecutive losses"
+
+
 def test_kill_all_fires_when_every_firm_is_dead(store, firm_record, market, trading_config, gate):
     store.set_firm_status(firm_record.id, FirmStatus.KILLED.value, "dead")
     brokerage = Brokerage(store, trading_config, gate)
