@@ -132,10 +132,14 @@ def start_price_warmer(interval_s: float = 60.0):
         return _WARMER
 
     def _warm_forever():
-        import logging
         import time
+        import traceback
 
-        log = logging.getLogger("village.pricewarmer")
+        # `print`, not `logging`: uvicorn owns the logging config in this
+        # process and filters loggers it does not know, so the first version of
+        # this said nothing at all while working perfectly — which is the one
+        # outcome a background thread must not have. The loop narrates itself
+        # the same way, into the same kind of file.
         while True:
             try:
                 eco = ecosystem()
@@ -144,17 +148,16 @@ def start_price_warmer(interval_s: float = 60.0):
                     started = time.time()
                     market.marks(market.symbols)
                     took = time.time() - started
-                    # Only worth a line when it actually went to the network;
-                    # a warm pass is sub-second and says nothing.
+                    # Only worth a line when it actually went to the network; a
+                    # warm pass is a few dict lookups and says nothing.
                     if took > 1.0:
-                        log.info(
-                            "re-priced %d symbols in %.1fs (bar turned over)",
-                            len(market.symbols), took,
-                        )
+                        print(f"PRICES: re-priced {len(market.symbols)} symbols in "
+                              f"{took:.1f}s (bar turned over)", flush=True)
                 finally:
                     eco.db.close()
             except Exception:  # noqa: BLE001 - a warmer must never kill the console
-                log.exception("price warm failed; will retry")
+                print(f"PRICES: warm failed, will retry in {interval_s:.0f}s\n"
+                      f"{traceback.format_exc()}", flush=True)
             time.sleep(interval_s)
 
     _WARMER = threading.Thread(
