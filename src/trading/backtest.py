@@ -192,7 +192,30 @@ class Backtester:
         risk_limit: Optional[Decimal] = None,
         steps: Optional[int] = None,
         start: Optional[int] = None,
+        strategy: str = "",
     ) -> BacktestResult:
+        """Replay one firm over `market`. `strategy` may name a bot.
+
+        **`strategy="bot:bots/x.py"` backtests the file; leaving it empty
+        backtests the genome through the built-in pod.** That distinction is
+        the whole point of the argument, because until it existed there was no
+        way to ask the first question and the second was being mistaken for it.
+
+        `Firm.propose` has always routed on `record.strategy` — `_from_bot` when
+        it names a bot, `_from_pod` otherwise — but this method never set the
+        field, so every backtest silently took the pod branch. The strategy
+        court is built on this method, and the consequence was that on
+        2026-09-14 it tried twelve fleet strategies and rejected sixty of
+        sixty-two submissions on `return` findings that belong to a different
+        strategy. `veritas_reversion.py` "lost -1.26% over the sample" — the
+        built-in pod did, wearing five of VERITAS's parameters. Its actual rule
+        (RSI(2) < 10 *and* IBS < 0.3, gated on SMA200) was never evaluated,
+        because nothing here ever ran it.
+
+        `adapter.py` opens by naming this exact failure: the importer "works
+        when the bot *is* seven genes and fails quietly when it is not." The
+        court was the place it failed quietly.
+        """
         start_capital = money(capital if capital is not None else self.config.firm.allocation)
         record = FirmRecord(
             firm_key=firm_key,
@@ -204,6 +227,7 @@ class Backtester:
             risk_limit=D(risk_limit if risk_limit is not None else self.config.firm.risk_limit),
             genome=dict(genome or {}),
             universe=[s.upper() for s in symbols],
+            strategy=strategy,
             id=None,
         )
         firm = Firm(
