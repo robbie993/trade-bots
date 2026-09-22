@@ -160,6 +160,62 @@ def test_the_context_cannot_be_edited(context):
 def test_an_unknown_symbol_is_a_none_price_not_a_crash(context):
     assert context.price("NOTREAL") is None
     assert context.closes("NOTREAL") == []
+    assert context.highs("NOTREAL") == []
+    assert context.lows("NOTREAL") == []
+    assert context.opens("NOTREAL") == []
+
+
+def test_the_context_carries_the_bar_not_just_its_close(context):
+    """IBS, true range, ATR and ADX are all written on the bar.
+
+    Before this, `closes()` was the only series a strategy could reach, so
+    `veritas_reversion.py` had to substitute the recent *close* range for the
+    bar's own high and low and declare the proxy in its docstring. A proxy
+    wearing a validated rule's name is a different rule.
+    """
+    highs = context.highs("SPY", 20)
+    lows = context.lows("SPY", 20)
+    closes = context.closes("SPY", 20)
+
+    assert len(highs) == len(lows) == len(closes) == 20
+    for high, low, close in zip(highs, lows, closes):
+        assert high >= close >= low, "the close has to sit inside its own bar"
+        assert low > 0
+
+
+def test_the_ohlc_series_are_the_same_bars_as_the_closes(context):
+    """Two reads of `history` could straddle a new bar and pair a high with
+    the next bar's close — an off-by-one-bar skew that reads as signal."""
+    assert len(context.highs("SPY")) == len(context.closes("SPY"))
+    assert len(context.lows("SPY")) == len(context.closes("SPY"))
+    assert len(context.opens("SPY")) == len(context.closes("SPY"))
+
+
+def test_a_close_only_feed_serves_no_highs_rather_than_zeros(firm_record, market_data):
+    """A high of zero is a missing price, not a price.
+
+    Handing zeros to a strategy lets IBS evaluate to (close-0)/(0-0), or worse
+    to something plausible. An incomplete series is served as no series, so the
+    strategy declines instead of trusting it.
+    """
+    class CloseOnly:
+        """A feed that fills in closes and leaves the rest at the ZERO default."""
+
+        def __getattr__(self, name):
+            return getattr(market_data, name)
+
+        def history(self, symbol, lookback=None):
+            from src.trading.models import Bar
+
+            return [Bar(symbol=symbol, as_of=b.as_of, close=b.close)
+                    for b in market_data.history(symbol, lookback)]
+
+    context = adapter.build_context(
+        firm_record, CloseOnly(), [], Decimal("100000")
+    )
+    assert context.closes("SPY"), "closes still come through"
+    assert context.highs("SPY") == []
+    assert context.lows("SPY") == []
 
 
 # =========================================================================

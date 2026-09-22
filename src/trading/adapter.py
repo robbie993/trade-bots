@@ -104,6 +104,13 @@ class Context:
     _closes: dict = field(default_factory=dict, repr=False)
     _marks: dict = field(default_factory=dict, repr=False)
     _positions: dict = field(default_factory=dict, repr=False)
+    #: Aligned with ``_closes``, one entry per bar. Default-empty so a Context
+    #: built by older code (or a test) still constructs, and the accessors
+    #: return `[]` rather than raising — a strategy that needs highs should
+    #: decline on an empty series, which is what it already does for closes.
+    _highs: dict = field(default_factory=dict, repr=False)
+    _lows: dict = field(default_factory=dict, repr=False)
+    _opens: dict = field(default_factory=dict, repr=False)
 
     # -- prices -----------------------------------------------------------
     def price(self, symbol: str) -> Optional[Decimal]:
@@ -113,6 +120,38 @@ class Context:
     def closes(self, symbol: str, lookback: int = 0) -> list:
         """Closing prices, oldest first. `lookback` 0 means everything held."""
         series = self._closes.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def highs(self, symbol: str, lookback: int = 0) -> list:
+        """Bar highs, oldest first, aligned with ``closes``.
+
+        Closes alone cannot express a rule written on the bar. IBS is
+        ``(close - low) / (high - low)``; true range, ATR and ADX all need the
+        same two numbers. Without them a ported strategy has to substitute a
+        proxy — the recent *close* range standing in for the bar's own range —
+        and a proxy wearing a validated rule's name is a different strategy.
+        `veritas_reversion.py` had to declare exactly that substitution.
+
+        The data was never missing: ``Bar`` has carried open/high/low/close all
+        along and ``market.closes()`` is itself derived from ``history()``. It
+        simply was not reachable from a strategy.
+        """
+        series = self._highs.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def lows(self, symbol: str, lookback: int = 0) -> list:
+        """Bar lows, oldest first, aligned with ``closes``. See ``highs``."""
+        series = self._lows.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def opens(self, symbol: str, lookback: int = 0) -> list:
+        """Bar opens, oldest first, aligned with ``closes``.
+
+        Here because a next-open fill is the honest way to price a signal
+        computed on a close, and several ported bots report their primary
+        results that way.
+        """
+        series = self._opens.get(str(symbol).upper(), [])
         return list(series[-lookback:] if lookback else series)
 
     # -- your book --------------------------------------------------------
@@ -160,18 +199,50 @@ class Context:
         return list(self._positions.values())
 
 
+def _ohlc_or_nothing(bars, field_name: str) -> list:
+    """One OHLC series, or `[]` if the feed did not really supply it.
+
+    All-or-nothing on purpose. A partially-populated series is worse than an
+    absent one, because a strategy checking `if not highs` would pass and then
+    average a zero into its range.
+    """
+    series = []
+    for bar in bars:
+        value = D(getattr(bar, field_name, 0) or 0)
+        if value <= 0:
+            return []
+        series.append(value)
+    return series
+
+
 def build_context(record, market, positions: Sequence[Position], equity, lookback: int = 250):
     universe = tuple(record.universe or [])
     closes, marks = {}, {}
+    highs, lows, opens = {}, {}, {}
     for symbol in universe:
         try:
             marks[symbol] = D(market.mark(symbol))
         except Exception:  # noqa: BLE001 - a symbol the feed lacks is not fatal
             marks[symbol] = None
+        # One read of `history` for all four series, so highs, lows, opens and
+        # closes are guaranteed to be the SAME bars. Two separate calls could
+        # straddle a new bar arriving and hand a strategy a high from one bar
+        # and a close from the next, which is the kind of off-by-one-bar skew
+        # that reads as signal.
         try:
-            closes[symbol] = [D(c) for c in market.closes(symbol, lookback)]
+            bars = list(market.history(symbol, lookback))
         except Exception:  # noqa: BLE001
-            closes[symbol] = []
+            bars = []
+        closes[symbol] = [D(b.close) for b in bars]
+        # A feed that carries only closes leaves high/low/open at their ZERO
+        # default, and a high of zero is not a price — it is a missing one.
+        # Handing those over would let IBS evaluate to (close-0)/(0-0) or, worse,
+        # to a plausible-looking number, which is how this codebase has
+        # manufactured results before. So an incomplete series is served as no
+        # series at all: the strategy sees `[]`, declines, and says why.
+        highs[symbol] = _ohlc_or_nothing(bars, "high")
+        lows[symbol] = _ohlc_or_nothing(bars, "low")
+        opens[symbol] = _ohlc_or_nothing(bars, "open")
     held = {
         str(p.symbol).upper(): Holding(
             symbol=str(p.symbol).upper(),
@@ -188,6 +259,9 @@ def build_context(record, market, positions: Sequence[Position], equity, lookbac
         _closes=closes,
         _marks=marks,
         _positions=held,
+        _highs=highs,
+        _lows=lows,
+        _opens=opens,
     )
 
 
