@@ -178,8 +178,31 @@ class Conscience:
         market: MarketData,
     ) -> FoundationFinding:
         """Harm to the person whose money this is."""
-        if proposal.side_enum is Side.SELL:
-            return _ok("care", "reducing exposure cannot harm the capital")
+        # What makes a trade harmless is that it *reduces* a position, not that
+        # it is a sell. For a short the trade that reduces is a buy, so keying
+        # the exemption on the side got a short book exactly backwards: it
+        # waved through the sell that opened the short, then blocked the buy
+        # that would close it.
+        #
+        # `firm_i_memecoins_ii` was killed on 2026-09-10 holding DOGE-USD
+        # -43,113 with no cash. Its own bankruptcy wind-up order is a buy, so
+        # "the firm has no equity left to risk" blocked it — 190 times in the
+        # last seven days alone, once per tick for eleven days. The firm could
+        # not complete the liquidation that its own death required, and sat
+        # there carrying an unbounded short and an allocation of -$3,749.62.
+        #
+        # `RiskManager._decide` had this right all along, signed `held` and
+        # all, one layer down. This is the same test, so the two layers now
+        # agree about what "closing" means.
+        existing = next(
+            (p for p in positions if p.symbol == proposal.symbol and p.is_open), None
+        )
+        held_qty = existing.quantity if existing else ZERO
+        reducing = (held_qty > 0 and proposal.side_enum is Side.SELL) or (
+            held_qty < 0 and proposal.side_enum is Side.BUY
+        )
+        if reducing:
+            return _ok("care", "reducing an open position cannot harm the capital")
 
         equity = money(
             D(firm.cash)

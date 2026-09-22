@@ -93,6 +93,43 @@ def test_care_never_objects_to_an_exit(market):
     assert not finding(review, "care").warns
 
 
+def test_care_never_objects_to_closing_a_short(market):
+    """The eleven-day deadlock: closing a short is a buy.
+
+    `firm_i_memecoins_ii` was killed on 2026-09-10 holding DOGE-USD -43,113
+    with no cash. Its own bankruptcy wind-up order is a buy, so the no-equity
+    rule blocked it once per tick for eleven days — the firm could not perform
+    the liquidation its death required.
+    """
+    market.seek(150)
+    held = [Position(firm_id=1, symbol="SPY", quantity=D(-1000), avg_price=D(1))]
+    review = Conscience().review(
+        proposal(side=Side.BUY.value, quantity="1000"),
+        firm(cash=Decimal("0"), allocation=Decimal("0")),
+        held,
+        market,
+    )
+    assert not finding(review, "care").blocks
+    assert not finding(review, "care").warns
+
+
+def test_care_still_judges_a_sell_that_opens_a_short(market):
+    """A bare sell is not an exit — it is new risk, and used to be waved through.
+
+    Keying the exemption on the side meant a firm with nothing left could open
+    a short but not close one. The risk manager never made this mistake; it
+    tests a signed `held`, which is now what this does too.
+    """
+    market.seek(150)
+    review = Conscience().review(
+        proposal(side=Side.SELL.value, quantity="1000"),
+        firm(cash=Decimal("0"), allocation=Decimal("0")),
+        [],
+        market,
+    )
+    assert finding(review, "care").blocks
+
+
 # -- fairness -------------------------------------------------------------
 def test_fairness_blocks_a_wash_trade(market):
     market.seek(150)

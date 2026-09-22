@@ -520,6 +520,38 @@ def test_an_approved_kill_closes_the_firm_and_returns_the_cash(
     assert result["returned"] == "100000.00"
 
 
+def test_a_kill_leaves_a_short_the_cash_to_buy_itself_back(
+    store, firm_record, trading_config, gate
+):
+    """The eleven-day deadlock, at its root.
+
+    Closing a short costs cash, and the cash it costs is the proceeds of the
+    short sale sitting in the balance the kill was sweeping. `firm_i_memecoins_ii`
+    was killed holding DOGE-USD -43,113 with $3,749.62 of short proceeds; the
+    kill took all of it, and the firm could never buy back.
+    """
+    from src.trading.models import Position
+
+    store._save_position(
+        Position(firm_id=firm_record.id, symbol="SPY", quantity=D(-100), avg_price=D(400))
+    )
+    result = Brokerage(store, trading_config, gate).kill_firm("test_firm", "approved")
+
+    firm = store.require_firm_by_id(firm_record.id)
+    assert firm.is_killed
+    assert result["returned"] == "0"
+    assert firm.cash == Decimal("100000.00"), "the means to close the short must stay"
+
+
+def test_a_kill_still_returns_the_cash_of_a_flat_firm(
+    store, firm_record, trading_config, gate
+):
+    """Deferring the release must not strand a firm that has nothing to close."""
+    result = Brokerage(store, trading_config, gate).kill_firm("test_firm", "approved")
+    assert result["returned"] == "100000.00"
+    assert store.require_firm_by_id(firm_record.id).cash == Decimal("0.00")
+
+
 def test_a_killed_firm_cannot_be_resumed(store, firm_record, trading_config, gate):
     brokerage = Brokerage(store, trading_config, gate)
     brokerage.kill_firm("test_firm", "approved")

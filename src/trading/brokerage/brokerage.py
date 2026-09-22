@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from ...money import D, fmt_money, money
+from ...money import D, ZERO, fmt_money, money
 from ..config import TradingConfig
 from ..data.market_data import MarketData
 from ..firms import strikes
@@ -205,21 +205,50 @@ class Brokerage:
         Open positions are *not* liquidated here. Selling is the firm's job
         and goes through the venue like any other trade; a killed firm keeps
         exiting on the next tick and hands back cash as it does.
+
+        Which is why the cash cannot all go back at the moment of death. That
+        model works for a long book — sweep the idle cash, and selling returns
+        the rest. A short is the other way round: closing it *costs* cash, and
+        the cash it costs is the proceeds of the short sale, sitting in the
+        very balance being swept. Take that and the firm can never buy back.
+
+        `firm_i_memecoins_ii` was killed on 2026-09-10 holding DOGE-USD
+        -43,113. Its short sales had earned it $3,749.62; the kill returned
+        every cent of it, leaving cash $0 and allocation -$3,749.62 against a
+        position that needed roughly $3,850 to close. It then proposed the same
+        wind-up buy once per tick for eleven days. The conscience was refusing
+        it first, so that is where the deadlock showed — but even with the
+        conscience fixed the fill would have been refused for overdrawing.
+
+        So the release waits for the book to be flat, which is what `wind_up`
+        has always done for the bankruptcy leg of the same journey. Nothing is
+        stranded: `wind_up` runs on every dead firm every tick and releases the
+        moment the last position closes, and a killed firm cannot open new
+        risk in the meantime — it only proposes its own exits.
         """
         firm = self.store.get_firm(firm_key)
         if firm is None:
             raise ValueError(f"unknown firm {firm_key}")
         self.store.set_firm_status(firm.id, FirmStatus.KILLED.value, reason)
-        released = self.allocator.release(
-            self.store.require_firm_by_id(firm.id), f"firm killed: {reason}"
-        )
+
+        current = self.store.require_firm_by_id(firm.id)
+        still_holding = any(p.is_open for p in self.store.positions(firm.id))
+        if still_holding:
+            returned = ZERO
+        else:
+            returned = abs(self.allocator.release(current, f"firm killed: {reason}").delta)
+
         self.store.record_event(
             "kill",
             f"{firm_key} killed: {reason}",
             firm_id=firm.id,
-            payload={"reason": reason, "returned": str(abs(released.delta))},
+            payload={
+                "reason": reason,
+                "returned": str(returned),
+                "deferred": still_holding,
+            },
         )
-        return {"firm": firm_key, "reason": reason, "returned": str(abs(released.delta))}
+        return {"firm": firm_key, "reason": reason, "returned": str(returned)}
 
     # -- real money --------------------------------------------------------
     def request_promotion(self, firm_key: str, readiness, venue: str, by: str):
