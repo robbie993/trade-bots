@@ -87,6 +87,10 @@ bots/*
 !bots/veritas_reversion.py
 !bots/wheel.py
 
+# The bridges: they carry a live bot's own output into the signal board rather
+# than re-implementing it. See scripts/fleet_sync.py.
+!bots/fleet_scanner.py
+
 # The dossiers that go with them — what each bot is, and what was measured.
 !bots/dividend.json
 !bots/fomo.json
@@ -97,3 +101,7 @@ bots/*
 # The daily village's own state, same reasoning as run/ and logs/ above.
 run-daily/
 logs-daily/
+
+# Fleet snapshots pulled off Railway volumes by scripts/fleet_sync.py — a cache
+# of what the live bots said, re-fetchable at any time and not source.
+data/fleet/
