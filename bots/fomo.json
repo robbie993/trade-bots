@@ -1,0 +1,67 @@
+{
+  "name": "FOMO — Solana memecoin copy-trader",
+  "source_of_truth": "/Users/robbie/trade/fomo_bot.py (Railway service trade-bot-2)",
+  "dossier": "dossiers/fomo.md",
+  "seat": "none — see why_there_is_no_genome",
+
+  "MONEY_WARNING": [
+    "THIS IS THE ONE BOT IN THE FLEET THAT SPENDS REAL MONEY. It signs real Solana mainnet",
+    "swaps through Jupiter with a real wallet key. Everything else in this drop is paper.",
+    "OPEN SECURITY ITEM: the wallet's private key was pasted into a chat transcript twice on",
+    "2026-08-02 and has NOT been rotated. The wallet is also a privy embedded wallet, so",
+    "fomo.family can spend it independently of the bot whenever Robbie is logged in."
+  ],
+
+  "what_it_is": [
+    "It watches ~58 traders on fomo.family and mirrors their buys at 0.5% of their size,",
+    "$1-$10 a trade, capped at 8 concurrent coins. Two distinct traders on the same coin",
+    "inside 45 minutes unlocks full size; a lone trader gets half. Exits are +60% (sell 40%),",
+    "+200% (sell half the rest), -45% hard stop, 28% trail from the high after TP1, and a",
+    "12-hour time stop if the position is under +15%."
+  ],
+
+  "why_there_is_no_genome": [
+    "Its entry signal is another human's transaction. Not a window, not an indicator — a",
+    "person. There is no price rule to put in a genome, and the seven genes describe price",
+    "history the bot never looks at before buying."
+  ],
+
+  "why_it_cannot_run_in_the_village": [
+    "No village data source prices Solana memecoins. ccxt, yahoo and alpaca all cover listed",
+    "assets; these tokens are hours old and trade on Jupiter. There is also no feed of who",
+    "bought what on fomo.family. Both halves of the strategy are missing, not just one."
+  ],
+
+  "real_constants": {
+    "mirror_fraction": 0.005,
+    "min_buy_usd": 1.0,
+    "max_buy_usd": 10.0,
+    "max_positions": 8,
+    "consensus_min_traders": 2,
+    "consensus_window_seconds": 2700,
+    "solo_size_fraction": 0.5,
+    "tp1_gain": 0.60,
+    "tp2_gain": 2.00,
+    "hard_stop": 0.45,
+    "trail_from_high": 0.28,
+    "time_stop_hours": 12,
+    "rug_check_max_score": 80
+  },
+
+  "verdict_already_measured": {
+    "headline": "A null. Over 262 closed trades the bot is somewhere between -0.006 and +0.078 SOL.",
+    "method": "On-chain scan 2026-08-02, splitting transactions by fee payer — the only reliable way to separate the bot from Robbie's own manual trading on the same shared wallet.",
+    "bot_transactions": "400 txs, -0.0063 SOL net, of which 0.0398 SOL was fees",
+    "win_rate_trap": "Post-refuel win rate ~49.7% clears the 45% bar it was judged against while the money does nothing. Win rate without expectancy, again.",
+    "its_own_ledger_is_wrong": "close_position() computes pnl = cost_usd * gain — no fees, no slippage, quoted price rather than fill. Its 'realized -$2.28' structurally cannot show what trading cost.",
+    "partial_scans_flatter": "Three intermediate estimates (+1.15, +0.078, +0.19 SOL) all revised downward as RPC coverage completed. The transactions that failed to fetch were disproportionately losses.",
+    "fixed_bug_worth_knowing": "The hard stop refused to sell whenever price impact exceeded 20% — exactly when a thin coin is crashing. Six positions rode to as low as -99.3% before f7cd7ef added an emergency path on 2026-08-04."
+  },
+
+  "what_the_village_could_still_do": [
+    "Read the file, not the strategy. The interesting parts are the shared-wallet accounting",
+    "failure, the fee-blind ledger, and the drop-one/permutation discipline this dataset needs:",
+    "a claimed latency edge of +1.8% collapsed to +0.39% on dropping one trade and permutation-",
+    "tested at p=0.357."
+  ]
+}

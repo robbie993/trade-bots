@@ -1,0 +1,51 @@
+{
+  "name": "FORM4 — SEC Form 4 insider-buy watchlist",
+  "source_of_truth": "/Users/robbie/trade/form4_bot.py (Railway service BOT=wheel, co-hosted)",
+  "dossier": "dossiers/form4.md",
+  "seat": "none — see why_there_is_no_genome",
+
+  "what_it_is": [
+    "A nightly EDGAR crawler, not a strategy. It walks the SEC daily index after 22:10 ET,",
+    "parses every Form 4, keeps open-market insider BUYS over $50,000, and posts up to 15 of",
+    "them to Discord as a watchlist. It places no orders and holds no positions. Another bot",
+    "(picks_trader) decides what to do with the names."
+  ],
+
+  "why_there_is_no_genome": [
+    "There is no entry rule made of price. The input is an SEC filing feed and the output is a",
+    "list of names; there is no moving average, no RSI, no lookback and no valuation band",
+    "anywhere in the file. Seven genes written here would be seven numbers invented so a",
+    "backtest could run, and the backtest would then be measuring the numbers I invented.",
+    "The court's 'no readable genome' refusal is the correct ruling on this bot."
+  ],
+
+  "why_it_cannot_run_in_the_village": [
+    "Its entire input is https://www.sec.gov — the court refuses network imports, and rightly.",
+    "A scanner wired up here could only ever publish silence."
+  ],
+
+  "real_constants": {
+    "run_after_et": "22:10 nightly, plus a 06:45 re-scan",
+    "min_buy_usd": 50000,
+    "max_alerts": 15,
+    "request_gap_seconds": 0.13,
+    "note_on_request_gap": "~8 req/s, under SEC's 10 req/s limit. Two instances would breach it — which is why FIVEWAY deliberately does not start a second copy."
+  },
+
+  "verdict_already_measured": {
+    "headline": "The insider signal is real, it is priced overnight, and retail cannot get in front of it.",
+    "sample": "SEC quarterly Form 3/4/5 datasets — 974,435 transactions, 31,456 buy events, 4,310 tickers, 2023-01..2026-03",
+    "overnight_gap_filing_close_to_next_open": "+0.786% (t=+32.13, positive 72% of the time)",
+    "what_is_left_after_the_gap": "+0.141% over the next 21 days — 83% of the return is gone before you can trade",
+    "filing_times": "82.5% of 2,949 sampled acceptance timestamps land AFTER the close; only 12.2% during market hours",
+    "median_abnormal_return": "NEGATIVE at every horizon tested (1/5/10/21/63d); the positive mean is a few big winners",
+    "placebo": "same tickers, random dates — within noise of the real signal",
+    "data_check": "10 random rows traced back to the original Form 4 XML on EDGAR: 10/10 exact on ticker, shares and price"
+  },
+
+  "what_the_village_could_still_do": [
+    "Nothing about the signal — that question already has a better-powered answer than a",
+    "village replay could produce. What is worth reading is the file itself: rate limiting,",
+    "the $1B/$5,000-per-share sanity traps, and the deliberate absence of a webhook fallback."
+  ]
+}

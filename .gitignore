@@ -54,12 +54,42 @@ data/market/
 # CI workflow adds its demo one explicitly with `git add -f`.
 dashboard/
 
-# The drop box. The examples and the README ship; your own bots do not — a
-# strategy you wrote is yours, and `recruit-watch` should not be a way to
-# commit it by accident.
+# The drop box. A strategy somebody handed you is theirs and stays out of this
+# repository — `recruit-watch` should not be a way to commit it by accident.
+#
+# The fleet ports are different and are listed below. They are first-party:
+# our own bots from the sibling repo, translated to the `propose(context)`
+# door, and the village is starting to depend on them — a firm whose strategy
+# is `bot:bots/veritas_reversion.py` will not run without that file. An
+# untracked dependency is not a dependency, it is a copy on one disk, and this
+# project has been bitten by that exact shape before (eleven preregs with no
+# commits, a ledger fix that sat uncommitted for nine days).
+#
+# The rule that still holds: anything genuinely foreign gets no line here.
 bots/*
 !bots/README.md
 !bots/example_momentum.py
 !bots/example_reversion.yaml
 !bots/example_adapter.py
 !bots/example_scanner.py
+
+# -- the fleet ports, first-party --------------------------------------------
+!bots/atlas.py
+!bots/btcc.py
+!bots/coinbase.py
+!bots/cross_sectional_momentum.py
+!bots/fiveway.py
+!bots/gatekeeper.py
+!bots/keystone.py
+!bots/picks_trader.py
+!bots/scanner.py
+!bots/sentinel.py
+!bots/veritas_reversion.py
+!bots/wheel.py
+
+# The dossiers that go with them — what each bot is, and what was measured.
+!bots/dividend.json
+!bots/fomo.json
+!bots/form4.json
+!bots/kronos_live.json
+!bots/trade_journal.json

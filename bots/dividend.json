@@ -1,0 +1,46 @@
+{
+  "name": "DIVIDEND — weekly dividend-income finder",
+  "source_of_truth": "/Users/robbie/trade/dividend_bot.py (Railway service BOT=wheel, co-hosted)",
+  "dossier": "dossiers/dividend.md",
+  "seat": "none — see why_there_is_no_genome",
+
+  "what_it_is": [
+    "A weekly Discord post answering one question: how much capital would each of these names",
+    "need to pay $100 a year in dividends. It ranks by yield, flags anything above 8% as a",
+    "possible yield trap, and stops. It has never placed an order and has no order code path."
+  ],
+
+  "why_there_is_no_genome": [
+    "It reads dividend yields, not price history. There is no window, no threshold on a moving",
+    "average and no signal — the only number in it that resembles a parameter is TRAP_YIELD=0.08,",
+    "which is a warning label, not an entry rule. Nothing here can be backtested, and a genome",
+    "would be fabrication."
+  ],
+
+  "why_it_cannot_run_in_the_village": [
+    "context gives closes. Dividend yield is not derivable from closes, and no village data",
+    "source carries it."
+  ],
+
+  "real_constants": {
+    "target_income_usd_per_year": 100.0,
+    "post_every_days": 7,
+    "trap_yield": 0.08,
+    "top_n": 20
+  },
+
+  "universe": ["JNJ", "KO", "PG", "PEP", "MMM", "CVX", "XOM", "ABBV", "MO", "KMB", "CL",
+               "MCD", "HD", "LOW", "TGT", "WMT", "IBM", "VZ", "T", "PM", "CAT", "MDT",
+               "ADP", "LMT", "O", "STAG", "MAIN", "ARCC", "STWD", "AGNC", "SO", "DUK",
+               "D", "NEE", "SCHD", "VYM", "DGRO", "JEPI", "JEPQ", "HDV", "JPM", "BAC"],
+
+  "verdict_already_measured": {
+    "headline": "None. This bot has never been evaluated, because there is nothing to evaluate.",
+    "honest_status": "It is a recurring information post. It cannot win or lose money and no claim has ever been made for it."
+  },
+
+  "what_the_village_could_still_do": [
+    "Read it as an example of a bot that correctly refuses to become a strategy. The yield-trap",
+    "flag is the only judgement it makes, and it makes it out loud."
+  ]
+}

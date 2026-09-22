@@ -1,0 +1,57 @@
+{
+  "name": "TRADE_JOURNAL — the evidence layer (D-0006)",
+  "source_of_truth": "/Users/robbie/trade/trade_journal.py (runs as `trade_journal.py daemon`)",
+  "dossier": "dossiers/trade_journal.md",
+  "seat": "none — this is not a strategy at all",
+
+  "what_it_is": [
+    "The fleet's measurement layer. It captures the broker's own activity stream into an",
+    "append-only, SHA-256-chained journal, snapshots the account, and writes an immutable audit",
+    "record every time completeness is checked. It reads the broker and writes files. It changes",
+    "no bot's behaviour and places no orders — that is its whole design constraint.",
+    "Its one-line objective: increase confidence in experimental conclusions without changing",
+    "any experimental conclusion."
+  ],
+
+  "why_there_is_no_genome": [
+    "It has no opinion about any price. Asking the court to backtest it is a category error —",
+    "there is nothing here that could win or lose money."
+  ],
+
+  "why_it_is_in_this_drop_anyway": [
+    "Because every other file here is only as good as this one. Every verdict in every dossier",
+    "rests on numbers that came from somewhere, and this is the somewhere. A village that judges",
+    "the strategies and never looks at the measurement layer has audited the easy half."
+  ],
+
+  "the_principle_it_proved": {
+    "integrity_is_not_completeness": [
+      "They are independent guarantees, and this was proven by failure injection rather than",
+      "assumed: `verify` walks the hash chain and catches in-place edits. `audit` diffs against",
+      "the live broker and catches omissions the chain cannot — a re-chained journal missing one",
+      "fill PASSES verify and FAILS audit.",
+      "Freshness is therefore defined as journal-head == broker-head, not as wall-clock lag."
+    ]
+  },
+
+  "real_constants": {
+    "artifacts": ["journal/broker_journal.jsonl", "journal/broker_snapshots.jsonl",
+                  "journal/audit_log.jsonl", "decision journal (built, deliberately unwired)"],
+    "backfill": "569 records, 2026-06-28 to 2026-07-22",
+    "serialization": "canonical decimal strings, chained SHA-256",
+    "test_suite": "40 tests with CI, on branch d0006-evidence-journal (unpushed)"
+  },
+
+  "the_open_gap": {
+    "headline": "Off-site backup does not exist. The Railway volume is not off-site.",
+    "consequence": "Durability of every claim in this drop is currently bounded by one provider's storage. This is stated as a limit, not a plan.",
+    "why_it_is_blocked": "Creating the bucket and holding the credentials is Robbie's to do; the replication script is destination-agnostic and written."
+  },
+
+  "why_this_layer_exists_at_all": [
+    "Because the fleet's reporting has already lied once. The wheel completed a real TSLA put",
+    "cycle — sold 6/29, bought to close 7/14, +$252 verified against Alpaca's own fills — while",
+    "wheel_state.json and the daily summary both reported '$0 premium, 0 cycles'. Reconciliation",
+    "only caught it because someone ran it by hand."
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "KRONOS_LIVE — weekly forecast generator for the FIVEWAY gate",
+  "source_of_truth": "/Users/robbie/trade/kronos_live.py (Railway service BOT=fiveway, same volume)",
+  "dossier": "dossiers/kronos_live.md",
+  "seat": "none — see why_there_is_no_genome",
+
+  "what_it_is": [
+    "Not a strategy and not a bot that trades. It runs the Kronos foundation model over a frozen",
+    "universe once a week and writes kronos_live.json, which fiveway_bot reads as one of its five",
+    "gates. It exists because the research forecasts stopped at 2026-07-17 and a forward test",
+    "reading them would silently gate today's trades on three-week-old predictions.",
+    "FIVEWAY refuses to emit at all if this file is more than 10 days old — verified by smoke test."
+  ],
+
+  "why_there_is_no_genome": [
+    "The model is 4.6 billion pre-training bars of learned weights. There is no window and no",
+    "threshold to declare; MAX_CONTEXT=512 is a tensor size, not a strategy parameter."
+  ],
+
+  "why_it_cannot_run_in_the_village": [
+    "It needs torch and a multi-gigabyte weights download, and it runs from a git clone of",
+    "shiyu-coder/Kronos at /app/Kronos. The court refuses that whole shape of file, correctly."
+  ],
+
+  "real_constants": {
+    "max_age_days": 10,
+    "must_match": "fiveway_bot.KRONOS_MAX_AGE",
+    "max_context_bars": 512,
+    "cadence_seconds": 604800,
+    "hardware": "CPU only, no GPU — about 200 forecasts a week"
+  },
+
+  "verdict_already_measured": {
+    "headline": "Eight independent tests of Kronos on this project's data. Eight nulls.",
+    "arm_a": "20 ETFs, daily, 10,300 forecasts — RankIC +0.0022 (t=+0.17)",
+    "arm_b": "200 stocks, weekly, 19,994 forecasts — RankIC +0.0008 (t=+0.05); median daily RankIC -0.0304, only 48% of days positive",
+    "the_kill_test": "Kronos cannot be distinguished from ITS OWN SIGNAL randomly permuted across names (z=+0.22, p=0.41 and z=+0.11, p=0.46). That is an information problem, not an adaptation problem.",
+    "beaten_by": "Free 12-1 momentum scored RankIC +0.0383 (t=+2.55) on the same 20 ETFs",
+    "later_stacks": "Also null inside the wheel gate (loses to its own shuffle placebo, p=0.86), the spidey stack, and the whale stack",
+    "hard_boundary": "Pre-training ends June 2024 and includes 4.6B US bars from 2000 onward — 38% of the corpus. Every US backtest before 2024-07 is inside the weights. The honest window can only grow by waiting.",
+    "the_number_that_could_have_been_spun": "Arm B's secondary endpoint read top-quartile +1.416%/10d, t=+2.05. It is not evidence: n=10 cohorts, pre-registered as secondary, underpowered, primary endpoint zero, kill criterion failed."
+  },
+
+  "what_the_village_could_still_do": [
+    "Nothing that would settle anything. If a village firm using this gate looks good, the",
+    "first hypothesis should be the village's data or cost model, not that Kronos works after all."
+  ]
+}
