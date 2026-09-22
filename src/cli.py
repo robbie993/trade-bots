@@ -698,6 +698,21 @@ def cmd_serve(args) -> int:  # pragma: no cover - long-running server
             f"approve spending. You are binding to {args.host}.",
             file=sys.stderr,
         )
+    # Keep the price cache warm off the request path. Re-pricing the universe
+    # cold takes ~99 seconds, and doing that inside a request meant /village
+    # simply did not return for whoever opened it first after a bar turned over
+    # — every fifteen minutes, on this village's bar. See `start_price_warmer`.
+    #
+    # Started here rather than on an app startup hook so that importing the app
+    # — which every test does — starts no threads and reaches for no network.
+    try:
+        from .trading.web import start_price_warmer
+
+        start_price_warmer()
+    except Exception:  # noqa: BLE001 - the console must serve with or without it
+        print("note: price warmer did not start; pages may be slow after a bar turns",
+              file=sys.stderr)
+
     uvicorn.run("src.agents.web:app", host=args.host, port=args.port, log_level="info")
     return 0
 

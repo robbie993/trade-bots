@@ -103,6 +103,67 @@ def ecosystem() -> Ecosystem:
     return eco
 
 
+_WARMER = None
+
+
+def start_price_warmer(interval_s: float = 60.0):
+    """Refill the shared price cache off the request path, in the background.
+
+    Sharing one feed across requests (see `_shared_feed`) meant only the
+    *first* load after a bar turned over paid to re-price the universe. It did
+    not make that load survivable. Measured on 2026-09-22 against the live
+    village: a cold `evaluate_all` took **99 seconds** for 36 symbols, while the
+    same call on a warm cache took 0.77. So `/village` and `/api/firms` simply
+    did not return — a browser gives up long before that, and the page had
+    looked hung to anyone unlucky enough to open it just after a bar. On a 15m
+    bar that is somebody's first load every fifteen minutes.
+
+    A whole page is not worth a network round trip it cannot bound, so the
+    round trip moves here. This thread does exactly what a page load used to
+    do, on a timer, and the feed's own one-bar TTL decides when that turns into
+    HTTP: while the cache is warm this loop is a few dict lookups, and just
+    after a bar turns over it pays the 99 seconds instead of the reader.
+
+    Total fetching is unchanged — the same symbols, once a bar. What changes is
+    who waits for it.
+    """
+    global _WARMER
+    if _WARMER is not None and _WARMER.is_alive():
+        return _WARMER
+
+    def _warm_forever():
+        import logging
+        import time
+
+        log = logging.getLogger("village.pricewarmer")
+        while True:
+            try:
+                eco = ecosystem()
+                try:
+                    market = eco.market()
+                    started = time.time()
+                    market.marks(market.symbols)
+                    took = time.time() - started
+                    # Only worth a line when it actually went to the network;
+                    # a warm pass is sub-second and says nothing.
+                    if took > 1.0:
+                        log.info(
+                            "re-priced %d symbols in %.1fs (bar turned over)",
+                            len(market.symbols), took,
+                        )
+                finally:
+                    eco.db.close()
+            except Exception:  # noqa: BLE001 - a warmer must never kill the console
+                log.exception("price warm failed; will retry")
+            time.sleep(interval_s)
+
+    _WARMER = threading.Thread(
+        target=_warm_forever, name="village-price-warmer", daemon=True
+    )
+    _WARMER.start()
+    return _WARMER
+
+
 def e(value) -> str:
     return html.escape(str(value))
 
