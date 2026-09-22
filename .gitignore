@@ -93,3 +93,7 @@ bots/*
 !bots/form4.json
 !bots/kronos_live.json
 !bots/trade_journal.json
+
+# The daily village's own state, same reasoning as run/ and logs/ above.
+run-daily/
+logs-daily/

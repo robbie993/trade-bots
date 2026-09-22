@@ -26,8 +26,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-RUN_DIR="run"
-LOG_DIR="logs"
+# Overridable so a second village can run beside the first without either one
+# noticing. The pid files are the thing that actually collides: two instances
+# sharing `run/loop.pid` means `stop` kills whichever wrote last and `status`
+# reports one village's health under the other's name. A second instance sets
+# these along with MVV_LOCAL_DB, TRADE_FIRMS_CONFIG and MVV_GATE_PORT — see
+# `village_daily.sh`, which is exactly that and nothing else.
+RUN_DIR="${MVV_RUN_DIR:-run}"
+LOG_DIR="${MVV_LOG_DIR:-logs}"
 mkdir -p "$RUN_DIR" "$LOG_DIR" data
 
 HOST="${MVV_GATE_HOST:-127.0.0.1}"

@@ -1,0 +1,52 @@
+# The daily village — one firm, one strategy, its own book.
+#
+#   ./scripts/village_daily.sh start
+#
+# Separate from `firm_config.yaml` because this village runs a different clock,
+# not a different mandate. Everything here is daily: `TRADE_BAR=1d`, and the
+# windows in `veritas_reversion.py` are stated in bars, so a strategy that says
+# "SMA200" gets two hundred daily closes rather than two hundred quarter-hours.
+#
+# **Why there is a second village at all.** The 15m village cannot run this
+# strategy honestly and says so. VERITAS needs 200 daily bars; on fifteen-minute
+# bars that is 5,200, and the feed fetches 3,680 before the village keeps the
+# last 720 and hands a bot the last 250. There is no lookback setting that
+# reaches 5,200 at 15m, because the bars do not exist. Computing "SMA200" over
+# 200 quarter-hours instead would be 50 hours wearing a 200-day name, which is
+# the unit confusion that has produced nine separate bugs in this codebase. So
+# the clock changes rather than the rule.
+#
+# This file funds nothing. `init` creates the firm with the allocation below
+# only if it does not exist; raising it afterwards needs a human and the
+# allocator, like everywhere else.
+
+firms:
+  firm_veritas:
+    name: "VERITAS"
+    asset_class: "ETF"
+    # The door: `bot:<path>` runs the file instead of the built-in pod. The
+    # village keeps the risk manager, the conscience, the ledger, the kill
+    # switch and the gate — a bot proposal is reviewed exactly like any other.
+    strategy: "bot:bots/veritas_reversion.py"
+    venue: "paper"
+    risk_limit: 0.02
+    capital_allocation: 20000
+    # Liquid, cheap to trade, and long enough on Alpaca to have 200 daily bars
+    # behind them. VERITAS holds at most four names at a time by its own rule.
+    universe: [SPY, QQQ, IWM, EFA, AAPL, MSFT]
+    # A bot firm does not run the analyst debate — `propose` returns orders
+    # directly and `_from_pod` is never reached. Left at the loader's default
+    # rather than `[]` because an empty list here is replaced by that default
+    # anyway, and a line that looks like it disables something it does not is
+    # worse than no line. The seats are inert for this firm either way.
+    analysts: [technical, sentiment, macro]
+    # The genome is not read by the adapter — every constant lives in the bot
+    # file, where it is sourced to Connors rather than fitted here. It is
+    # recorded so the leaderboard and the court can see what was claimed.
+    genome:
+      rsi_entry: 10.0
+      ibs_entry: 0.3
+      regime_days: 200
+      exit_sma_days: 5
+      time_stop_days: 10
+      max_concurrent: 4
