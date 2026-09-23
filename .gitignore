@@ -106,3 +106,7 @@ logs-daily/
 # Fleet snapshots pulled off Railway volumes by scripts/fleet_sync.py — a cache
 # of what the live bots said, re-fetchable at any time and not source.
 data/fleet/
+
+# Scouted research candidates — a cache of what is out there, re-fetchable.
+# The denominator matters (see scripts/research_scout.py), but the file is data.
+data/research/
