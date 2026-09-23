@@ -84,7 +84,13 @@ def _vol_adj_momentum(closes):
 def propose(context):
     scored = []
     for symbol in context.universe:
-        closes = context.closes(symbol, 200)
+        # Floats at the boundary, and only here. See the note in sentinel.py:
+        # the context serves Decimal because it also serves cash, the maths
+        # below is the real bot's and is written in float, and mixing them
+        # raises TypeError on the first arithmetic — which is why this port had
+        # never run. Converting beats rewriting: the value of a port is being
+        # the same arithmetic as the bot on Railway.
+        closes = [float(c) for c in context.closes(symbol, 200)]
         if not closes or not context.price(symbol):
             continue
         m = _vol_adj_momentum(closes)
@@ -111,7 +117,7 @@ def propose(context):
     def _weights(names):
         inv = []
         for sym, _ in names:
-            closes = context.closes(sym, VOL_N + 2)
+            closes = [float(c) for c in context.closes(sym, VOL_N + 2)]
             rets = [(closes[i] / closes[i - 1]) - 1.0 for i in range(1, len(closes))]
             sd = _stdev(rets) or 0.0
             inv.append((sym, 1.0 / sd if sd > 0 else 0.0))
@@ -130,7 +136,7 @@ def propose(context):
     # turnover gate, on the same scale the real bot uses: sum |dw| in weight terms
     turnover = 0.0
     for sym in context.universe:
-        held_val = context.quantity(sym) * (context.price(sym) or 0)
+        held_val = float(context.quantity(sym)) * float(context.price(sym) or 0)
         turnover += abs(target.get(sym, 0.0) - held_val) / equity
     if turnover > MAX_TURNOVER:
         return []                       # this is the gate that skips ~78% of weeks

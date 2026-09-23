@@ -141,8 +141,21 @@ def propose(context):
     open_positions = sum(1 for s in context.universe if context.quantity(s) > 0)
 
     for symbol in context.universe:
-        closes = context.closes(symbol, VOL_PCTL_WINDOW + 60)
+        # **Floats at the boundary, and only here.** The context serves Decimal
+        # because it also serves cash; the indicator maths below is the real
+        # bot's, written in float, with float constants (`k = 2.0/(n+1)`,
+        # `gains = 0.0`). Mixing the two raises `TypeError: unsupported operand
+        # type(s) for *: 'decimal.Decimal' and 'float'` on the first EMA, which
+        # is why this file had never once run inside the village.
+        #
+        # Converting here rather than rewriting the maths in Decimal is
+        # deliberate: the shipped example states the rule — "Use Decimal for
+        # anything that becomes money. Floats are fine for indicators" — and a
+        # rewrite would change the arithmetic of a port whose whole value is
+        # being the same arithmetic as the bot on Railway.
+        closes = [float(c) for c in context.closes(symbol, VOL_PCTL_WINDOW + 60)]
         price = context.price(symbol)
+        price = float(price) if price is not None else None
         if not closes or not price or len(closes) < HTF_EMA_LEN + HTF_SLOPE_LOOKBACK + 5:
             continue
         held = context.quantity(symbol)

@@ -81,10 +81,15 @@ def _rsi(xs, n):
 def propose(context):
     orders = []
     for symbol in context.universe:
-        closes = context.closes(symbol, 260)
+        # Floats at the boundary, and only here — see sentinel.py. The
+        # context serves Decimal because it also serves cash; the maths
+        # below is the real bot's, in float. Mixing them raises TypeError
+        # on the first arithmetic, which is why this port never ran.
+        closes = [float(c) for c in context.closes(symbol, 260)]
         if not closes or len(closes) < SMA_TREND + 1:
             continue                      # silence, not neutrality
         price = context.price(symbol)
+        price = float(price) if price is not None else None
         if not price:
             continue
         held = context.quantity(symbol)

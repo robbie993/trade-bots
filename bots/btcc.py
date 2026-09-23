@@ -162,7 +162,7 @@ def _score(closes, bench_ret):
 
 
 def propose(context):
-    bench = context.closes(BENCHMARK, 30)
+    bench = [float(c) for c in context.closes(BENCHMARK, 30)]
     bench_ret = ((bench[-1] - bench[-25]) / bench[-25]
                  if bench and len(bench) >= 25 else 0.0)
 
@@ -173,8 +173,13 @@ def propose(context):
 
     orders = []
     for symbol in context.universe:
-        closes = context.closes(symbol, 200)
+        # Floats at the boundary, and only here — see sentinel.py. The
+        # context serves Decimal because it also serves cash; the maths
+        # below is the real bot's, in float. Mixing them raises TypeError
+        # on the first arithmetic, which is why this port never ran.
+        closes = [float(c) for c in context.closes(symbol, 200)]
         price = context.price(symbol)
+        price = float(price) if price is not None else None
         if not closes or not price or len(closes) < 60:
             continue
         s, htf = _score(closes, bench_ret)

@@ -56,8 +56,13 @@ def propose(context):
     open_n = sum(1 for s in context.universe if context.quantity(s) > 0)
 
     for symbol in context.universe:
-        closes = context.closes(symbol, 30)
+        # Floats at the boundary, and only here — see sentinel.py. The
+        # context serves Decimal because it also serves cash; the maths
+        # below is the real bot's, in float. Mixing them raises TypeError
+        # on the first arithmetic, which is why this port never ran.
+        closes = [float(c) for c in context.closes(symbol, 30)]
         price = context.price(symbol)
+        price = float(price) if price is not None else None
         if not closes or not price or len(closes) < 10:
             continue
         held = context.quantity(symbol)
