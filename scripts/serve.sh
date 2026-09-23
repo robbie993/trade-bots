@@ -3,6 +3,7 @@
 #
 #     MVV_ROLE=web      serve the pages          (the default)
 #     MVV_ROLE=worker   tick the village forever
+#     MVV_ROLE=tick     tick it exactly once, then exit
 #
 # This is the shape a hosted village needs and a laptop one does not. On your
 # own machine `village.sh` starts two processes side by side; on a platform
@@ -17,6 +18,17 @@
 #               quarters. It has no HTTP surface at all, so nothing it does is
 #               reachable from the internet. This is the piece that makes the
 #               village *live* rather than a mirror.
+#
+#   the tick    the worker's job, once. For a platform *cron* rather than a
+#               service: a cron that starts `trade run --interval` would launch
+#               a forever-loop on every fire, and the second fire either stacks
+#               a writer on top of the first or is dropped — both of which look
+#               like a village that ticks irregularly for no reason. One fire,
+#               one bar, then exit, and the schedule is the interval.
+#
+#               Pair it with a TRADE_BAR that matches the cron. Hourly cron and
+#               a 15m bar means three bars in four are never seen, which reads
+#               as a quiet market rather than a misconfiguration.
 #
 #   the web     serves pages. It is read-only unless somebody signs in
 #               (MVV_GATE_TOKEN — see src/access.py), and it never migrates
@@ -68,8 +80,24 @@ worker)
   exec python -m src.main trade run --interval "$INTERVAL"
   ;;
 
+tick)
+  # Same preparation as the worker, and for the same reasons — the schema and
+  # the firm roster have to exist before a bar can be processed, and `trade
+  # init` never re-funds a firm that is already there.
+  echo "==> tick: bringing the schema up to date"
+  python -m src.main init-db
+  echo "==> tick: creating firms from config/firm_config.yaml"
+  python -m src.main trade init
+
+  export TRADE_AUTONOMY="${TRADE_AUTONOMY:-council}"
+  export TRADE_LIVING="${TRADE_LIVING:-on}"
+
+  echo "==> tick: one bar, then exit"
+  exec python -m src.main trade tick
+  ;;
+
 *)
-  echo "unknown MVV_ROLE=$ROLE (expected 'web' or 'worker')" >&2
+  echo "unknown MVV_ROLE=$ROLE (expected 'web', 'worker' or 'tick')" >&2
   exit 1
   ;;
 esac
