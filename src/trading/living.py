@@ -264,8 +264,29 @@ class Living:
         self._maybe_scheme(report, sandbox, firms, day)
 
     def _maybe_ally(self, report, sandbox, firms, day: int) -> bool:
-        """Two firms trading similar things find they have something to discuss."""
-        existing = sandbox.alliances.all(status="active")
+        """Two firms trading similar things find they have something to discuss.
+
+        **An alliance between dead firms is not an alliance.** `alliances.all`
+        returns everything still marked active, including partnerships whose
+        members have since gone bankrupt — and those were counted against the
+        cap on how many may exist. Measured 2026-09-23: all three active
+        alliances dated from 2026-08-14 and every member of all three
+        (`firm_b_stocks`, `firm_d_value`, `firm_a_etf`, `firm_h_global`,
+        `firm_c_crypto`, `firm_e_momentum`) was bankrupt. With thirteen living
+        firms the cap is four, so three dead partnerships were holding three
+        of the four slots and the tavern had produced nothing in six weeks.
+
+        Same shape as the arena fighting the dead: a collection that keeps
+        returning the estate, and a rule that assumed it would not. Living
+        members are what counts, here and there.
+        """
+        living_keys = {f.firm_key for f in firms}
+        all_active = sandbox.alliances.all(status="active")
+        existing = [a for a in all_active
+                    if any(m in living_keys for m in a.members)]
+        # `spoken_for` follows the same rule: a firm is unavailable only if its
+        # alliance still has somebody alive in it. Being partnered to an estate
+        # is not a commitment.
         spoken_for = {member for a in existing for member in a.members}
         free = [f for f in firms if f.firm_key not in spoken_for]
         if len(free) < 2 or len(existing) >= max(1, len(firms) // 3):

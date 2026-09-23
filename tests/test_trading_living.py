@@ -21,6 +21,7 @@ from decimal import Decimal
 import pytest
 
 from src.trading.living import Living, LivingConfig, _clock, _roll
+from src.trading.models import FirmStatus
 
 
 # =========================================================================
@@ -226,3 +227,32 @@ def test_the_token_floor_is_a_decimal():
     from src.trading.living import TOKEN_FLOOR
 
     assert isinstance(TOKEN_FLOOR, Decimal)
+
+
+def test_a_dead_firms_alliance_does_not_hold_a_slot(eco, monkeypatch):
+    """The tavern went quiet for six weeks because the estate was still partnered.
+
+    `alliances.all(status="active")` returns partnerships whose members have
+    since gone bankrupt. Counting those against the cap meant three dead pairs
+    from 2026-08-14 held three of four slots while thirteen living firms had
+    nothing to do — the same shape as the arena fighting the dead.
+    """
+    monkeypatch.setenv("TRADE_LIVING", "on")
+    _living(eco)
+    living = _living(eco)
+    firms = living.store.firms()
+    assert len(firms) >= 2
+
+    # Two firms ally, then both die.
+    a, b = firms[0], firms[1]
+    living.sandbox.alliances.form("old pact", a.firm_key, [b.firm_key])
+    for f in (a, b):
+        living.store.set_firm_status(f.id, FirmStatus.BANKRUPT.value)
+
+    alive = [f for f in living.store.firms() if not f.is_killed]
+    counted = [
+        al for al in living.sandbox.alliances.all(status="active")
+        if any(m in {f.firm_key for f in alive} for m in al.members)
+    ]
+    assert living.sandbox.alliances.all(status="active"), "the pact is still on the books"
+    assert counted == [], "but no living firm is in it, so it must not hold a slot"
