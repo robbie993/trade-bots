@@ -90,6 +90,7 @@ bots/*
 # The bridges: they carry a live bot's own output into the signal board rather
 # than re-implementing it. See scripts/fleet_sync.py.
 !bots/fleet_scanner.py
+!bots/fleet_form4.py
 
 # The dossiers that go with them — what each bot is, and what was measured.
 !bots/dividend.json
