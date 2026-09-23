@@ -16,6 +16,14 @@
   "verdict": "FAIL"
  },
  {
+  "subject": "evolver:crypto_survivors",
+  "test": "in-sample fitness rank predicts held-out rank",
+  "p": 0.3166924472641016,
+  "run_date": "2026-09-20",
+  "note": "generation 6, purge gap 150 bars, rho=-0.378 p=0.317 n=8 | look 2, needs p<0.0250 | ranks nothing | WINDOW-DEPENDENT: single-window draw against a sliding feed; walk-forward (D-V012) gives mean rho +0.0077, sd 0.1366, 1/8 windows significant. Not standalone evidence.",
+  "verdict": "FAIL"
+ },
+ {
   "subject": "evolver:firm_a_etf_ii_v_ii",
   "test": "in-sample fitness rank predicts held-out rank",
   "p": 0.6872847751762754,
