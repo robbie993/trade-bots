@@ -50,3 +50,65 @@ firms:
       exit_sma_days: 5
       time_stop_days: 10
       max_concurrent: 4
+
+  firm_fleet_desk:
+    name: "Fleet Desk"
+    asset_class: "Equity"
+    strategy: "momentum_reversion"
+    venue: "paper"
+    risk_limit: 0.02
+    capital_allocation: 20000
+    # **The scanner bot's own base universe, all 82 names, lifted from
+    # `scanner_bot.py:37`.** This is the firm that exists so the fleet's readings
+    # have somewhere to land. A reading is routed by symbol — `SignalAnalyst`
+    # asks the board per symbol of *this* firm's universe — so a desk whose
+    # universe does not overlap the scanners hears nothing at all, which is the
+    # state the village was in before this firm existed.
+    #
+    # **This universe is not neutral and the number is on record.** Measured
+    # 2026-08-06: scanner_bot's hand-written list is worth about +26.9%/yr of
+    # pure hindsight against a random-name control, because the names were
+    # chosen in 2026 from what had already worked. Any result this desk produces
+    # is therefore contaminated by the same selection, and a backtest scored on
+    # it measures the list rather than the screen. It is here because the
+    # readings are about these names and nothing else would hear them — not
+    # because it is a fair universe. Judge this desk against a random-name
+    # control or not at all.
+    universe: [AAPL, ABBV, ABNB, ADBE, AFRM, AMAT, AMC, AMD, AMZN, ARM, ASML, AVGO, BA, BABA, BAC, CAT, CLSK, COIN, COST, CRM, CRWD, CVNA, CVX, DDOG, DELL, DIS, DKNG, F, GE, GM, GME, GOOGL, GS, HD, HOOD, INTC, JNJ, JPM, KO, LCID, LLY, LRCX, MA, MARA, MCD, META, MRNA, MSFT, MSTR, MU, NET, NFLX, NKE, NOW, NVDA, ON, ORCL, PANW, PEP, PFE, PLTR, PYPL, QCOM, RBLX, RIOT, RIVN, SBUX, SHOP, SMCI, SMR, SNOW, SOFI, SQ, TSLA, TSM, UBER, UNH, V, VST, WDC, WMT, XOM]
+    # `signals` is the seat that hears the scanners. The rest are the ordinary
+    # analysts, so the fleet's opinion joins a debate instead of being the whole
+    # of it — one voice among five, which is the only way a reading is allowed
+    # to matter here.
+    analysts: [technical, macro, signals, news, scribe]
+    genome:
+      fast_window: 20
+      slow_window: 50
+      rsi_window: 14
+      trend_bias: 60
+      # The fleet's readings are worth *something* but nothing here has earned
+      # full trust: form4 measured weak, unstable and median-negative, and the
+      # scanner's universe is the hindsight problem above. Start the seat at
+      # half weight, and let evidence move it rather than enthusiasm.
+      signal_trust: 50
+
+# =========================================================================
+# The scanners the fleet speaks through.
+#
+# These are bridges, not strategies: `fleet_sync.py` copies what the real bots
+# on Railway decided onto this machine, and these files repeat it. They compute
+# nothing. If the sync stops, they publish nothing and every firm correctly
+# hears silence — see the staleness rule in each file.
+#
+# `universe` is set explicitly rather than defaulting to "the whole village",
+# because the default is the village's *watched* symbols and these readings are
+# about names only the fleet desk trades.
+# =========================================================================
+scanners:
+  fleet_scanner:
+    bot: bots/fleet_scanner.py
+    universe: [AAPL, ABBV, ABNB, ADBE, AFRM, AMAT, AMC, AMD, AMZN, ARM, ASML, AVGO, BA, BABA, BAC, CAT, CLSK, COIN, COST, CRM, CRWD, CVNA, CVX, DDOG, DELL, DIS, DKNG, F, GE, GM, GME, GOOGL, GS, HD, HOOD, INTC, JNJ, JPM, KO, LCID, LLY, LRCX, MA, MARA, MCD, META, MRNA, MSFT, MSTR, MU, NET, NFLX, NKE, NOW, NVDA, ON, ORCL, PANW, PEP, PFE, PLTR, PYPL, QCOM, RBLX, RIOT, RIVN, SBUX, SHOP, SMCI, SMR, SNOW, SOFI, SQ, TSLA, TSM, UBER, UNH, V, VST, WDC, WMT, XOM]
+  fleet_form4:
+    bot: bots/fleet_form4.py
+    # form4 names are small caps that turn over daily and are mostly not in the
+    # scanner's list, so this one takes the village default (every watched
+    # symbol) and simply goes quiet on the ones nobody trades.
