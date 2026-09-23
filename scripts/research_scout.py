@@ -56,16 +56,50 @@ OUT = REPO / "data" / "research" / "candidates.jsonl"
 SOURCES = {
     "arxiv_qfin": {
         "url": "https://arxiv.org/list/q-fin.TR/recent",
-        "row": "dl > dt",
+        "parser": "arxiv",
         "why": "q-fin.TR is trading and market microstructure. Papers state a "
                "rule and its test, which is the rarest property in this corpus.",
     },
-    "arxiv_stat_ml": {
+    "arxiv_stat": {
         "url": "https://arxiv.org/list/q-fin.ST/recent",
-        "row": "dl > dt",
+        "parser": "arxiv",
         "why": "q-fin.ST — statistical finance. Same reason.",
     },
+    "arxiv_portfolio": {
+        "url": "https://arxiv.org/list/q-fin.PM/recent",
+        "parser": "arxiv",
+        "why": "q-fin.PM — portfolio management. Where sizing and risk rules live, "
+               "which is the half of a strategy that usually goes unspecified.",
+    },
+    "github_strategies": {
+        "url": "https://github.com/search?q=trading+strategy+backtest+language%3APython"
+               "&type=repositories&s=updated&o=desc",
+        "parser": "github",
+        "why": "Public repositories, ranked by recent activity. Code is the one "
+               "medium where a claim cannot hide behind prose — either the rule is "
+               "in the file or it is not.",
+    },
+    "hn_trading": {
+        "url": "https://hn.algolia.com/api/v1/search_by_date?query=trading%20strategy"
+               "&tags=story&hitsPerPage=25",
+        "parser": "hn",
+        "why": "Hacker News, newest first. Keyless and public. Comment threads here "
+               "are unusually good at killing a bad claim quickly, which is worth "
+               "more than the submissions.",
+    },
 }
+
+#: **Two sources were tried and removed: Reddit and SSRN both block automated
+#: access.** Not rate-limit — an outright "Content Blocked" page. Getting past
+#: that means defeating bot detection, which is not something this will do, so
+#: they are gone rather than quietly broken. If you want r/algotrading in here,
+#: the honest route is Reddit's own API with an account, which is a decision to
+#: take deliberately and not a scraper to sneak in.
+#:
+#: What is left needs no login and no key. arXiv and GitHub render server-side,
+#: so one page load is the whole result; Hacker News is a JS app, so this reads
+#: its public Algolia endpoint instead — still just fetching what any reader can
+#: see. One page per source per run is politer than a human browsing.
 
 TIMEOUT_MS = 25000
 
@@ -89,46 +123,95 @@ def _seen() -> set:
     return out
 
 
+def _parse_arxiv(soup, limit):
+    """arXiv listing pages pair <dt> (ids) with <dd> (title, subjects)."""
+    out = []
+    for dt in soup.select("dl > dt")[:limit]:
+        dd = dt.find_next_sibling("dd")
+        link = dt.select_one('a[href*="/abs/"]')
+        if dd is None or link is None:
+            continue
+        href = link.get("href") or ""
+        url = href if href.startswith("http") else f"https://arxiv.org{href}"
+        title_el = dd.select_one(".list-title")
+        title = (title_el.get_text(strip=True).replace("Title:", "").strip()
+                 if title_el else "")
+        subj_el = dd.select_one(".list-subjects")
+        extra = (subj_el.get_text(strip=True).replace("Subjects:", "").strip()
+                 if subj_el else "")
+        if title:
+            out.append((url, title, extra))
+    return out
+
+
+def _parse_github(soup, limit):
+    """Repository search results. The heading link is owner/name."""
+    out = []
+    seen = set()
+    for a in soup.select('a[href]'):
+        href = a.get("href") or ""
+        parts = [p for p in href.split("?")[0].strip("/").split("/") if p]
+        # owner/repo and nothing deeper — skip /issues, /tree, /stargazers.
+        if len(parts) != 2 or href.startswith("http"):
+            continue
+        if parts[0] in {"search", "topics", "collections", "sponsors", "features",
+                        "orgs", "settings", "login", "signup", "about", "pricing"}:
+            continue
+        slug = f"{parts[0]}/{parts[1]}"
+        if slug in seen:
+            continue
+        text = a.get_text(strip=True)
+        if not text or "/" not in text:
+            continue
+        seen.add(slug)
+        out.append((f"https://github.com/{slug}", slug, "repository"))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _parse_hn(soup, limit):
+    """Hacker News via its public Algolia endpoint — the body is JSON, not HTML."""
+    try:
+        payload = json.loads(soup.get_text())
+    except ValueError:
+        return []
+    out = []
+    for hit in (payload.get("hits") or [])[:limit]:
+        url = hit.get("url") or (
+            f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+            if hit.get("objectID") else "")
+        title = hit.get("title") or hit.get("story_title") or ""
+        if url and title:
+            out.append((url, title, f"{hit.get('points') or 0} points, "
+                                    f"{hit.get('num_comments') or 0} comments"))
+    return out
+
+
+PARSERS = {"arxiv": _parse_arxiv, "github": _parse_github, "hn": _parse_hn}
+
+
 def scout(name: str, spec: dict, limit: int = 25) -> list:
     """Open the page in a real browser and read what is listed. Never evaluates."""
     from bs4 import BeautifulSoup
     from playwright.sync_api import sync_playwright
 
+    parse = PARSERS[spec["parser"]]
     found = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         try:
             page = browser.new_page()
             page.goto(spec["url"], timeout=TIMEOUT_MS, wait_until="domcontentloaded")
-            time.sleep(2)
+            time.sleep(2.5)
             soup = BeautifulSoup(page.content(), "lxml")
-
-            # arXiv listing pages pair <dt> (the id/links) with <dd> (title,
-            # authors). Walk the pairs rather than the rows, so a title is never
-            # attached to the wrong identifier.
-            for dt in soup.select(spec["row"])[:limit]:
-                dd = dt.find_next_sibling("dd")
-                if dd is None:
-                    continue
-                link = dt.select_one('a[href*="/abs/"]')
-                if link is None:
-                    continue
-                href = link.get("href") or ""
-                url = href if href.startswith("http") else f"https://arxiv.org{href}"
-                title_el = dd.select_one(".list-title")
-                title = (title_el.get_text(strip=True).replace("Title:", "").strip()
-                         if title_el else "")
-                subj_el = dd.select_one(".list-subjects")
-                subjects = (subj_el.get_text(strip=True).replace("Subjects:", "").strip()
-                            if subj_el else "")
-                if not title:
-                    continue
+            for url, title, extra in parse(soup, limit):
                 found.append({
                     "id": _digest(url),
                     "source": name,
                     "url": url,
-                    "title": title,
-                    "subjects": subjects,
+                    "title": title[:300],
+                    "subjects": extra[:200],
                     "found_at": datetime.now(timezone.utc).isoformat(),
                     # Deliberately absent: any judgement. No score, no
                     # "promising", no rank. Those are the reviewed step.

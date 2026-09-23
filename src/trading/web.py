@@ -31,7 +31,9 @@ There is no authentication. Bind it to localhost.
 from __future__ import annotations
 
 import html
+import json
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -280,6 +282,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _shadow_panel(eco),
         _council_panel(eco),
         _court_panel(eco),
+        _research_panel(eco),
         _arena_panel(eco),
         _market_panel(eco),
         _sandbox_panel(eco),
@@ -710,6 +713,78 @@ def _council_panel(eco) -> str:
 def _verdict(value) -> str:
     css = {"grant": "good", "refuse": "warn", "defer": "muted"}.get(value or "", "muted")
     return f"<span class={css}>{e(value or '')}</span>"
+
+
+def _research_panel(eco) -> str:
+    """What the village has read on its own, and how long ago.
+
+    The scout runs outside the tick (`scripts/research_scout.py`) because a
+    browser is far slower than a bar, so this panel reads its file rather than
+    triggering it. That means the panel's real job is to make *staleness*
+    visible: a research layer that quietly stopped looks exactly like one that
+    found nothing, and the first is a bug while the second is a Tuesday.
+
+    The count is deliberately the headline. It is the denominator — how many
+    ideas were looked at, including every one that went nowhere — and a search
+    that reports only its hits has already lost the thread.
+    """
+    path = Path(__file__).resolve().parent.parent.parent / "data" / "research" / "candidates.jsonl"
+    rows, newest, by_source = [], None, {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            rows.append(r)
+            by_source[r.get("source", "?")] = by_source.get(r.get("source", "?"), 0) + 1
+            at = r.get("found_at") or ""
+            if at and (newest is None or at > newest):
+                newest = at
+    except OSError:
+        return _panel(
+            "Research",
+            "<p class=muted>The village has never been out to read anything. "
+            "<code>python scripts/research_scout.py</code></p>",
+        )
+
+    age = ""
+    if newest:
+        try:
+            then = datetime.fromisoformat(newest)
+            if then.tzinfo is None:
+                then = then.replace(tzinfo=timezone.utc)
+            hours = (datetime.now(timezone.utc) - then).total_seconds() / 3600.0
+            age = (f"{hours:.0f}h ago" if hours < 48 else f"{hours/24:.0f}d ago")
+            if hours > 48:
+                age = f"<strong>{age}</strong> — the scout has stopped"
+        except ValueError:
+            age = newest
+
+    unreviewed = sum(1 for r in rows if r.get("status") == "unreviewed")
+    sources = ", ".join(f"{k} {v}" for k, v in sorted(by_source.items()))
+
+    recent = sorted(rows, key=lambda r: r.get("found_at") or "", reverse=True)[:8]
+    table = _table([{
+        "source": e(r.get("source", "")),
+        "found": e((r.get("found_at") or "")[:10]),
+        "title": f"<a href='{e(r.get('url',''))}' target=_blank rel=noopener>"
+                 f"{e((r.get('title') or '')[:70])}</a>",
+    } for r in recent]) if recent else "<p class=muted>(nothing yet)</p>"
+
+    return _panel(
+        "Research — what the village read for itself",
+        f"<p><strong>{len(rows)}</strong> candidate(s) seen, "
+        f"{unreviewed} unreviewed · last look {age or 'never'}</p>"
+        f"<p class=muted>{e(sources)}</p>"
+        + table
+        + "<p class=muted>Found, not judged. Nothing here has been tested, and the "
+          "count is the denominator: every idea looked at, including the ones that "
+          "went nowhere. Run <code>scripts/research_scout.py</code> to look again.</p>",
+    )
 
 
 def _court_panel(eco) -> str:

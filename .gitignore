@@ -110,3 +110,7 @@ data/fleet/
 # Scouted research candidates — a cache of what is out there, re-fetchable.
 # The denominator matters (see scripts/research_scout.py), but the file is data.
 data/research/
+
+# The AI queue is live state, not source. Questions and answers are evidence
+# and get written up when they matter; the spool itself is transient.
+data/ai_queue/
