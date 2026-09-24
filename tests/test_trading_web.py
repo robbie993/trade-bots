@@ -8,6 +8,7 @@ capital writes an approval request and stops.
 
 from __future__ import annotations
 
+import threading
 from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
 
@@ -526,3 +527,138 @@ def test_one_firm_can_be_pulled_back_on_its_own(client):
     assert db.query_one("SELECT venue FROM firms WHERE firm_key = 'alpha'")["venue"] \
         == "paper"
     db.close()
+
+
+# =========================================================================
+# prices, and the page that will not wait for them
+# =========================================================================
+# Pricing the universe cold took 99 seconds against the live village, inside
+# the request, so `/village` did not return and a browser gave up. The warmer
+# moved that onto a timer; these hold the remaining case, where the timer has
+# not finished its first pass yet — after a deploy, a restart, or a warmer
+# that failed to start. The page must come back and say so.
+def test_prices_ready_gives_up_rather_than_waiting():
+    import time
+
+    from src.trading import web
+
+    release = threading.Event()
+
+    class SlowMarket:
+        symbols = ["SPY"]
+
+        def marks(self, symbols):
+            release.wait(10)
+            return {}
+
+    web._PRICER = None
+    started = time.monotonic()
+    try:
+        ready = web.prices_ready(SlowMarket(), timeout_s=0.05)
+        waited = time.monotonic() - started
+    finally:
+        release.set()
+        web._PRICER = None
+
+    assert ready is False
+    # The point of the whole change: the caller is back in milliseconds, not
+    # whenever the network happens to be done.
+    assert waited < 2.0
+
+
+def test_prices_ready_is_true_once_the_pass_finishes():
+    from src.trading import web
+
+    asked = []
+
+    class FastMarket:
+        symbols = ["SPY", "QQQ"]
+
+        def marks(self, symbols):
+            asked.append(list(symbols))
+            return {}
+
+    web._PRICER = None
+    try:
+        assert web.prices_ready(FastMarket(), timeout_s=5.0) is True
+    finally:
+        web._PRICER = None
+
+    # Priced off the request path, but priced — the same symbols, once.
+    assert asked == [["SPY", "QQQ"]]
+
+
+def test_prices_ready_does_not_raise_when_the_feed_refuses():
+    from src.trading import web
+
+    class RefusingMarket:
+        symbols = ["SPY"]
+
+        def marks(self, symbols):
+            raise RuntimeError("alpaca returned 403: forbidden")
+
+    web._PRICER = None
+    try:
+        assert web.prices_ready(RefusingMarket(), timeout_s=5.0) is True
+    finally:
+        web._PRICER = None
+
+
+def test_mission_control_says_it_is_warming_instead_of_hanging(client, monkeypatch):
+    from src.trading import web
+
+    monkeypatch.setattr(web, "prices_ready", lambda market, timeout_s=None: False)
+    response = client.get("/village")
+
+    assert response.status_code == 200
+    assert "Warming the prices" in response.text
+    # It comes back on its own, or the reader is left to guess.
+    assert "location.reload()" in response.text
+
+
+def test_a_firm_page_warms_rather_than_hangs(client, monkeypatch):
+    from src.trading import web
+
+    monkeypatch.setattr(web, "prices_ready", lambda market, timeout_s=None: False)
+    response = client.get("/village/firms/alpha")
+
+    assert response.status_code == 200
+    assert "Warming the prices" in response.text
+
+
+def test_the_page_returns_while_a_slow_feed_is_still_fetching(client, monkeypatch):
+    """End to end: a feed that takes forever, and a page that does not.
+
+    The other tests here stub `prices_ready`; this one leaves it in place and
+    makes the *fetch* slow, which is the shape of the real failure — 36
+    sequential HTTP calls against a cold cache, measured at 99 seconds.
+    """
+    import time
+
+    from src.trading.data.market_data import MarketData
+
+    release = threading.Event()
+
+    def slow_marks(self, symbols):
+        release.wait(10)
+        return {}
+
+    monkeypatch.setenv("MVV_PAGE_PRICE_TIMEOUT", "0.1")
+    monkeypatch.setattr(MarketData, "marks", slow_marks)
+    from src.trading import web
+
+    web._PRICER = None
+
+    started = time.monotonic()
+    try:
+        response = client.get("/village")
+        took = time.monotonic() - started
+    finally:
+        release.set()
+        web._PRICER = None
+
+    assert response.status_code == 200
+    assert "Warming the prices" in response.text
+    # The number that matters. Before this change the same request blocked
+    # until every symbol had been fetched.
+    assert took < 5.0

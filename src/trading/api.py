@@ -32,9 +32,27 @@ from fastapi.responses import JSONResponse
 
 from ..money import D, ZERO, money
 from . import planets
-from .web import ecosystem
+from .web import ecosystem, prices_ready
 
 router = APIRouter()
+
+
+def _warming() -> JSONResponse:
+    """503 rather than a held-open connection, while prices are being fetched.
+
+    A consumer that polls this endpoint wants an answer or a refusal, not a
+    socket that stays open for ninety-nine seconds and then fails anyway. The
+    status code is the one for "ask again shortly" and `Retry-After` says how
+    shortly; `warming` is there so a caller can tell this apart from a village
+    that is actually down. See `src.trading.web.prices_ready`.
+    """
+    return JSONResponse(
+        {"warming": True,
+         "detail": "prices are being fetched; this is the first pass since "
+                   "the process started"},
+        status_code=503,
+        headers={"Retry-After": "5"},
+    )
 
 
 def _firm(firm, card, purse, open_positions: int = 0) -> dict:
@@ -66,6 +84,8 @@ def firms() -> JSONResponse:
     eco = ecosystem()
     try:
         market = eco.market()
+        if not prices_ready(market):
+            return _warming()
         records = eco.store.firms()
         cards = {c.firm_id: c for c in eco.brokerage.evaluator.evaluate_all(records, market)}
         out = []
@@ -97,6 +117,8 @@ def status() -> JSONResponse:
     eco = ecosystem()
     try:
         market = eco.market()
+        if not prices_ready(market):
+            return _warming()
         records = eco.store.firms()
         cards = eco.brokerage.evaluator.evaluate_all(records, market)
         reconciliation = eco.brokerage.reconcile(market)

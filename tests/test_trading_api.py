@@ -198,3 +198,28 @@ def test_the_vendored_page_credits_upstream():
     body = SOLAR.read_text()
     assert "Audazia/solar-system-agents" in body
     assert "MIT" in body
+
+
+# =========================================================================
+# warming: a refusal, not a held-open socket
+# =========================================================================
+def test_api_firms_refuses_while_the_prices_are_warming(client, monkeypatch):
+    from src.trading import api
+
+    monkeypatch.setattr(api, "prices_ready", lambda market, timeout_s=None: False)
+    response = client.get("/api/firms")
+
+    assert response.status_code == 503
+    assert response.json()["warming"] is True
+    # A poller is told when to come back rather than left to invent an interval.
+    assert response.headers["Retry-After"] == "5"
+
+
+def test_api_status_refuses_while_the_prices_are_warming(client, monkeypatch):
+    from src.trading import api
+
+    monkeypatch.setattr(api, "prices_ready", lambda market, timeout_s=None: False)
+    response = client.get("/api/status")
+
+    assert response.status_code == 503
+    assert response.json()["warming"] is True

@@ -169,6 +169,108 @@ def start_price_warmer(interval_s: float = 60.0):
     return _WARMER
 
 
+#: How long a read-only page may wait for the price cache before it stops
+#: waiting and says so. A warm pass is 0.77s measured, so five seconds always
+#: wins when the cache is warm, and is short enough that nobody reads the wait
+#: as a hung page.
+PAGE_PRICE_TIMEOUT_S = 5.0
+
+_PRICER_LOCK = threading.Lock()
+_PRICER: Optional[threading.Thread] = None
+
+
+def _price_timeout() -> float:
+    import os
+
+    raw = os.environ.get("MVV_PAGE_PRICE_TIMEOUT", "").strip()
+    try:
+        return float(raw) if raw else PAGE_PRICE_TIMEOUT_S
+    except ValueError:
+        return PAGE_PRICE_TIMEOUT_S
+
+
+def prices_ready(market, timeout_s: Optional[float] = None) -> bool:
+    """Price the universe off the request path, and say whether it finished.
+
+    `start_price_warmer` moved the 99-second cold fetch onto a timer, which
+    fixed the common case and left the windows where a reader still wears the
+    whole thing:
+
+      * the first pass after a process starts — every deploy and every
+        restart, and `railway.json` restarts on failure up to ten times, so a
+        crash-looping service is cold on every single load;
+      * any pass that raised, because the warmer then sleeps a minute before
+        trying again while requests go back to fetching inline;
+      * a warmer that never started at all, which `cmd_serve` deliberately
+        tolerates with a printed note.
+
+    In each of those `evaluate_all` is still a blocking 99 seconds inside the
+    request, and a browser gives up long before it. So the *wait* is bounded
+    here rather than the fetch: the pass runs in a thread, the request waits
+    `timeout_s` for it, and if it has not finished the caller says so instead
+    of holding the connection open. The thread is not cancelled — it keeps
+    going and fills the shared feed, so the reload a few seconds later takes
+    the warm path. Nothing is fetched that was not going to be fetched; what
+    changes is that nobody waits an unbounded time for it.
+
+    One pass at a time, because a page that hangs is a page people reload, and
+    forty browsers each starting their own pass would meet Alpaca's rate limit
+    and make the thing they are waiting for slower. A caller joining a pass
+    that another request started is the intended case: the feed is shared
+    process-wide (see `_shared_feed`) over one config-derived universe, so any
+    pass warms the cache the next render reads.
+
+    Never raises. A feed that refuses — no credentials, a 403 — fails
+    per-symbol inside `MarketData._series`, which records it in `unpriceable`
+    and returns no bars. That is fast, and the page is built to render it.
+    """
+    global _PRICER
+    if not market.symbols:
+        return True
+    timeout = _price_timeout() if timeout_s is None else timeout_s
+
+    def _pass() -> None:
+        try:
+            market.marks(market.symbols)
+        except Exception:  # noqa: BLE001 - a warming pass must not kill a request
+            import traceback
+
+            print(f"PRICES: page warm failed\n{traceback.format_exc()}", flush=True)
+
+    with _PRICER_LOCK:
+        pricer = _PRICER
+        if pricer is None or not pricer.is_alive():
+            pricer = threading.Thread(
+                target=_pass, name="village-page-pricer", daemon=True
+            )
+            _PRICER = pricer
+            pricer.start()
+
+    pricer.join(timeout)
+    return not pricer.is_alive()
+
+
+def _warming_panel(title: str = "The Village — Mission Control") -> str:
+    """What a reader gets while the first price pass is still running.
+
+    A page, quickly, that says what is happening and comes back on its own —
+    rather than a connection held open for ninety-nine seconds and then a
+    browser timeout, which is indistinguishable from a village that has died.
+    """
+    return (
+        f"<h1>{e(title)}</h1>"
+        "<div class=card><p><strong>Warming the prices.</strong></p>"
+        "<p class=muted>The universe has not been priced since this process "
+        "started, and pricing it cold takes about a minute and a half. It is "
+        "being fetched right now, in the background — this page reloads itself "
+        "in five seconds and needs nothing from you. If it keeps saying this, "
+        "the price feed is refusing rather than slow: check the service log "
+        "for <code>PRICES:</code> lines.</p></div>"
+        "<script>setTimeout(function(){location.reload();}, 5000);</script>"
+        "<p><a href='/'>&larr; approval gate</a></p>"
+    )
+
+
 def e(value) -> str:
     return html.escape(str(value))
 
@@ -224,6 +326,9 @@ def _render(eco: Ecosystem, said: str) -> str:
         )
 
     market = eco.market()
+    # Never render this page by waiting on a cold fetch. See `prices_ready`.
+    if not prices_ready(market):
+        return _warming_panel()
     cards = eco.brokerage.evaluator.evaluate_all(firms, market)
     by_id = {c.firm_id: c for c in cards}
     reconciliation = eco.brokerage.reconcile(market)
@@ -965,6 +1070,8 @@ def firm_detail(firm_key: str) -> HTMLResponse:
             return page("Unknown firm", f"<h1>No firm {e(firm_key)}</h1>"
                                         "<p><a href='/village'>&larr; back</a></p>")
         market = eco.market()
+        if not prices_ready(market):
+            return page("The Village — warming up", _warming_panel(firm.name))
         card = eco.brokerage.evaluator.evaluate(firm, market)
         purse = eco.store.cash_view(firm, market, eco.config.firm.cash_floor_pct)
 
