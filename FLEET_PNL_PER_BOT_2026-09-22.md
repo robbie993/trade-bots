@@ -98,3 +98,76 @@ banking, so it has form here.
    this possible, and the pattern the others should copy.
 5. Tag `client_order_id` per bot. One line each, and every future version of
    this question is answerable from the source nobody can flatter.
+
+
+---
+
+# CORRECTION — 2026-09-23, from the journal
+
+Two things above are wrong. Both were mine.
+
+## 1. The hypothesis was wrong
+
+I proposed that the wheel's +$3,436 was premium on **still-open** short options
+booked as realised. Checked against the broker: there are three open short calls
+and the premium collected on them totals **$325**. That explains a tenth of a
+$3,100 gap, not the gap. The hypothesis had the right shape and the wrong size,
+and it should not have been offered as the leading explanation without this
+check — which took one call.
+
+## 2. The framing was wrong, and that is the bigger error
+
+I compared **one bot's realised P/L** against **the whole account's realised
+P/L** and called the difference a discrepancy. The account holds every fleet
+bot plus five scheduled Claude agents. There is no reason those two numbers
+should match, and the "~$3,100 gap" was partly an artefact of comparing a part
+to a whole.
+
+## What the journal actually says
+
+Net option premium across the account's life, from `broker_journal.jsonl`,
+deduped by `order_id` — 29 sells against 22 buy-backs:
+
+| underlying | net premium |
+|---|---|
+| HOOD | +$1,321.00 |
+| AMD | +$1,315.00 |
+| INTC | +$1,005.00 |
+| PLTR | +$392.00 |
+| COIN | +$329.00 |
+| SOFI | +$270.00 |
+| TSLA | +$252.00 |
+| NVDA | +$172.00 |
+| F | +$9.00 |
+| **total** | **+$5,065.00** |
+
+**So the wheel's +$3,436 is plausible and is not fabricated.** It sits below
+$5,065 of verified net premium, which is what a realised figure should do —
+some of that premium belongs to positions still open, and $325 of it provably
+does. The number I told you not to quote is better supported than the reason I
+gave for doubting it.
+
+## What is still unexplained
+
+The account's realised is about **−$114**. The bots that report dollars sum to
+roughly **+$3,002** (wheel +$3,436, picks_trader −$357, btcc −$73, coinbase
+−$4). Something is losing approximately $3,100 that no bot log accounts for.
+
+Candidates, none yet checked:
+
+- the **five scheduled Claude agents**, which trade this account and keep no
+  P/L log at all (`CLAUDE_AGENTS_INVENTORY_2026-09-22.md`) — the TSLA wheel and
+  the politician copy trader both place orders;
+- **crypto_day_trader**, whose partial exits have silently failed for its whole
+  life;
+- **assigned shares** sold at a loss, which are realised equity losses rather
+  than option premium and would not appear in any wheel premium figure.
+
+That is the question worth answering next, and it is a different question from
+the one this document originally asked.
+
+## The lesson, since this is the second time today
+
+A number that disagrees with another number is not yet a finding. Both of my
+errors came from proposing a mechanism before measuring one — and both took a
+single query to settle once I stopped reasoning and looked.
