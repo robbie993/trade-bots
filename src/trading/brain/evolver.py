@@ -426,9 +426,14 @@ class Evolver:
             pass
 
     def _record_rank_test(self, firm, generation: int, candidates,
-                          purge_bars: int = 0) -> str:
-        """Ask whether this generation's ranking predicted anything, and count
-        the asking.
+                          purge_bars: int = 0) -> tuple:
+        """Ask whether this generation's ranking predicted anything, count the
+        asking, and return whether the answer survives the count.
+
+        Returns `(note, ranked)`. `ranked` is False when the sort carried no
+        out-of-sample information *after* correcting for how many times this
+        firm has been asked — which is the number that decides whether a
+        promotion is allowed to happen at all. See `evolve`.
 
         The evolver has always sorted candidates by in-sample fitness and
         adopted the top one. Whether that sort carries any out-of-sample
@@ -449,7 +454,9 @@ class Evolver:
         try:
             rho, p, n = _spearman_of(candidates)
             if n < 3:
-                return ""
+                # Too few pairs to rank anything. Not a failed look — an
+                # unasked question — so it neither counts nor gates.
+                return "", True
             ledger = PValueLedger()
             subject = f"evolver:{firm.firm_key}"
             ctx = ledger.context(subject, p)
@@ -486,9 +493,12 @@ class Evolver:
                 verdict="PASS" if (rho > 0 and ctx["survives_bonferroni_05"])
                         else "FAIL",
             )
-            return note
+            return note, bool(rho > 0 and ctx["survives_bonferroni_05"])
         except Exception:               # noqa: BLE001 - never fail a run
-            return ""
+            # A ledger that cannot be written must not silently become a gate
+            # that cannot be passed. Recording is best-effort; refusing on a
+            # failure to record would stop evolution for a disk error.
+            return "", True
 
     def purge_bars(self) -> int:
         """Bars discarded between the fitted window and the holdout.
@@ -621,12 +631,17 @@ class Evolver:
         # the whole cohort makes that a standing readout rather than an
         # archaeology project, so the next claim that evolution is working
         # can be checked against the generation that made it.
+        # Default True: with no holdout there is no rank test to fail, and the
+        # `enough_holdout` refusal below already stops the promotion. A gate
+        # that fired on a question never asked would be a different rule.
+        ranked = True
         enough_holdout = holdout_bars >= self.brain.min_holdout_bars
         if enough_holdout:
             for candidate in candidates:
                 candidate.holdout_fitness = score(
                     candidate.genome, start=holdout_start).fitness
-            self._record_rank_test(firm, generation, candidates, gap)
+            _rank_line, ranked = self._record_rank_test(
+                firm, generation, candidates, gap)
 
         # (the rank test above is recorded before anything is adopted, so the
         # ledger counts the look whether or not the generation liked itself)
@@ -669,6 +684,32 @@ class Evolver:
                 f"it won the fit ({incumbent.fitness} -> {best.fitness}) and lost "
                 f"the held-out bars ({incumbent.holdout_fitness} -> "
                 f"{best.holdout_fitness}) — fitted to the past, not to the market"
+            )
+        elif not ranked:
+            # **The look counter is a gate, not a narration.**
+            #
+            # The rank test asks whether sorting candidates by in-sample
+            # fitness predicts anything out of sample, and the ledger corrects
+            # its p-value for how many times this firm has already been asked.
+            # Until now the answer was written down and then ignored: a
+            # generation could be told "ranks nothing" or "nominally positive,
+            # fails the look count" and promote anyway, on the strength of the
+            # very ordering just declared uninformative.
+            #
+            # That is the specific failure the research dossier names as
+            # fatal — "make the look-counter a hard gate, not a log line" —
+            # and it is the reason it says every other phase is worthless
+            # first. A search that keeps its winners without paying for its
+            # looks manufactures one.
+            #
+            # The incumbent stands. Nothing is lost: the candidates are still
+            # written to `strategy_genomes` with their fitness and holdout
+            # fitness, so a later reader can see exactly what was refused and
+            # re-derive whether the refusal was right.
+            gen.refused = (
+                "the ranking did not survive its own look count — "
+                "promoting on it would be adopting an order this generation "
+                "just showed carries no out-of-sample information"
             )
 
         if not gen.refused:

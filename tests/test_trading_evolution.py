@@ -429,3 +429,74 @@ def test_the_page_and_the_terminal_flip_the_same_switch(db, tmp_path, firms_yaml
     capsys.readouterr()
 
     assert Settings(db).get("evolution", default=False) is True
+
+
+def test_a_ranking_that_fails_its_look_count_cannot_promote(
+    store, firm_record, market_data, monkeypatch
+):
+    """The look counter is a gate, not a narration.
+
+    A genome that wins the fit *and* the holdout is normally adopted — the test
+    above proves it. This is that same genome, refused, because the generation's
+    own ranking did not survive the number of times this firm has been asked.
+    Before this, it promoted anyway: on the strength of an ordering it had just
+    recorded as carrying no out-of-sample information.
+    """
+    from src.trading.brain.evolver import Evolver as _Ev
+
+    monkeypatch.setattr(
+        _Ev, "_record_rank_test",
+        lambda self, firm, generation, candidates, purge_bars=0: (
+            "rho=+0.010 p=0.900 | ranks nothing", False),
+    )
+
+    evolver = Evolver(store, _unpurged())
+    _rigged(evolver,
+            fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
+            holdout_scores={w: 100 for w in range(3, 31)} | {10: 1})
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.genome = dict(BASE_GENOME)
+
+    gen = evolver.evolve(firm, market_data, generation=1)
+    assert gen.promoted is False, "it won both exams and must still be refused"
+    assert "look count" in gen.refused
+
+
+def test_a_ranking_that_survives_its_look_count_still_promotes(
+    store, firm_record, market_data, monkeypatch
+):
+    """The gate must not be a blanket refusal — the same genome, allowed."""
+    from src.trading.brain.evolver import Evolver as _Ev
+
+    monkeypatch.setattr(
+        _Ev, "_record_rank_test",
+        lambda self, firm, generation, candidates, purge_bars=0: (
+            "rho=+0.400 p=0.001 | survives its own history", True),
+    )
+
+    evolver = Evolver(store, _unpurged())
+    _rigged(evolver,
+            fit_scores={w: 100 for w in range(3, 31)} | {10: 1},
+            holdout_scores={w: 100 for w in range(3, 31)} | {10: 1})
+    firm = store.require_firm_by_id(firm_record.id)
+    firm.genome = dict(BASE_GENOME)
+
+    gen = evolver.evolve(firm, market_data, generation=1)
+    assert gen.promoted is True, gen.refused
+
+
+def test_the_gate_reads_the_rank_result_not_just_the_fit():
+    """`_record_rank_test` must hand back a verdict the caller can act on."""
+    import inspect
+
+    from src.trading.brain.evolver import Evolver
+
+    src = inspect.getsource(Evolver.evolve)
+    assert "ranked" in src, "evolve must capture the rank verdict"
+    assert "elif not ranked" in src, "and refuse promotion on it"
+
+    rec = inspect.getsource(Evolver._record_rank_test)
+    assert "return note, bool(" in rec, "the recorder must return a verdict"
+    assert 'return "", True' in rec, (
+        "a ledger it cannot write must not become a gate it cannot pass"
+    )
