@@ -77,6 +77,19 @@ def test_the_fleet_sits_beside_the_village_once_its_account_is_read(client):
     assert "scanner" in body
 
 
+def test_what_the_village_found_outside_is_shown_and_linked(client):
+    from src.trading import intel
+
+    assert "Outside the village" not in client.get("/village").text
+    db = db_for(client)
+    intel.upsert(db, "pumpfun_top", "Mint1", title="Frog ($FROG)",
+                 url="https://pump.fun/coin/Mint1", score=12345)
+    db.close()
+    body = client.get("/village").text
+    assert "Outside the village" in body
+    assert "https://pump.fun/coin/Mint1" in body and "Frog ($FROG)" in body
+
+
 def test_the_gate_links_to_mission_control(client):
     assert "/village" in client.get("/").text
 

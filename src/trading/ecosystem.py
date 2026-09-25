@@ -141,6 +141,7 @@ class Ecosystem:
         self._scanners = None
         self._scribe = None
         self._news = None
+        self._meme_radar = None
         self._shadow = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
@@ -236,6 +237,22 @@ class Ecosystem:
             self._shadow = ShadowDesk(self.store, self.signals,
                                       genome=dict(BASE_GENOME))
         return self._shadow
+
+    @property
+    def meme_radar(self):
+        """DEX flow for the meme coins, or None unless TRADE_MEME_RADAR_ENABLED.
+
+        Opt-in for the news desk's reason: it reaches the open internet.
+        """
+        if self._meme_radar is None:
+            import os
+
+            if not os.environ.get("TRADE_MEME_RADAR_ENABLED", "").strip():
+                return None
+            from .meme_radar import MemeRadar
+
+            self._meme_radar = MemeRadar(self.signals, self.db)
+        return self._meme_radar
 
     @property
     def news(self):
@@ -614,6 +631,11 @@ class Ecosystem:
         # making outbound requests is not one anybody asked for.
         if self.news is not None:
             report.signals.extend(self.news.run(market))
+        if self.meme_radar is not None:
+            try:
+                report.signals.extend(self.meme_radar.run(market))
+            except Exception as exc:  # noqa: BLE001 - a source, never a precondition
+                report.bot_notes.append(f"meme radar failed: {str(exc)[:160]}")
         # The shadow options desk. It writes only to `shadow_trades` and can
         # never reach the ledger, so it runs after everything that can.
         if self.shadow is not None:

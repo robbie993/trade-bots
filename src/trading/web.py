@@ -382,6 +382,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _firms_panel(eco, firms, by_id),
         _real_money_panel(eco, firms, by_id, reconciliation.ok),
         _fleet_panel(eco, capital, equity),
+        _intel_panel(eco),
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
         _signals_panel(eco, market),
@@ -649,6 +650,34 @@ def _fleet_panel(eco, capital, equity) -> str:
         "An open gain is a price, not a result.</p>"
     )
     return _panel("The fleet, beside the village", body)
+
+
+def _intel_panel(eco) -> str:
+    """What the village found outside itself and cannot trade. See intel.py."""
+    from . import intel
+
+    names = intel.sources(eco.db)
+    if not names:
+        return ""
+    blocks = []
+    for source in names:
+        rows = []
+        for r in intel.recent(eco.db, source, limit=12):
+            title = e(str(r.get("title") or r["item_key"])[:90])
+            url = str(r.get("url") or "")
+            rows.append({
+                "seen": e(str(r.get("last_seen") or "")[5:16].replace("T", " ")),
+                "what": (f"<a href='{e(url)}' rel=noopener target=_blank>{title}</a>"
+                         if url.startswith("http") else title),
+                "score": "" if r.get("score") is None else f"{float(r['score']):,.0f}",
+            })
+        blocks.append(f"<h3>{e(source)}</h3>" + _table(rows))
+    return _panel(
+        "Outside the village",
+        "<p class=muted>Found, not traded: no firm can buy any of this, and none of "
+        "it reaches a debate. It is kept so it can be looked at, and one day "
+        "tested.</p>" + "".join(blocks),
+    )
 
 
 def _signals_panel(eco, market) -> str:
