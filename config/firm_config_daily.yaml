@@ -109,6 +109,10 @@ scanners:
     universe: [AAPL, ABBV, ABNB, ADBE, AFRM, AMAT, AMC, AMD, AMZN, ARM, ASML, AVGO, BA, BABA, BAC, CAT, CLSK, COIN, COST, CRM, CRWD, CVNA, CVX, DDOG, DELL, DIS, DKNG, F, GE, GM, GME, GOOGL, GS, HD, HOOD, INTC, JNJ, JPM, KO, LCID, LLY, LRCX, MA, MARA, MCD, META, MRNA, MSFT, MSTR, MU, NET, NFLX, NKE, NOW, NVDA, ON, ORCL, PANW, PEP, PFE, PLTR, PYPL, QCOM, RBLX, RIOT, RIVN, SBUX, SHOP, SMCI, SMR, SNOW, SOFI, SQ, TSLA, TSM, UBER, UNH, V, VST, WDC, WMT, XOM]
   fleet_book:
     bot: bots/fleet_book.py
+  # Explicit calls from the YouTube channels in config/video_channels.yaml,
+  # read by scripts/video_watch.py on the operator's PC.
+  video_calls:
+    bot: bots/video_calls.py
   fleet_form4:
     bot: bots/fleet_form4.py
     # form4 names are small caps that turn over daily and are mostly not in the

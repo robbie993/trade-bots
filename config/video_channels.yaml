@@ -1,0 +1,21 @@
+# YouTube channels the village watches (scripts/video_watch.py).
+#
+# Captions only for now: the operator's PC has no graphics card, so the watcher
+# reads what is said, not what is shown. One video is one voice: a call made
+# five times in one video counts once.
+#
+# `handle` is the part after youtube.com/@. Add channels here; a handle that
+# does not resolve is reported and skipped, never guessed at.
+channels:
+  - {handle: CNBCtelevision, group: markets}
+  - {handle: markets, group: markets}          # Bloomberg Television
+  - {handle: CoinBureau, group: crypto}
+  - {handle: Bankless, group: crypto}
+  - {handle: InvestAnswers, group: educators}
+  - {handle: MeetKevin, group: educators}
+
+# How many of each channel's newest uploads to look at per run.
+per_channel: 5
+
+# Calls older than this stop voting.
+max_age_hours: 24

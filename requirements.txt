@@ -46,3 +46,7 @@ httpx>=0.24.0            # FastAPI TestClient transport
 # adding a trading firm never requires a dependency. Market data, execution,
 # scoring, ethics and the kill switches are all standard library.
 PyYAML>=6.0
+
+# The YouTube watcher on the operator's PC (scripts/video_watch.py). Captions
+# only; nothing in the village or the worker imports it.
+yt-dlp>=2025.1

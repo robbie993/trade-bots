@@ -258,4 +258,8 @@ scanners:
     bot: bots/fleet_form4.py
   fleet_book:
     bot: bots/fleet_book.py
+  # Explicit calls from the YouTube channels in config/video_channels.yaml,
+  # read by scripts/video_watch.py on the operator's PC.
+  video_calls:
+    bot: bots/video_calls.py
     # universe: [SPY, QQQ, IWM]   # optional — defaults to the whole village
