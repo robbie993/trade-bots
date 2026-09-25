@@ -381,6 +381,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         header,
         _firms_panel(eco, firms, by_id),
         _real_money_panel(eco, firms, by_id, reconciliation.ok),
+        _fleet_panel(eco, capital, equity),
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
         _signals_panel(eco, market),
@@ -612,6 +613,42 @@ def _switches_panel(eco) -> str:
         "the gate, and nothing already approved is undone.</p>"
     )
     return _panel("Switches", body)
+
+
+def _fleet_panel(eco, capital, equity) -> str:
+    """The live fleet beside the village, each on its own capital.
+
+    Two returns side by side, not a race: they started on different days, with
+    different money, on different instruments, and one "who is winning" number
+    would hide all three. The fleet's figure is mostly unrealised — see
+    FLEET_PNL_2026-09-22.md — so it says so rather than letting it read as banked.
+    """
+    from . import fleet
+
+    c = fleet.comparison(eco.db, capital, equity)
+    if c is None:
+        return ""
+    heard = sorted(s for s in fleet.latest(eco.db) if s != fleet.ACCOUNT_SOURCE)
+    rows = [
+        {"": "the fleet (shared Alpaca paper account)",
+         "equity": f"${c['fleet_equity']:,.2f}",
+         "return": f"{c['fleet_return_pct']:+.2f}% on $100,000",
+         "today": f"{c['fleet_day_pct']:+.2f}%",
+         "note": f"{c['fleet_positions']} open position(s), "
+                 f"${c['fleet_unrealized']:,.2f} of it unrealised"},
+        {"": "the village (firms still standing)",
+         "equity": f"${c['village_equity']:,.2f}",
+         "return": f"{c['village_return_pct']:+.2f}% on ${c['village_capital']:,.2f}",
+         "today": "",
+         "note": "paper, inside the village's own ledger"},
+    ]
+    body = _table(rows) + (
+        f"<p class=muted>Account read {e(str(c['fetched_at'])[:16])}Z. "
+        "Bots whose decisions the village hears: "
+        f"{e(', '.join(heard)) or 'none yet — run scripts/fleet_sync.py --to-railway'}. "
+        "An open gain is a price, not a result.</p>"
+    )
+    return _panel("The fleet, beside the village", body)
 
 
 def _signals_panel(eco, market) -> str:

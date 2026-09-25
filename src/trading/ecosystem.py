@@ -145,6 +145,9 @@ class Ecosystem:
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
         self._reported_bar = ""
+        #: The bar the fleet's account was last read on. Once per bar, in
+        #: memory: a restart costs one extra read, which is nothing.
+        self._fleet_bar = ""
         #: The furthest bar this run has seen. `market.as_of()` is the max
         #: timestamp across symbols, and it is **not monotonic**: a partial bar
         #: is present in one fetch and absent from the next, so the maximum
@@ -346,6 +349,27 @@ class Ecosystem:
 
     # -- the layers, with the village watching -----------------------------
     #
+    def _hear_the_fleet(self, bar_now: str, report) -> None:
+        from . import fleet
+
+        fleet.materialize(self.db)
+        if not bar_now or bar_now == self._fleet_bar:
+            return
+        # Only a village already trusting Alpaca for prices reads the account.
+        # A synthetic or CSV village — every test, every backtest — must never
+        # reach a real brokerage because the operator's shell has keys in it.
+        if "alpaca" not in str(getattr(self.feed, "name", "")):
+            return
+        self._fleet_bar = bar_now
+        try:
+            note = fleet.snapshot_account(self.db)
+        except Exception as exc:  # noqa: BLE001 - the fleet is a source, not a precondition
+            report.bot_notes.append(f"fleet account unread: {str(exc)[:160]}")
+            return
+        if note:
+            self.flow.emit("market", "read the fleet's account", detail=note)
+            fleet.materialize(self.db)
+
     # Thin wrappers so a court ruling or a market sale shows up in the village
     # whether it was driven from the CLI or from the dashboard. Each one emits
     # and delegates; none of them changes what the underlying call does.
@@ -573,6 +597,11 @@ class Ecosystem:
         # score and nothing else — there is no path from src/trading/signals.py
         # to an order, so this is the one place in the tick where running a
         # stranger's file cannot even be refused, only ignored.
+        # The fleet first: its bots trade on Railway in another project, and
+        # what they said reaches this ledger through fleet_sync. Unpack it to
+        # where the fleet scanners read, and read the shared account once a
+        # bar. Neither can stop the tick; a quiet fleet is a silent scanner.
+        self._hear_the_fleet(bar_now, report)
         report.signals = self.scanners.run(market)
         # The scribe reads the village's own dead and publishes to the same
         # board. It needs the ledger, so it cannot be a sandboxed scanner file

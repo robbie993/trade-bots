@@ -145,8 +145,9 @@ def test_postgres_migrations_match_the_sqlite_ones():
     # 011-014 the court, competition, market and sandbox, 015 the flow,
     # 016 the council, 017 the switches on the wall, 018 published signals,
     # 019 which feed built a position, 020 which feed measured a firm,
-    # 021 on which market bars it measured it.
-    assert len(pg_files) == 25
+    # 021 on which market bars it measured it, 022-025 strikes, shadow
+    # trades and the genome holdout, 026 what the live fleet said.
+    assert len(pg_files) == 26
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())

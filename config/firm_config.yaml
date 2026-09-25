@@ -249,4 +249,13 @@ firms:
 scanners:
   example:
     bot: bots/example_scanner.py
+  # The live fleet, heard rather than re-implemented. fleet_sync (on a machine
+  # logged in to Railway) and the worker's once-a-bar account read put their
+  # output in the ledger; these read it. Each is silent when its data is stale.
+  fleet_scanner:
+    bot: bots/fleet_scanner.py
+  fleet_form4:
+    bot: bots/fleet_form4.py
+  fleet_book:
+    bot: bots/fleet_book.py
     # universe: [SPY, QQQ, IWM]   # optional — defaults to the whole village

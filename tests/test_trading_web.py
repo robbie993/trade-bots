@@ -61,6 +61,22 @@ def test_mission_control_renders_every_panel(client):
         assert panel in body
 
 
+def test_the_fleet_sits_beside_the_village_once_its_account_is_read(client):
+    from src.trading import fleet
+
+    assert "The fleet, beside the village" not in client.get("/village").text
+    db = db_for(client)
+    fleet.record(db, fleet.ACCOUNT_SOURCE, {
+        "account": "PA-TEST", "equity": "111082.76", "last_equity": "111296.69",
+        "cash": "1", "positions": [{"symbol": "NVDA", "unrealized_pl": "12.5"}]})
+    fleet.record(db, "scanner", {"day": "2026-09-25", "picks": []})
+    db.close()
+    body = client.get("/village").text
+    assert "The fleet, beside the village" in body
+    assert "+11.08% on $100,000" in body
+    assert "scanner" in body
+
+
 def test_the_gate_links_to_mission_control(client):
     assert "/village" in client.get("/").text
 

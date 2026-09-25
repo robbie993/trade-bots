@@ -42,9 +42,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 OUT_DIR = REPO / "data" / "fleet"
 
-PROJECT = "e7a232dc-f65e-421c-bd22-0106116ea09a"
+PROJECT = "e7a232dc-f65e-421c-bd22-0106116ea09a"          # where the fleet runs
+VILLAGE_PROJECT = "ai-village"                            # where its ledger is
 ENVIRONMENT = "production"
-RAILWAY = Path.home() / ".local" / "bin" / "railway"
+RAILWAY = Path.home() / ".local" / "bin" / ("railway.exe" if sys.platform == "win32" else "railway")
 
 #: What to pull, and from which service's volume. The service names are
 #: Railway-generated and say nothing about what runs there — see
@@ -68,6 +69,9 @@ def fetch(service: str, remote_path: str) -> str:
         [str(RAILWAY), "ssh", "-p", PROJECT, "-s", service, "-e", ENVIRONMENT,
          f"cat {remote_path}"],
         capture_output=True, text=True, timeout=TIMEOUT_S,
+        # No stdin: a first connection asks whether to trust the host, and a
+        # prompt nobody can answer is a sync that hangs until the timeout.
+        stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip()[:200] or "railway ssh failed")
@@ -79,6 +83,28 @@ def fetch(service: str, remote_path: str) -> str:
     if start < 0:
         raise RuntimeError(f"no JSON in the response ({out.strip()[:120]!r})")
     return out[start:]
+
+
+def railway_database_url() -> str:
+    """The shared village Postgres, asked of Railway rather than written down.
+
+    Built from the Postgres service's own variables and its public TCP proxy,
+    so no connection string (which is a password) ever sits in a file on this
+    machine. Needs the same `railway login` the ssh step already needs.
+    """
+    result = subprocess.run(
+        [str(RAILWAY), "variables", "-p", VILLAGE_PROJECT, "-s", "Postgres",
+         "-e", ENVIRONMENT, "--json"],
+        capture_output=True, text=True, timeout=TIMEOUT_S, stdin=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip()[:200] or "railway variables failed")
+    v = json.loads(result.stdout[result.stdout.find("{"):])
+    host, port = v.get("RAILWAY_TCP_PROXY_DOMAIN"), v.get("RAILWAY_TCP_PROXY_PORT")
+    if not host or not port:
+        raise RuntimeError("the village Postgres has no public TCP proxy")
+    return (f"postgresql://{v['PGUSER']}:{v['PGPASSWORD']}@{host}:{port}/"
+            f"{v['PGDATABASE']}")
 
 
 def sync_one(name: str) -> dict:
@@ -102,11 +128,24 @@ def sync_one(name: str) -> dict:
     return snapshot
 
 
+def to_ledger(db, snapshot: dict) -> None:
+    """Also put it where the Railway worker can read it. See src/trading/fleet.py."""
+    from src.trading import fleet
+
+    fleet.record(db, snapshot["source"], snapshot["payload"],
+                 fetched_at=snapshot["fetched_at"], service=snapshot["service"],
+                 remote_path=snapshot["remote_path"])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", action="append", choices=sorted(SOURCES),
                         help="just this one; repeatable. Default: all of them.")
     parser.add_argument("--list", action="store_true", help="show sources and exit")
+    parser.add_argument("--to-railway", action="store_true",
+                        help="also write each snapshot to the village's Railway Postgres")
+    parser.add_argument("--database-url", default="",
+                        help="also write to this database instead (overrides --to-railway)")
     args = parser.parse_args()
 
     if args.list:
@@ -114,11 +153,21 @@ def main() -> int:
             print(f"  {name:<14} {service:<24} {path}")
         return 0
 
+    db = None
+    if args.database_url or args.to_railway:
+        sys.path.insert(0, str(REPO))
+        from src.db.connection import Database
+
+        db = Database.from_url(args.database_url or railway_database_url())
+        db.init_schema()
+
     wanted = args.source or sorted(SOURCES)
     failures = 0
     for name in wanted:
         try:
             snap = sync_one(name)
+            if db is not None:
+                to_ledger(db, snap)
         except Exception as exc:  # noqa: BLE001 - one dead source is not a dead sync
             # Loud, and keeps going. A bridge that stops at the first failure
             # syncs nothing the day one bot is redeploying.
@@ -128,7 +177,8 @@ def main() -> int:
         payload = snap["payload"]
         day = payload.get("day") if isinstance(payload, dict) else None
         size = len(payload.get("picks", [])) if isinstance(payload, dict) else 0
-        print(f"  {name:<14} ok  day={day}  picks={size}  -> data/fleet/{name}.json")
+        where = " + ledger" if db is not None else ""
+        print(f"  {name:<14} ok  day={day}  picks={size}  -> data/fleet/{name}.json{where}")
 
     if failures:
         print(f"\n{failures} of {len(wanted)} source(s) failed.", file=sys.stderr)
