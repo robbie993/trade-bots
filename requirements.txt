@@ -50,3 +50,4 @@ PyYAML>=6.0
 # The YouTube watcher on the operator's PC (scripts/video_watch.py). Captions
 # only; nothing in the village or the worker imports it.
 yt-dlp>=2025.1
+curl_cffi>=0.7        # lets yt-dlp look like a browser to YouTube

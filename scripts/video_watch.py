@@ -39,7 +39,7 @@ import json
 import re
 import sys
 import time
-import urllib.request
+
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -102,15 +102,18 @@ def transcript(video_id: str) -> dict:
     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
                            "skip_download": True}) as y:
         info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-    tracks = (info.get("subtitles") or {}).get("en") or \
-        (info.get("automatic_captions") or {}).get("en") or []
-    url = next((t["url"] for t in tracks if t.get("ext") == "json3"), None)
-    text = ""
-    if url:
-        with urllib.request.urlopen(url, timeout=30) as r:  # noqa: S310 - YouTube's own caption URL
-            data = json.loads(r.read().decode("utf-8"))
-        text = " ".join(s.get("utf8", "") for e in data.get("events", [])
-                        for s in e.get("segs") or [])
+        tracks = (info.get("subtitles") or {}).get("en") or \
+            (info.get("automatic_captions") or {}).get("en") or []
+        url = next((t["url"] for t in tracks if t.get("ext") == "json3"), None)
+        text = ""
+        if url:
+            # Through yt-dlp's own session, not urllib: the same headers,
+            # cookies and (with curl_cffi) browser fingerprint as the page
+            # request. A bare urllib fetch of the caption URL is what drew
+            # YouTube's 429s on the first run.
+            data = json.loads(y.urlopen(url).read().decode("utf-8"))
+            text = " ".join(s.get("utf8", "") for e in data.get("events", [])
+                            for s in e.get("segs") or [])
     ts = info.get("timestamp")
     return {
         "id": video_id,
