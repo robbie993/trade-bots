@@ -1220,14 +1220,15 @@ def action_tick() -> RedirectResponse:
     """
     from .heartbeat import running_elsewhere
 
-    other = running_elsewhere()
+    eco = ecosystem()
+    other = running_elsewhere(db=eco.db)
     if other is not None:
+        eco.db.close()
         return _back(
             f"not ticked — the background loop (pid {other['pid']}) is running "
             f"this village and last ticked {other['age_s']}s ago. Two processes "
             "ticking one ledger is how the books stop adding up."
         )
-    eco = ecosystem()
     try:
         report = eco.tick()
         said = (
@@ -2072,9 +2073,10 @@ def flow_events(after: int = 0, limit: int = 60) -> JSONResponse:
     eco = ecosystem()
     try:
         events = [ev.to_dict() for ev in eco.flow.since(after, limit)]
+        loop = running_elsewhere(db=eco.db)
     finally:
         eco.db.close()
-    return JSONResponse({"events": events, "loop": running_elsewhere()})
+    return JSONResponse({"events": events, "loop": loop})
 
 
 __all__ = ["router"]

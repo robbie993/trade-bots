@@ -168,3 +168,16 @@ def test_the_tick_still_works_when_telemetry_cannot_write(ecosystem):
     report = ecosystem.tick(ecosystem.market().seek(150))
     assert report.oversight is not None
     assert report.errors == []
+
+
+def test_a_postgres_datetime_reaches_the_page_as_text():
+    """Postgres returns created_at as a datetime; the walk page 500'd on it."""
+    import json
+    from datetime import datetime, timezone
+
+    from src.trading.flow import FlowEvent
+
+    row = {"id": 1, "created_at": datetime(2026, 9, 25, 3, 0, tzinfo=timezone.utc)}
+    out = FlowEvent.from_row(row).to_dict()
+    assert out["at"] == "2026-09-25T03:00:00Z"
+    json.dumps(out)

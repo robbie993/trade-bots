@@ -65,7 +65,7 @@ def beat(path: Optional[Path] = None) -> None:
         pass
 
 
-def running_elsewhere(path: Optional[Path] = None) -> Optional[dict]:
+def running_elsewhere(path: Optional[Path] = None, db=None) -> Optional[dict]:
     """The other process ticking this village, or None.
 
     Returns `{"pid", "age_s"}` when something *else* is alive and has ticked
@@ -75,13 +75,45 @@ def running_elsewhere(path: Optional[Path] = None) -> Optional[dict]:
     * the heartbeat is fresh — an old one is a loop that has since stopped;
     * the pid is not us — our own heartbeat is not a conflict;
     * the pid still exists — `signal 0` asks the kernel rather than guessing.
+
+    **A file only sees its own machine.** On Railway the web console and the
+    worker are separate containers, so the worker's heartbeat file does not
+    exist where the console looks, and this answered "nobody" while a loop
+    ticked every sixty seconds next door — the exact 2026-09-01 double-writer,
+    one click away. Pass `db` and a missing file falls back to the ledger both
+    processes share: a flow event newer than the stale window means something
+    ticked this village, wherever it runs. That can also be a tick this console
+    ran itself a minute ago, which blocks a second click for a few minutes —
+    the cautious error, since the alternative is a second writer.
     """
-    # Read the module global at call time, not as a default bound at import:
-    # a default freezes the path before a test — or an operator's
-    # TRADE_HEARTBEAT — can redirect it, and a guard that cannot be pointed
-    # somewhere else is a guard that reads the developer's own running loop
-    # during their test suite.
-    path = path or HEARTBEAT
+    found = _from_file(path or HEARTBEAT)
+    if found is None and db is not None:
+        found = _from_ledger(db)
+    return found
+
+
+def _from_ledger(db) -> Optional[dict]:
+    from ..db.connection import to_datetime
+
+    try:
+        row = db.query_one("SELECT MAX(created_at) AS last FROM flow_events")
+    except Exception:  # noqa: BLE001 - an unmigrated ledger has no loop in it
+        return None
+    when = to_datetime((row or {}).get("last"))
+    if when is None:
+        return None
+    age = (datetime.now(timezone.utc) - when).total_seconds()
+    if age > STALE_AFTER_S:
+        return None
+    return {"pid": "another host", "age_s": round(max(age, 0.0), 1)}
+
+
+def _from_file(path: Path) -> Optional[dict]:
+    # The module global is read at call time (in `running_elsewhere`), not as
+    # a default bound at import: a default freezes the path before a test — or
+    # an operator's TRADE_HEARTBEAT — can redirect it, and a guard that cannot
+    # be pointed somewhere else is a guard that reads the developer's own
+    # running loop during their test suite.
     try:
         pid_text, stamp_text = path.read_text().split()[:2]
         pid = int(pid_text)

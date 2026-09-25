@@ -64,3 +64,37 @@ def test_beat_never_raises_even_when_it_cannot_write(tmp_path):
     """A village that cannot write its heartbeat still has to trade."""
     hb.beat(tmp_path / "nope" / "deeper" / "loop.beat")   # creates it
     hb.beat(tmp_path)                                     # a directory: unwritable
+
+
+class _Ledger:
+    """Just enough of a Database for the ledger fallback."""
+
+    def __init__(self, last):
+        self.last = last
+
+    def query_one(self, sql, params=()):
+        return {"last": self.last}
+
+
+def test_a_loop_in_another_container_is_seen_through_the_ledger(beat_file):
+    """Railway: the worker's heartbeat file is not on the web container's disk.
+
+    Postgres hands back a datetime, SQLite a string; both must be read.
+    """
+    now = datetime.now(timezone.utc)
+    for last in (now, now.strftime("%Y-%m-%dT%H:%M:%SZ")):
+        other = hb.running_elsewhere(beat_file, db=_Ledger(last))
+        assert other is not None and other["pid"] == "another host"
+
+
+def test_a_quiet_ledger_does_not_block_the_console(beat_file):
+    old = datetime.now(timezone.utc) - timedelta(seconds=hb.STALE_AFTER_S + 60)
+    assert hb.running_elsewhere(beat_file, db=_Ledger(old)) is None
+    assert hb.running_elsewhere(beat_file, db=_Ledger(None)) is None
+
+
+def test_a_ledger_that_cannot_answer_never_raises(beat_file):
+    class Broken:
+        def query_one(self, *a):
+            raise RuntimeError("no such table")
+    assert hb.running_elsewhere(beat_file, db=Broken()) is None

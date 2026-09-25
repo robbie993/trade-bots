@@ -28,7 +28,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-from ..db.connection import Database, utcnow_iso
+from ..db.connection import Database, to_iso, utcnow_iso
 
 # The village map. Each entry is a building: id, label, x, y, kind of
 # building, and what actually goes on inside it.
@@ -134,7 +134,9 @@ class FlowEvent:
             label=row.get("label") or "",
             firm=row.get("firm") or "",
             detail=row.get("detail") or "",
-            created_at=row.get("created_at") or "",
+            # Postgres hands back a datetime and SQLite a string; the page gets
+            # JSON either way, and a raw datetime is what 500'd the hosted walk.
+            created_at=to_iso(row.get("created_at")) or "",
         )
 
     def to_dict(self) -> dict:
