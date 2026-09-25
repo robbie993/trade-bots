@@ -114,3 +114,5 @@ data/research/
 # The AI queue is live state, not source. Questions and answers are evidence
 # and get written up when they matter; the spool itself is transient.
 data/ai_queue/
+
+.alpaca_credentials

@@ -176,6 +176,35 @@ on every deploy. The ledger, the fills, the approvals and the lessons are all
 in Postgres and survive; the vault is a rendering of them and does not. If you
 want it, run `trade audit --write` locally against the same database.
 
+### Bringing an existing village's history across
+
+`trade init` starts a village from nothing. If one has been running on a
+laptop, its history is in that machine's `data/mvv.db`, and it moves to
+Postgres exactly once:
+
+```bash
+# on the machine that holds the SQLite file, with its loop STOPPED
+export DATABASE_URL='<Railway Postgres public URL>'     # Postgres → Connect → Public Network
+python scripts/sqlite_to_postgres.py --sqlite data/mvv.db --postgres "$DATABASE_URL" --skip bouts --dry-run
+python scripts/sqlite_to_postgres.py --sqlite data/mvv.db --postgres "$DATABASE_URL" --skip bouts
+python -m src.main trade reconcile                       # against Postgres now
+```
+
+Do this **before** the worker's first deploy, or pause it: the worker runs
+`trade init` on start and the copy refuses a target that already has rows
+(`--replace` empties it, and means it). Checks every value before writing
+anything, copies in one transaction, and compares row counts table by table.
+`--skip bouts` leaves the arena's history behind — on the Mac it was 1.4M rows
+of no-contests between dead firms, and nothing reads old bouts.
+
+After it, **stop the laptop's loop for good** or point it at the same
+`DATABASE_URL`. Two loops writing one ledger trade every firm twice; two loops
+writing two ledgers is two villages that each believe they are the real one.
+
+Do not share `data/mvv.db` itself through Dropbox, OneDrive, iCloud or a network
+drive instead. A live SQLite database in WAL mode is three files that must
+change together, and a sync tool will not keep them together.
+
 ---
 
 ## Setting up the hosted database
