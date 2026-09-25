@@ -32,6 +32,7 @@ from src.notifications import NullNotifier
 AMBIENT_SWITCHES = (
     "TRADE_NEWS_ENABLED",
     "TRADE_MEME_RADAR_ENABLED",
+    "TRADE_REPO_SCOUT_ENABLED",
     "TRADE_SHADOW_ENABLED",
     "TRADE_BAR",
     "TRADE_BARS_PER_DAY",

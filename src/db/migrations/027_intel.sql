@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS intel (
     title TEXT DEFAULT '',
     url TEXT DEFAULT '',
     symbols TEXT DEFAULT '',
-    score DECIMAL(12,4),
+    score NUMERIC,
     detail TEXT DEFAULT '{}',
     first_seen TEXT DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
     last_seen TEXT DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
@@ -27,3 +27,10 @@ CREATE TABLE IF NOT EXISTS intel (
 );
 
 CREATE INDEX IF NOT EXISTS intel_source_seen ON intel (source, last_seen);
+
+-- The first deploy declared `score DECIMAL(12,4)`, whose ceiling is
+-- 99,999,999.9999, and Pump.fun's largest launches are worth more than that:
+-- every one of them failed to insert. `score` holds star counts and market
+-- caps, not money the village owns, so it has no business being bounded.
+-- Idempotent: altering a column to the type it already has changes nothing.
+ALTER TABLE intel ALTER COLUMN score TYPE NUMERIC;

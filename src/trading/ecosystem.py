@@ -142,6 +142,7 @@ class Ecosystem:
         self._scribe = None
         self._news = None
         self._meme_radar = None
+        self._repo_scout = None
         self._shadow = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
@@ -253,6 +254,19 @@ class Ecosystem:
 
             self._meme_radar = MemeRadar(self.signals, self.db)
         return self._meme_radar
+
+    @property
+    def repo_scout(self):
+        """GitHub and Hugging Face, hourly, or None unless TRADE_REPO_SCOUT_ENABLED."""
+        if self._repo_scout is None:
+            import os
+
+            if not os.environ.get("TRADE_REPO_SCOUT_ENABLED", "").strip():
+                return None
+            from .repo_scout import RepoScout
+
+            self._repo_scout = RepoScout(self.db)
+        return self._repo_scout
 
     @property
     def news(self):
@@ -636,6 +650,11 @@ class Ecosystem:
                 report.signals.extend(self.meme_radar.run(market))
             except Exception as exc:  # noqa: BLE001 - a source, never a precondition
                 report.bot_notes.append(f"meme radar failed: {str(exc)[:160]}")
+        if self.repo_scout is not None:
+            try:
+                report.signals.extend(self.repo_scout.run())
+            except Exception as exc:  # noqa: BLE001 - research, never a precondition
+                report.bot_notes.append(f"repo scout failed: {str(exc)[:160]}")
         # The shadow options desk. It writes only to `shadow_trades` and can
         # never reach the ledger, so it runs after everything that can.
         if self.shadow is not None:

@@ -671,7 +671,10 @@ def _intel_panel(eco) -> str:
                          if url.startswith("http") else title),
                 "score": "" if r.get("score") is None else f"{float(r['score']):,.0f}",
             })
-        blocks.append(f"<h3>{e(source)}</h3>" + _table(rows))
+        warn = ("<p class=warn>Code found here is never downloaded or run. Trending "
+                "trading-bot repositories are a known malware lure.</p>"
+                if source == "github" else "")
+        blocks.append(f"<h3>{e(source)}</h3>{warn}" + _table(rows))
     return _panel(
         "Outside the village",
         "<p class=muted>Found, not traded: no firm can buy any of this, and none of "
