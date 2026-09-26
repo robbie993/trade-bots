@@ -413,6 +413,14 @@ class Ecosystem:
             for note in ask.consider(self, {c.firm_id: c for c in cards}):
                 report.village.append(note)
                 self.flow.emit("brain", "a firm asked an outside mind", detail=note)
+            # The mind tests one proposal a bar: a backtest pair is slow, and
+            # proposals are rare. See proposals.py.
+            from . import proposals
+
+            tested = proposals.test_one(self, market)
+            if tested:
+                report.village.append(tested)
+                self.flow.emit("brain", "the mind tested a proposal", detail=tested)
         except Exception as exc:  # noqa: BLE001 - asking is never a precondition
             report.bot_notes.append(f"asking failed: {str(exc)[:160]}")
 
@@ -1441,6 +1449,17 @@ class Ecosystem:
                     f"{fmt_money(done['capital'])}. It comes back to paper "
                     "automatically the moment anything is wrong with it.",
                 )
+            elif (approval.action == ApprovalAction.ADOPT_GENOME.value
+                    and details.get("proposal_id")):
+                from . import proposals
+
+                try:
+                    done = proposals.adopt(self, details, approval.approved_by or "human")
+                except ValueError as exc:
+                    done = f"proposal #{details['proposal_id']} not adopted: {exc}"
+                applied.append(done)
+                self._remember_decision(done, approval.reason or "",
+                                        firm_key=details.get("firm", ""), payload=details)
             elif approval.action == ApprovalAction.RESUME_FIRM.value and details.get("firm"):
                 # A resume that can never succeed must be consumed, not retried.
                 #

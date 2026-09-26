@@ -53,13 +53,14 @@ PANELS = {
     "recruit": jurors.RECRUIT,
     "kill_firm": jurors.KILL,
     "resume_firm": jurors.RESUME,
+    "adopt_genome": jurors.ADOPT,
 }
 
 
 # The approval actions the council hears. Kept beside PANELS rather than
 # derived from it because PANELS is keyed partly by `kind` (a capital transfer
 # is an allocate_capital row), and a set of *actions* is what the gate wants.
-COUNCIL_ACTIONS = ("allocate_capital", "kill_firm", "resume_firm")
+COUNCIL_ACTIONS = ("allocate_capital", "kill_firm", "resume_firm", "adopt_genome")
 
 
 @dataclass

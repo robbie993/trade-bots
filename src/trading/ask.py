@@ -127,6 +127,17 @@ def answer(db, question_id: int, answered_by: str, text: str, model: str = "") -
             "reward": 0,
             "created_at": utcnow_iso(),
         })
+    # **The firm talks back.** Advice becomes a question for a concrete gene
+    # change; a proposal becomes a row the village will test. See proposals.py.
+    from . import proposals
+
+    try:
+        if q["topic"] == "proposal":
+            proposals.record(db, q, answered_by, text)
+        else:
+            proposals.follow_up(db, q, answered_by, text)
+    except Exception:  # noqa: BLE001 - the answer is kept even if the follow-up is not
+        pass
     return True
 
 

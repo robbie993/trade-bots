@@ -748,6 +748,41 @@ class Evolver:
             gen.promoted = True
         return gen
 
+    def trial(self, firm: FirmRecord, market: MarketData, genome: dict,
+              analysts: Sequence[str] = ("technical", "sentiment", "macro")) -> dict:
+        """One proposed genome against the incumbent, on evolution's own exam.
+
+        The same split `evolve` uses: both are scored on the early bars and on
+        the held-out tail, with a fresh cursor per run so they see identical
+        bars. Nothing is written or adopted here; the numbers are returned so
+        the caller can record them where the council will read them.
+        """
+        symbols = firm.universe or market.symbols
+        capital = firm.initial_allocation or self.config.firm.allocation
+        fitted_bars, holdout_start, holdout_bars = self._split(market, symbols)
+
+        def score(g, start=None, steps=None):
+            data = MarketData(market.feed, symbols)
+            return self.backtester.run(
+                firm_key=firm.firm_key, symbols=symbols, market=data, genome=g,
+                analysts=analysts, capital=capital, risk_limit=firm.risk_limit,
+                start=start, steps=steps,
+            ).fitness
+
+        incumbent = self.normalise(firm.genome or BASE_GENOME)
+        proposed = self.normalise(genome)
+        out = {
+            "fitted_bars": fitted_bars, "holdout_bars": holdout_bars,
+            "enough_holdout": holdout_bars >= self.brain.min_holdout_bars,
+            "fitted_before": score(incumbent, steps=fitted_bars or None),
+            "fitted_after": score(proposed, steps=fitted_bars or None),
+            "holdout_before": None, "holdout_after": None,
+        }
+        if out["enough_holdout"]:
+            out["holdout_before"] = score(incumbent, start=holdout_start)
+            out["holdout_after"] = score(proposed, start=holdout_start)
+        return out
+
     def history(self, firm_id: int, limit: int = 20) -> list:
         return self.store.db.query(
             "SELECT * FROM strategy_genomes WHERE firm_id = ? ORDER BY id DESC LIMIT ?",

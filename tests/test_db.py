@@ -147,8 +147,9 @@ def test_postgres_migrations_match_the_sqlite_ones():
     # 019 which feed built a position, 020 which feed measured a firm,
     # 021 on which market bars it measured it, 022-025 strikes, shadow
     # trades and the genome holdout, 026 what the live fleet said, 027 what
-    # the village found outside itself, 028 what the firms asked other minds.
-    assert len(pg_files) == 28
+    # the village found outside itself, 028 what the firms asked other minds,
+    # 029 the genome changes those minds proposed and how they tested.
+    assert len(pg_files) == 29
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())

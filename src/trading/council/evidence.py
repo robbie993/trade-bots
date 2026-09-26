@@ -97,6 +97,23 @@ def gather(eco, approval, market=None) -> CouncilEvidence:
         pause_reason=details.get("reason", "") or "",
     )
 
+    # A proposed genome is judged on the numbers the worker recorded when it
+    # tested it — the ledger row, not whatever the request says about itself.
+    if approval.action == "adopt_genome" and details.get("proposal_id"):
+        import json as _json
+
+        row = eco.db.query_one("SELECT * FROM ai_proposals WHERE id = ?",
+                               (details["proposal_id"],))
+        if row:
+            evidence.notes["proposal"] = {
+                "changes": _json.loads(row.get("changes") or "{}"),
+                "fitted_before": row.get("fitted_before"), "fitted_after": row.get("fitted_after"),
+                "holdout_before": row.get("holdout_before"),
+                "holdout_after": row.get("holdout_after"),
+                "holdout_bars": row.get("holdout_bars"),
+                "proposed_by": row.get("proposed_by"), "why": row.get("why"),
+            }
+
     market = market if market is not None else eco.market()
     reconciliation = eco.brokerage.reconcile(market)
     evidence.books_reconcile = reconciliation.ok

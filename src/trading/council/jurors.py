@@ -361,6 +361,65 @@ def stake_is_modest(evidence) -> Finding:
 
 
 # The panel, per action. Order is the order they are read in.
+# -- adopting a genome an outside mind proposed --------------------------------
+# The numbers come from the `ai_proposals` row the worker wrote after testing,
+# read by `evidence.gather` — never from the request text.
+def _proposal(evidence) -> dict:
+    return (evidence.notes or {}).get("proposal") or {}
+
+
+def proposal_on_file(evidence) -> Finding:
+    if not _proposal(evidence):
+        return _against("proposal_on_file", 100, "no tested proposal on the ledger", veto=True)
+    return _abstain("proposal_on_file", "the tested proposal is on the ledger")
+
+
+def held_out_win(evidence) -> Finding:
+    """The one fact that earns an adoption: it beat the incumbent on bars nobody chose it on."""
+    p = _proposal(evidence)
+    before, after = p.get("holdout_before"), p.get("holdout_after")
+    if before is None or after is None:
+        return _against("held_out_win", 100, "it was never scored on held-out bars", veto=True)
+    if D(str(after)) <= D(str(before)):
+        return _against("held_out_win", 100,
+                        f"it did not win the held-out bars ({before} -> {after})", veto=True)
+    return _for("held_out_win", HEAVY, f"it won the held-out bars ({before} -> {after})")
+
+
+def held_out_sample(evidence) -> Finding:
+    bars = int(_proposal(evidence).get("holdout_bars") or 0)
+    if bars <= 0:
+        return _against("held_out_sample", 100, "there were no held-out bars", veto=True)
+    return _abstain("held_out_sample", f"{bars} held-out bar(s)")
+
+
+def fit_agrees(evidence) -> Finding:
+    p = _proposal(evidence)
+    before, after = p.get("fitted_before"), p.get("fitted_after")
+    if before is None or after is None:
+        return _abstain("fit_agrees", "no in-sample score to compare")
+    if D(str(after)) >= D(str(before)):
+        return _for("fit_agrees", MEDIUM, f"it also won the fitted bars ({before} -> {after})")
+    return _against("fit_agrees", LIGHT,
+                    f"it lost the fitted bars ({before} -> {after}): the held-out win may be luck")
+
+
+def change_is_small(evidence) -> Finding:
+    n = len(_proposal(evidence).get("changes") or {})
+    if n <= 2:
+        return _for("change_is_small", LIGHT, f"{n} gene(s) changed")
+    return _against("change_is_small", LIGHT, f"{n} genes changed at once")
+
+
+def firm_alive(evidence) -> Finding:
+    if evidence.status not in ("active", "paused"):
+        return _against("firm_alive", 100, f"the firm is {evidence.status or 'gone'}", veto=True)
+    return _abstain("firm_alive", "the firm is alive")
+
+
+ADOPT = (books, firm_exists, firm_alive, proposal_on_file, held_out_sample, held_out_win,
+         fit_agrees, change_is_small)
+
 RAISE = (books, firm_exists, sample_gate, headroom, ceiling, compounding,
          score, performance, drawdown, win_rate)
 KILL = (books, firm_exists, sample_gate_for_kill, kill_condition, sustained,
@@ -372,4 +431,4 @@ RECRUIT = (books, firm_exists, court_accepted, has_a_universe, stake_is_modest,
            trial_fitness, trial_confidence)
 
 
-__all__ = ["KILL", "RAISE", "RECRUIT", "RESUME", "TRANSFER"]
+__all__ = ["ADOPT", "KILL", "RAISE", "RECRUIT", "RESUME", "TRANSFER"]

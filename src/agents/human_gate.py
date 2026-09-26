@@ -49,6 +49,9 @@ class ApprovalAction(str, Enum):
     # it. See src/trading/council.
     RESUME_FIRM = "resume_firm"
     LIVE_TRADING = "live_trading"
+    # Adopting a genome an outside mind proposed and the village's backtest
+    # confirmed on held-out bars. See src/trading/proposals.py.
+    ADOPT_GENOME = "adopt_genome"
 
 
 class ApprovalStatus(str, Enum):

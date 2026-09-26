@@ -714,11 +714,26 @@ def _questions_panel(eco) -> str:
             f"</strong> [{e(q['topic'])}] {e(q['question'][:140])} "
             f"<span class=muted>{e(str(q['asked_at'])[:16])}</span></summary>{answers}</details>"
         )
+    from . import proposals
+
+    props = proposals.recent(eco.db, limit=12)
+    prop_rows = [{
+        "firm": e(p["firm_key"]),
+        "from": e(p.get("proposed_by") or ""),
+        "change": e(p.get("changes") or ""),
+        "status": e(p.get("status") or ""),
+        "result": e(p.get("verdict") or "waiting for the mind to test it"),
+    } for p in props]
+    prop_html = ("<h3>Proposals: advice turned into gene changes</h3>"
+                 "<p class=muted>The firm asks its adviser for concrete gene changes; "
+                 "the mind backtests each against the current genome on held-out "
+                 "history; only a held-out winner goes to the council.</p>"
+                 + _table(prop_rows)) if prop_rows else ""
     return _panel(
         "Questions the firms asked",
         "<p class=muted>Answers are advice, delivered to the firm's memory. They change "
         "no setting and move no money; the council still rules on those.</p>"
-        + "".join(items),
+        + "".join(items) + prop_html,
     )
 
 

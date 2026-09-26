@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS ai_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firm_key TEXT NOT NULL,
+    question_id INTEGER,
+    proposed_by TEXT DEFAULT '',
+    why TEXT DEFAULT '',
+    changes TEXT NOT NULL,
+    genome_before TEXT DEFAULT '{}',
+    genome_proposed TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'awaiting_test',
+    fitted_before NUMERIC,
+    fitted_after NUMERIC,
+    holdout_before NUMERIC,
+    holdout_after NUMERIC,
+    holdout_bars INTEGER,
+    verdict TEXT DEFAULT '',
+    approval_id INTEGER,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    tested_at TEXT
+);
