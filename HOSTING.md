@@ -436,6 +436,13 @@ reaches the open internet on its own. All five are on for the Railway worker:
 | `TRADE_REPO_SCOUT_ENABLED` | hourly GitHub and Hugging Face finds, recorded and never run (`repo_scout.py`) |
 | `TRADE_ASK_ENABLED` | firms file questions for outside minds (`ask.py`); answered from the operator's PC |
 
+`TRADE_HISTORY_DAYS=720` is required on a 15-minute bar. It is a bar count on
+intraday bars, and evolution's split needs a 90-bar warmup and a 150-bar purge
+gap before any held-out window: at the default 180 nothing can be split, so no
+genome is ever promoted and no proposal can be judged. 720 gives 264 fitted and
+216 held-out bars, which is what the Mac village ran on. It was lost in the move
+to Railway until a proposal trial came back with zero held-out bars.
+
 The worker also reads the fleet's shared Alpaca account once a bar whenever it
 runs on the Alpaca feed, and needs `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`
 for that and for prices.
