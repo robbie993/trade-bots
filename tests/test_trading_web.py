@@ -90,6 +90,19 @@ def test_what_the_village_found_outside_is_shown_and_linked(client):
     assert "https://pump.fun/coin/Mint1" in body and "Frog ($FROG)" in body
 
 
+def test_the_firms_questions_and_answers_are_shown(client):
+    from src.trading import ask
+
+    assert "Questions the firms asked" not in client.get("/village").text
+    db = db_for(client)
+    qid = ask.ask(db, "firm_a_etf", "review", "What is your read?", {}, "review:x")
+    ask.answer(db, qid, "claude", "Your exits cost more than your entries earn.", model="m1")
+    db.close()
+    body = client.get("/village").text
+    assert "Questions the firms asked" in body
+    assert "Your exits cost more than your entries earn." in body and "m1" in body
+
+
 def test_the_gate_links_to_mission_control(client):
     assert "/village" in client.get("/").text
 

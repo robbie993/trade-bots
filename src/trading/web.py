@@ -383,6 +383,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _real_money_panel(eco, firms, by_id, reconciliation.ok),
         _fleet_panel(eco, capital, equity),
         _intel_panel(eco),
+        _questions_panel(eco),
         _brokerage_panel(eco, firms),
         _switches_panel(eco),
         _signals_panel(eco, market),
@@ -650,6 +651,34 @@ def _fleet_panel(eco, capital, equity) -> str:
         "An open gain is a price, not a result.</p>"
     )
     return _panel("The fleet, beside the village", body)
+
+
+def _questions_panel(eco) -> str:
+    """What the firms asked outside minds, and what they were told. See ask.py."""
+    from . import ask
+
+    qs = ask.recent(eco.db, limit=12)
+    if not qs:
+        return ""
+    items = []
+    for q in qs:
+        answers = "".join(
+            f"<blockquote><strong>{e(a['answered_by'])}</strong>"
+            f"{(' · ' + e(a['model'])) if a.get('model') else ''}"
+            f"<br>{e(a['answer'][:1500])}</blockquote>"
+            for a in q["answers"]
+        ) or "<p class=muted>waiting for an answer</p>"
+        items.append(
+            f"<details{' open' if q['answers'] else ''}><summary><strong>{e(q['firm_key'])}"
+            f"</strong> [{e(q['topic'])}] {e(q['question'][:140])} "
+            f"<span class=muted>{e(str(q['asked_at'])[:16])}</span></summary>{answers}</details>"
+        )
+    return _panel(
+        "Questions the firms asked",
+        "<p class=muted>Answers are advice, delivered to the firm's memory. They change "
+        "no setting and move no money; the council still rules on those.</p>"
+        + "".join(items),
+    )
 
 
 def _intel_panel(eco) -> str:
