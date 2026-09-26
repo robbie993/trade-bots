@@ -43,7 +43,7 @@ ANSWERED_BY = "claude (Claude Code on the operator's PC)"
 #: installed binary is used by path when it is where the installer put it.
 _LOCAL = Path.home() / ".local" / "bin" / ("claude.exe" if sys.platform == "win32" else "claude")
 CLAUDE = str(_LOCAL) if _LOCAL.exists() else "claude"
-PER_RUN = 6
+PER_RUN = 12
 TIMEOUT_S = 300
 
 

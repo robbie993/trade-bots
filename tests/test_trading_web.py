@@ -103,6 +103,19 @@ def test_the_firms_questions_and_answers_are_shown(client):
     assert "Your exits cost more than your entries earn." in body and "m1" in body
 
 
+def test_the_dead_are_folded_away_and_the_broke_are_flagged(client):
+    db = db_for(client)
+    keys = [r["firm_key"] for r in db.query("SELECT firm_key FROM firms ORDER BY id")]
+    db.execute("UPDATE firms SET status = 'bankrupt', cash = 0 WHERE firm_key = ?", (keys[0],))
+    db.execute("UPDATE firms SET cash = 0, allocation = 293 WHERE firm_key = ?", (keys[1],))
+    db.close()
+    body = client.get("/village").text
+    assert "The graveyard: 1 firm(s)" in body
+    assert "Marked active, but broke" in body
+    graveyard = body[body.index("The graveyard"):]
+    assert keys[0] in graveyard
+
+
 def test_the_gate_links_to_mission_control(client):
     assert "/village" in client.get("/").text
 

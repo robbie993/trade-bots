@@ -445,8 +445,48 @@ def _firms_panel(eco, firms, by_id) -> str:
                       else f"<span class=muted>({card.score})</span>" if card else "-"),
             "trades": card.closed_trades if card else 0,
             "cash": fmt_money(purse.withdrawable),
+            "_group": _firm_group(firm, card),
         })
-    return _panel("Firms", _table(rows))
+    return _panel("Firms", _grouped(rows))
+
+
+#: Below this, a firm marked active has nothing to trade with. Two wound-up
+#: estates were brought back to "active" by the council with a few hundred
+#: dollars of allocation on paper and no cash, and sat in the list looking
+#: like working desks.
+BROKE_BELOW = 1
+
+
+def _firm_group(firm, card) -> str:
+    if firm.is_killed or firm.status == "bankrupt":
+        return "dead"
+    equity = float(card.equity) if card else float(firm.cash or 0)
+    return "broke" if equity < BROKE_BELOW else "working"
+
+
+def _grouped(rows: list) -> str:
+    """Working firms in the open, broke ones flagged, the dead folded away.
+
+    Thirty-eight of fifty-one firms were wound up, and listing them all at $0
+    beside the thirteen still standing buried the village under its graveyard.
+    Nothing is hidden: the dead are one click away, counted in the summary.
+    """
+    def strip(rs):
+        return [{k: v for k, v in r.items() if k != "_group"} for r in rs]
+
+    working = [r for r in rows if r["_group"] == "working"]
+    broke = [r for r in rows if r["_group"] == "broke"]
+    dead = [r for r in rows if r["_group"] == "dead"]
+    out = _table(strip(working)) if working else "<p class=muted>No firm has money to trade.</p>"
+    if broke:
+        out += (f"<h3>Marked active, but broke ({len(broke)})</h3>"
+                "<p class=muted>No cash to trade with. Usually a wound-up estate brought "
+                "back to active; it will keep proposing and being refused until it is "
+                "wound up or funded.</p>" + _table(strip(broke)))
+    if dead:
+        out += (f"<details><summary>The graveyard: {len(dead)} firm(s) wound up or killed"
+                "</summary>" + _table(strip(dead)) + "</details>")
+    return out
 
 
 def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
@@ -501,6 +541,7 @@ def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
             "trading": where,
             "standing": standing,
             "": button,
+            "_group": "working" if on_live else _firm_group(firm, by_id.get(firm.id)),
         })
 
     panic = ""
@@ -528,7 +569,7 @@ def _real_money_panel(eco, firms, by_id, reconciled: bool) -> str:
     )
     title = (f"Real money — {len(live)} firm(s) LIVE" if live
              else "Real money — nothing is live")
-    return _panel(title, _table(rows) + note, panic)
+    return _panel(title, _grouped(rows) + note, panic)
 
 
 def _brokerage_panel(eco, firms) -> str:
