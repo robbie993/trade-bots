@@ -44,6 +44,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+# Task Scheduler hands this process a cp1252 console, and model answers are full
+# of characters it cannot encode ("−", em dashes): the first run died on
+# the third answer's print. Replace what cannot be shown rather than crash.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 sys.path.insert(0, str(REPO))
 
 import yaml  # noqa: E402
