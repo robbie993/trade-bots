@@ -205,3 +205,16 @@ def test_wind_up_is_idempotent(ecosystem):
 
     heirs = [f for f in eco.store.firms() if f.firm_key.startswith(firm.firm_key + "_")]
     assert len(heirs) == 1, "a second pass must not breed a second heir"
+
+
+def test_advice_the_dead_firm_was_given_passes_to_its_heir(ecosystem):
+    from src.trading import ask
+
+    eco = ecosystem
+    firm = _kill_with_a_book(eco)
+    qid = ask.ask(eco.db, firm.firm_key, "review", "read?", {}, "r:dead")
+    ask.answer(eco.db, qid, "claude", "Your fees ate your edge.")
+    closed = bankruptcy.wind_up(eco, firm)
+    heir = eco.store.get_firm(closed["successor"])
+    got = ask.advice_for(eco.db, heir.id)
+    assert any("inherited from" in a and "Your fees ate your edge." in a for a in got)

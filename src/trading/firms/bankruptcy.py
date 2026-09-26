@@ -48,6 +48,7 @@ import json
 from typing import Optional, Sequence
 
 from ...money import D, ZERO, fmt_money, money
+from ...db.connection import utcnow_iso
 from ..models import FirmRecord, FirmStatus
 
 
@@ -188,6 +189,24 @@ def wind_up(eco, firm: FirmRecord, card=None) -> Optional[dict]:
         # own genome. Inheritance has to survive more than one generation.
         seats = [str(s) for s in (firm.genome or {}).get("analysts", []) or []]
     heir = file_successor(eco.store, firm, pm, lesson, seats)
+
+    # **What outside minds told the dead firm goes to its heir.** Advice a firm
+    # asked for (see ask.py) lives in its own memory; without this it would be
+    # buried with the estate, and the heir would ask the same question again
+    # from nothing. Copied, labelled as inherited, never acted on by itself.
+    if heir is not None and heir.id is not None:
+        try:
+            for row in eco.db.query(
+                    "SELECT summary, payload FROM trade_memory WHERE firm_id = ? "
+                    "AND memory_type = 'outside_advice' ORDER BY id", (firm.id,)):
+                eco.db.insert("trade_memory", {
+                    "firm_id": heir.id, "symbol": "", "memory_type": "inherited_advice",
+                    "summary": f"inherited from {firm.firm_key}: {row['summary'][:700]}",
+                    "payload": row.get("payload") or "{}", "outcome": "", "reward": 0,
+                    "created_at": utcnow_iso(),
+                })
+        except Exception:  # noqa: BLE001 - an inheritance is never a reason to fail a wind-up
+            pass
 
     # The lesson goes where the living firms already look. `firm_id` stays on
     # the dead firm: it is that firm's lesson, and attributing it to the heir

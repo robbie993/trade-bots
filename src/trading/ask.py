@@ -38,7 +38,7 @@ from typing import Optional
 
 from ..db.connection import to_datetime, utcnow_iso
 
-MAX_OPEN = 12
+MAX_OPEN = 24
 QUIET_DAYS = 3
 #: A firm with less than this in cash has nothing to ask about yet.
 MIN_CASH = 1000
@@ -108,19 +108,36 @@ def answer(db, question_id: int, answered_by: str, text: str, model: str = "") -
     db.insert("ai_answers", {"question_id": question_id, "answered_by": answered_by,
                              "model": model, "answer": text, "answered_at": utcnow_iso()})
     db.execute("UPDATE ai_questions SET status = 'answered' WHERE id = ?", (question_id,))
-    firm = db.query_one("SELECT id FROM firms WHERE firm_key = ?", (q["firm_key"],))
-    db.insert("trade_memory", {
-        "firm_id": (firm or {}).get("id"),
-        "symbol": "",
-        "memory_type": "outside_advice",
-        "summary": f"{answered_by} on '{q['question'][:80]}': {text[:600]}",
-        "payload": json.dumps({"question_id": question_id, "model": model,
-                               "topic": q["topic"]}),
-        "outcome": "",
-        "reward": 0,
-        "created_at": utcnow_iso(),
-    })
+    try:
+        heir = (json.loads(q.get("context") or "{}") or {}).get("deliver_to") or ""
+    except (TypeError, ValueError):
+        heir = ""
+    for key, prefix in ((q["firm_key"], ""), (heir, f"from {q['firm_key']}, which died: ")):
+        if not key:
+            continue
+        firm = db.query_one("SELECT id FROM firms WHERE firm_key = ?", (key,))
+        db.insert("trade_memory", {
+            "firm_id": (firm or {}).get("id"),
+            "symbol": "",
+            "memory_type": "outside_advice",
+            "summary": f"{prefix}{answered_by} on '{q['question'][:80]}': {text[:600]}",
+            "payload": json.dumps({"question_id": question_id, "model": model,
+                                   "topic": q["topic"], "asked_by": q["firm_key"]}),
+            "outcome": "",
+            "reward": 0,
+            "created_at": utcnow_iso(),
+        })
     return True
+
+
+def advice_for(db, firm_id) -> list:
+    """What outside minds have told this firm, newest first."""
+    try:
+        return [r["summary"] for r in db.query(
+            "SELECT summary FROM trade_memory WHERE firm_id = ? AND memory_type IN "
+            "('outside_advice', 'inherited_advice') ORDER BY id DESC LIMIT 8", (firm_id,))]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def recent(db, limit: int = 10) -> list:
@@ -153,11 +170,88 @@ def _profile(firm, card) -> dict:
             "scorecard": _card_summary(card)}
 
 
+def _with_advice(db, firm, profile: dict) -> dict:
+    return {**profile, "advice_already_given": advice_for(db, firm.id)}
+
+
+def _estates_ask(eco) -> list:
+    """A wound-up firm with a living heir asks, once, what its heir should learn.
+
+    Asked by the dead, answered into the heir's memory as well as the estate's.
+    Only the direct predecessor of a living firm asks: the other thirty-odd
+    estates have no one left to tell.
+    """
+    notes = []
+    living = {f.firm_key: f for f in eco.store.firms()
+              if f.status in ("active", "paused")}
+    by_key = {f.firm_key: f for f in eco.store.firms()}
+    for heir in living.values():
+        dead_key = (heir.genome or {}).get("inherited_from")
+        dead = by_key.get(dead_key or "")
+        if dead is None or dead.status in ("active", "paused"):
+            continue
+        lessons = [r["summary"] for r in eco.db.query(
+            "SELECT summary FROM trade_memory WHERE firm_id = ? AND memory_type = "
+            "'bankruptcy' ORDER BY id DESC LIMIT 2", (dead.id,))]
+        fills = eco.store.fills(dead.id, limit=40)
+        q = ask(eco.db, dead.firm_key, "estate",
+                f"I was wound up ({dead.kill_reason or dead.status}). Looking at my whole "
+                f"record, what should my heir {heir.firm_key} learn from me, and what "
+                "should it stop doing?",
+                {**_profile(dead, None),
+                 "cause_of_death": dead.kill_reason,
+                 "postmortem": lessons,
+                 "advice_i_was_given": advice_for(eco.db, dead.id),
+                 "last_fills": [{"symbol": f.symbol, "side": f.side, "qty": str(f.quantity),
+                                 "price": str(f.price), "pnl": str(f.realized_pnl)}
+                                for f in fills],
+                 "deliver_to": heir.firm_key},
+                f"estate:{dead.firm_key}")
+        if q:
+            notes.append(f"{dead.firm_key} (wound up) asked what {heir.firm_key} should learn (#{q})")
+    return notes
+
+
+def _research_review(eco, now: datetime) -> list:
+    """Once a day, the village asks what in its GitHub and Hugging Face finds is worth testing.
+
+    The repo scout only records; nothing reads its finds. This hands the newest
+    ones to the outside minds with the village's own constraints, and asks for a
+    verdict per find. The answer is advice for whoever turns a find into a test:
+    the strategy court still judges any strategy before it trades, and nothing
+    found is ever run.
+    """
+    from . import intel
+
+    finds = []
+    for source in ("github", "huggingface_models", "huggingface_datasets"):
+        for r in intel.recent(eco.db, source, limit=8):
+            finds.append({"source": source, "name": r["item_key"], "url": r.get("url"),
+                          "stars_or_likes": r.get("score"),
+                          "about": (r.get("title") or "")[:200],
+                          "detail": r.get("detail")})
+    if not finds:
+        return []
+    q = ask(eco.db, "village", "research",
+            "These are the newest GitHub repositories and Hugging Face models and "
+            "datasets the village's scout found. For each, is it worth testing here, "
+            "and if so what exactly would we test and how would we know it worked? "
+            "Flag anything that looks like a scam, a malware lure, or survivorship-"
+            "biased backtesting. Be brief per item; most will be 'skip'.",
+            {"village": "paper-trading firms on Alpaca: US equities/ETFs and crypto "
+                        "majors plus DOGE/SHIB/PEPE/WIF, 15-minute bars; strategies are "
+                        "small genomes judged by a strategy court; no code from these "
+                        "finds is ever executed without review",
+             "finds": finds},
+            f"research:{now.strftime('%Y-%m-%d')}")
+    return [f"the village asked outside minds to review {len(finds)} research find(s) (#{q})"] if q else []
+
+
 def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
     """File whatever questions are due this bar. Returns one note per question."""
     now = now or datetime.now(timezone.utc)
     week = now.strftime("%G-W%V")
-    notes = []
+    notes = _estates_ask(eco) + _research_review(eco, now)
     for firm in eco.store.active_firms():
         # Cash, not allocation: a wound-up estate brought back to "active" can
         # carry a few hundred dollars of allocation on paper and nothing in the
@@ -165,7 +259,7 @@ def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
         if float(firm.cash or 0) < MIN_CASH:
             continue
         card = cards_by_id.get(firm.id)
-        profile = _profile(firm, card)
+        profile = _with_advice(eco.db, firm, _profile(firm, card))
         genome = firm.genome or {}
 
         if genome.get("inherited_from"):

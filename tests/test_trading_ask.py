@@ -86,3 +86,33 @@ def test_an_estate_with_allocation_but_no_cash_does_not_ask(ecosystem):
     ecosystem.store.update_firm_fields(firm.id, cash=0)
     ask.consider(ecosystem, {}, now=datetime(2026, 9, 25, tzinfo=timezone.utc))
     assert not [q for q in ask.recent(ecosystem.db, 50) if q["firm_key"] == firm.firm_key]
+
+
+def test_an_estate_asks_for_its_living_heir_and_the_answer_reaches_the_heir(ecosystem):
+    from src.trading.firms import bankruptcy
+    from src.trading.models import FirmStatus
+
+    eco = ecosystem
+    firm = eco.store.active_firms()[0]
+    eco.store.set_firm_status(firm.id, FirmStatus.KILLED.value, "test kill")
+    closed = bankruptcy.wind_up(eco, eco.store.require_firm_by_id(firm.id))
+    heir = eco.store.get_firm(closed["successor"])
+    eco.store.set_firm_status(heir.id, FirmStatus.ACTIVE.value)
+    ask.consider(eco, {}, now=datetime(2026, 9, 25, tzinfo=timezone.utc))
+    (q,) = [q for q in ask.open_questions(eco.db, limit=50) if q["topic"] == "estate"]
+    assert q["firm_key"] == firm.firm_key and q["context"]["deliver_to"] == heir.firm_key
+    ask.answer(eco.db, q["id"], "claude", "Trade less; your costs were the loss.")
+    assert any("from " + firm.firm_key in a for a in ask.advice_for(eco.db, heir.id))
+
+
+def test_the_village_asks_for_a_daily_research_review(ecosystem):
+    from src.trading import intel
+
+    intel.upsert(ecosystem.db, "github", "someone/quant", title="someone/quant — a bot",
+                 url="https://github.com/someone/quant", score=120)
+    day = datetime(2026, 9, 25, tzinfo=timezone.utc)
+    ask.consider(ecosystem, {}, now=day)
+    (q,) = [q for q in ask.open_questions(ecosystem.db, limit=50) if q["topic"] == "research"]
+    assert q["context"]["finds"][0]["name"] == "someone/quant"
+    ask.consider(ecosystem, {}, now=day)
+    assert len([q for q in ask.recent(ecosystem.db, 50) if q["topic"] == "research"]) == 1
