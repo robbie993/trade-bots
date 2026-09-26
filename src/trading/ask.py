@@ -40,6 +40,8 @@ from ..db.connection import to_datetime, utcnow_iso
 
 MAX_OPEN = 12
 QUIET_DAYS = 3
+#: A firm with less than this in cash has nothing to ask about yet.
+MIN_CASH = 1000
 
 GUARDRAILS = (
     "You are advising one firm in a paper-trading village of competing strategy "
@@ -157,8 +159,11 @@ def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
     week = now.strftime("%G-W%V")
     notes = []
     for firm in eco.store.active_firms():
-        if float(firm.allocation or 0) <= 0:
-            continue                      # an unfunded firm has nothing to ask about yet
+        # Cash, not allocation: a wound-up estate brought back to "active" can
+        # carry a few hundred dollars of allocation on paper and nothing in the
+        # till. The first live run let two of those fill half the queue.
+        if float(firm.cash or 0) < MIN_CASH:
+            continue
         card = cards_by_id.get(firm.id)
         profile = _profile(firm, card)
         genome = firm.genome or {}

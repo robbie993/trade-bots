@@ -78,3 +78,11 @@ def test_the_prompt_carries_the_guardrails():
 def test_asking_is_off_unless_switched_on(ecosystem):
     ecosystem.tick()
     assert ecosystem.db.query("SELECT COUNT(*) AS n FROM ai_questions")[0]["n"] == 0
+
+
+def test_an_estate_with_allocation_but_no_cash_does_not_ask(ecosystem):
+    """Live 2026-09-25: two zombie estates filled half the queue."""
+    firm = ecosystem.store.active_firms()[0]
+    ecosystem.store.update_firm_fields(firm.id, cash=0)
+    ask.consider(ecosystem, {}, now=datetime(2026, 9, 25, tzinfo=timezone.utc))
+    assert not [q for q in ask.recent(ecosystem.db, 50) if q["firm_key"] == firm.firm_key]
