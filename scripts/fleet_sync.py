@@ -58,6 +58,7 @@ SOURCES = {
     "btcc": ("supportive-benevolence", "/data/btcc_positions.json"),
     "atlas": ("supportive-benevolence", "/data/atlas_xsec_state.json"),
     "coinbase": ("honest-hope", "/data/cb_positions.json"),
+    "supercrypto": ("supercrypto", "/app/data/supercrypto_state.json"),
 }
 
 TIMEOUT_S = 120
@@ -82,7 +83,11 @@ def fetch(service: str, remote_path: str) -> str:
     start = out.find("{")
     if start < 0:
         raise RuntimeError(f"no JSON in the response ({out.strip()[:120]!r})")
-    return out[start:]
+    # One JSON document and nothing after it: the CLI has appended notices
+    # after the payload before (a deprecation warning), and `json.loads` of the
+    # whole tail then fails on text that is not the bot's.
+    doc, end = json.JSONDecoder().raw_decode(out[start:])
+    return json.dumps(doc)
 
 
 def railway_database_url() -> str:

@@ -258,6 +258,8 @@ scanners:
     bot: bots/fleet_form4.py
   fleet_book:
     bot: bots/fleet_book.py
+  fleet_positions:
+    bot: bots/fleet_positions.py
   # Explicit calls from the YouTube channels in config/video_channels.yaml,
   # read by scripts/video_watch.py on the operator's PC.
   video_calls:
