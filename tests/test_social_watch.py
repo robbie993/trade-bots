@@ -53,3 +53,28 @@ def test_agreeing_authors_add_up():
 def test_a_mention_and_an_old_post_do_not_vote():
     assert sw.readings([_post("a", "bitcoin was in the news"),
                         _post("b", "buy bitcoin", hours_ago=30)], 24, now=NOW) == []
+
+
+def _scanner(tmp_path):
+    spec = importlib.util.spec_from_file_location("social_calls_ut", ROOT / "bots" / "social_calls.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    m.FLEET = tmp_path
+    return m
+
+
+def _snap(tmp_path, name, readings, hours_old=0.1):
+    import json
+
+    at = datetime.now(timezone.utc) - timedelta(hours=hours_old)
+    (tmp_path / f"{name}.json").write_text(json.dumps({"fetched_at": at.isoformat(),
+                                                       "payload": {"readings": readings}}))
+
+
+def test_platforms_merge_and_a_stopped_one_drops_out(tmp_path):
+    m = _scanner(tmp_path)
+    _snap(tmp_path, "reddit_calls", [{"symbol": "BTC-USD", "score": 100, "confidence": 12, "note": "r"}])
+    _snap(tmp_path, "instagram_calls", [{"symbol": "BTC-USD", "score": -100, "confidence": 36, "note": "i"}])
+    _snap(tmp_path, "x_calls", [{"symbol": "NVDA", "score": 100, "confidence": 12}], hours_old=5)
+    (btc,) = m.scan(None)
+    assert btc["symbol"] == "BTC-USD" and btc["score"] == -50.0 and btc["confidence"] == 48.0

@@ -1,0 +1,43 @@
+# Instagram accounts the village account follows and reads (scripts/insta_watch.py).
+#
+# Following is how the account's own feed learns what to show: these seed the
+# algorithm with markets, trading and crypto, and the reader also scrolls the
+# home feed, so what Instagram recommends after that becomes a source too.
+#
+# Every handle is checked in the browser before it is followed; one that does
+# not resolve is reported and skipped, never guessed at. `verified: false` means
+# not yet checked. Edit freely: add handles, delete ones that turn out noisy.
+accounts:
+  # market news
+  - {handle: cnbc, group: news}
+  - {handle: bloombergbusiness, group: news}
+  - {handle: wsj, group: news}
+  - {handle: reuters, group: news}
+  - {handle: yahoofinance, group: news}
+  - {handle: financialtimes, group: news}
+  - {handle: businessinsider, group: news}
+  - {handle: marketwatch, group: news}
+  # charts and education
+  - {handle: tradingview, group: trading}
+  - {handle: investopedia, group: trading}
+  - {handle: stocktwits, group: trading}
+  - {handle: unusual_whales, group: trading}
+  # crypto
+  - {handle: coindesk, group: crypto}
+  - {handle: cointelegraph, group: crypto}
+  - {handle: binance, group: crypto}
+  - {handle: coinbase, group: crypto}
+  - {handle: solana, group: crypto}
+  - {handle: bitcoinmagazine, group: crypto}
+  # memes
+  - {handle: dogecoin, group: memes}
+  - {handle: pepecoineth, group: memes}
+
+# Follows per run while seeding, and seconds between them. A new account that
+# follows twenty accounts in a minute looks like what it is.
+follows_per_run: 4
+follow_pause_s: 45
+
+# Posts read per profile per run, and calls older than this stop voting.
+posts_per_profile: 6
+max_age_hours: 24

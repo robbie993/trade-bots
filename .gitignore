@@ -120,3 +120,6 @@ data/research/
 data/ai_queue/
 
 .alpaca_credentials
+
+# Which Instagram accounts the village account has followed (scripts/insta_watch.py).
+data/instagram_state.json
