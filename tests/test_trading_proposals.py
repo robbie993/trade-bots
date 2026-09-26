@@ -118,3 +118,12 @@ def test_the_council_vetoes_anything_that_did_not_win_out_of_sample():
     assert r.verdict == "defer" and "held_out_win" in r.vetoes
     r = Council().rule(_evidence(holdout_before=None, holdout_after=None, holdout_bars=0))
     assert r.verdict == "defer"
+
+
+def test_the_same_change_twice_is_one_proposal(ecosystem):
+    eco = ecosystem
+    firm = _firm(eco)
+    for i in range(2):
+        qid = ask.ask(eco.db, firm.firm_key, "proposal", "genes?", {}, f"p:{i}")
+        ask.answer(eco.db, qid, "claude", '{"changes": {"stop_loss_pct": 8}, "why": "w"}')
+    assert len(proposals.recent(eco.db)) == 1

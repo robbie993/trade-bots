@@ -125,6 +125,12 @@ def record(db, question: dict, answered_by: str, text: str) -> Optional[int]:
         else (firm.get("genome") or {})
     if all(str(before.get(k)) == str(v) for k, v in changes.items()):
         return None                       # proposes what the firm already is
+    # The same change for the same firm, already waiting or already judged, is
+    # one idea: two advisers agreeing does not earn it a second backtest.
+    for other in db.query("SELECT changes FROM ai_proposals WHERE firm_key = ?",
+                          (question["firm_key"],)):
+        if json.loads(other["changes"] or "{}") == changes:
+            return None
     return db.insert("ai_proposals", {
         "firm_key": question["firm_key"], "question_id": question["id"],
         "proposed_by": answered_by, "why": why, "changes": json.dumps(changes),
