@@ -425,6 +425,21 @@ each one exists.
 | `MVV_TICK_INTERVAL` | you | seconds between ticks in the worker. Default 300 |
 | `PORT` | the platform | what the web service listens on. Railway sets it |
 
+The worker's outside sources are each off until switched on, because each one
+reaches the open internet on its own. All five are on for the Railway worker:
+
+| variable | what it turns on |
+|---|---|
+| `TRADE_NEWS_ENABLED` | the news desk: RSS headlines scored per symbol (`news.py`) |
+| `TRADE_MEME_RADAR_ENABLED` | DEX buy/sell flow for DOGE, SHIB, PEPE, WIF, and a log of Pump.fun and DexScreener launches (`meme_radar.py`) |
+| `TRADE_CRYPTO_PULSE_ENABLED` | Hyperliquid funding and open interest, Fear & Greed, total market cap, as btcc reads them (`crypto_pulse.py`) |
+| `TRADE_REPO_SCOUT_ENABLED` | hourly GitHub and Hugging Face finds, recorded and never run (`repo_scout.py`) |
+| `TRADE_ASK_ENABLED` | firms file questions for outside minds (`ask.py`); answered from the operator's PC |
+
+The worker also reads the fleet's shared Alpaca account once a bar whenever it
+runs on the Alpaca feed, and needs `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`
+for that and for prices.
+
 Read-only mode turns itself on when the host looks like a hosted platform.
 `MVV_PUBLIC=1` forces it on — useful for checking locally what a visitor will
 see. `MVV_PUBLIC=0` forces it off, and you should not do that on a public URL:

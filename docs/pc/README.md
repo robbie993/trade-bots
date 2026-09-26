@@ -66,3 +66,27 @@ evolver's look-counter is now a hard gate rather than a log line.
 `docs/research-dossier.md` is the 117-search literature review this work is
 measured against. Its Phase 0 is the priority, and three of its four items are
 still open.
+
+## What this PC does for the village (set up 2026-09-25)
+
+The village runs on Railway (`ai-village` project: `village-worker`,
+`village-web`, `Postgres`). This PC does the jobs that need a home connection,
+`railway login`, or Claude Code. Three Windows scheduled tasks, each a `.cmd`
+in `scripts/` that logs to `logs/`:
+
+| task | every | what |
+|---|---|---|
+| Village fleet sync | 30 min | `fleet_sync.py --to-railway`: every fleet bot's state file over `railway ssh` into `fleet_snapshots` |
+| Village video watch | 30 min | `video_watch.py --to-railway`: new uploads on `config/video_channels.yaml`, explicit calls into `youtube_calls` and `intel` |
+| Village answer questions | 2 h | `answer_questions.py --to-railway`: Claude Code headless answers the firms' questions |
+
+None of them stores a password: the database URL is asked of Railway each run
+(through the Postgres service's public TCP proxy), and the Alpaca keys live only
+in Railway's variables. If a task's log shows `railway ... Unauthorized`, run
+`railway login` again in PowerShell.
+
+Known state at hand-off: YouTube has rate-limited this PC's caption requests
+since the first burst on 2026-09-25 (lists and titles still load; captions
+429). Audio downloads work, and a Whisper fallback is next once its model can
+be downloaded (Hugging Face was unreachable from here that evening).
+
