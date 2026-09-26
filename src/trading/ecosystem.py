@@ -150,6 +150,8 @@ class Ecosystem:
         #: The bar the fleet's account was last read on. Once per bar, in
         #: memory: a restart costs one extra read, which is nothing.
         self._fleet_bar = ""
+        #: The bar the firms last considered asking outside minds on.
+        self._ask_bar = ""
         #: The furthest bar this run has seen. `market.as_of()` is the max
         #: timestamp across symbols, and it is **not monotonic**: a partial bar
         #: is present in one fetch and absent from the next, so the maximum
@@ -380,6 +382,26 @@ class Ecosystem:
 
     # -- the layers, with the village watching -----------------------------
     #
+    def _firms_ask(self, bar_now: str, market, report) -> None:
+        """Once a bar, file any question a firm is due to ask. See ask.py."""
+        import os
+
+        if not os.environ.get("TRADE_ASK_ENABLED", "").strip():
+            return
+        if not bar_now or bar_now == self._ask_bar:
+            return
+        self._ask_bar = bar_now
+        from . import ask
+
+        try:
+            firms = self.store.active_firms()
+            cards = self.brokerage.evaluator.evaluate_all(firms, market)
+            for note in ask.consider(self, {c.firm_id: c for c in cards}):
+                report.village.append(note)
+                self.flow.emit("brain", "a firm asked an outside mind", detail=note)
+        except Exception as exc:  # noqa: BLE001 - asking is never a precondition
+            report.bot_notes.append(f"asking failed: {str(exc)[:160]}")
+
     def _hear_the_fleet(self, bar_now: str, report) -> None:
         from . import fleet
 
@@ -633,6 +655,7 @@ class Ecosystem:
         # where the fleet scanners read, and read the shared account once a
         # bar. Neither can stop the tick; a quiet fleet is a silent scanner.
         self._hear_the_fleet(bar_now, report)
+        self._firms_ask(bar_now, market, report)
         report.signals = self.scanners.run(market)
         # The scribe reads the village's own dead and publishes to the same
         # board. It needs the ledger, so it cannot be a sandboxed scanner file
