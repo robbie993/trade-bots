@@ -1,0 +1,21 @@
+# Subreddits the village reads (scripts/social_watch.py), from their public RSS
+# feeds: no account, no browser. One author is one voice across every post and
+# subreddit in the window, so a poster repeating themselves counts once.
+subreddits:
+  - {name: wallstreetbets, group: stocks}
+  - {name: stocks, group: stocks}
+  - {name: investing, group: stocks}
+  - {name: options, group: stocks}
+  - {name: CryptoCurrency, group: crypto}
+  - {name: CryptoMarkets, group: crypto}
+  - {name: Bitcoin, group: crypto}
+  - {name: ethtrader, group: crypto}
+  - {name: solana, group: crypto}
+  - {name: dogecoin, group: memes}
+  - {name: SatoshiStreetBets, group: memes}
+
+# Posts per run, across all of them in one combined feed (Reddit caps it at 100).
+per_run: 100
+
+# Calls older than this stop voting.
+max_age_hours: 24

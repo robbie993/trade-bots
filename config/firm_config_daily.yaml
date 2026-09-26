@@ -115,6 +115,10 @@ scanners:
   # read by scripts/video_watch.py on the operator's PC.
   video_calls:
     bot: bots/video_calls.py
+  # Explicit calls from the subreddits in config/social_sources.yaml, read by
+  # scripts/social_watch.py on the operator's PC. One author is one voice.
+  social_calls:
+    bot: bots/social_calls.py
   fleet_form4:
     bot: bots/fleet_form4.py
     # form4 names are small caps that turn over daily and are mostly not in the
