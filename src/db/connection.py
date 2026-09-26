@@ -174,12 +174,36 @@ class Database:
         params = self._params([values[c] for c in cols])
         cur = self.conn.cursor()
         if self.dialect == "postgres":
+            # **Only ask for an id the table has.** `position_provenance`,
+            # `firm_strikes`, `genome_holdout` and `genome_epoch` are keyed by
+            # what they describe and have no `id`. "RETURNING id" on them is an
+            # error, every caller swallowed it, and on Postgres a swallowed
+            # error still aborts the transaction: the first buy of any symbol
+            # died inside `settle` and took the rest of the tick with it. On
+            # the hosted village no firm could open a new position.
+            if not self._has_id(table):
+                cur.execute(self._sql(sql), params)
+                cur.close()
+                return 0
             cur.execute(self._sql(sql) + " RETURNING id", params)
             new_id = cur.fetchone()["id"]
             cur.close()
             return int(new_id)
         cur.execute(sql, params)
         return int(cur.lastrowid)
+
+    def _has_id(self, table: str) -> bool:
+        cache = self.__dict__.setdefault("_id_columns", {})
+        if table not in cache:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = %s AND column_name = 'id'",
+                (table,),
+            )
+            cache[table] = cur.fetchone() is not None
+            cur.close()
+        return cache[table]
 
     def update(self, table: str, row_id: int, values: dict) -> None:
         if not values:
