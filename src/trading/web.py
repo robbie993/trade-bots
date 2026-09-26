@@ -2194,7 +2194,7 @@ def solar_page() -> HTMLResponse:
     if not page.exists():  # pragma: no cover - only if the file is deleted
         return HTMLResponse("<p>solar.html is missing from src/trading/static/</p>",
                             status_code=404)
-    return HTMLResponse(page.read_text())
+    return HTMLResponse(page.read_text(encoding="utf-8"))
 
 
 @router.get("/village/flow/events")

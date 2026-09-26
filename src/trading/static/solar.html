@@ -420,19 +420,19 @@
   <div class="hud-stats">
     <div class="hud-stat">
       <div class="hud-stat-value" id="stat-agents">8</div>
-      <div class="hud-stat-label">AGENTS</div>
+      <div class="hud-stat-label">LIVING FIRMS</div>
     </div>
     <div class="hud-stat">
       <div class="hud-stat-value" id="stat-active" style="color:var(--success);">0</div>
-      <div class="hud-stat-label">ACTIVE</div>
+      <div class="hud-stat-label">WITH MONEY</div>
     </div>
     <div class="hud-stat">
       <div class="hud-stat-value" id="stat-tasks" style="color:var(--warning);">0</div>
-      <div class="hud-stat-label">TASKS/24H</div>
+      <div class="hud-stat-label">CLOSED TRADES</div>
     </div>
     <div class="hud-stat">
       <div class="hud-stat-value" id="stat-uptime" style="color:var(--sun-glow);">--</div>
-      <div class="hud-stat-label">UPTIME</div>
+      <div class="hud-stat-label">EQUITY</div>
     </div>
   </div>
   <div class="hud-clock" id="clock">00:00:00</div>
@@ -905,8 +905,8 @@ function buildAgentList() {
   let html = '';
   AGENTS.forEach(a => {
     const statusTag = a.status === 'active'
-      ? '<span class="agent-tag tag-active">ACTIVE</span>'
-      : '<span class="agent-tag tag-idle">IDLE</span>';
+      ? '<span class="agent-tag tag-active">TRADING</span>'
+      : `<span class="agent-tag tag-idle">${(a.state || 'idle').toUpperCase()}</span>`;
     const cronTag = a.tasks24h > 50 ? '<span class="agent-tag tag-cron">HIGH</span>' : '';
     html += `
       <div class="agent-card" data-id="${a.id}" style="--agent-color:${a.color};" onclick="selectAgentById('${a.id}')">
@@ -920,6 +920,12 @@ function buildAgentList() {
       </div>
     `;
   });
+  if (typeof DEAD_FIRMS !== 'undefined' && DEAD_FIRMS.length) {
+    html += `<details class="agent-card" style="--agent-color:#5a5a6a;"><summary class="agent-desc"
+      style="cursor:pointer">GRAVEYARD — ${DEAD_FIRMS.length} firm(s) wound up or killed</summary>` +
+      DEAD_FIRMS.map(f => `<div class="agent-desc">${String(f.key || '').toUpperCase()} · ${f.status}</div>`).join('') +
+      '</details>';
+  }
   list.innerHTML = html;
 }
 
@@ -943,10 +949,14 @@ function updateClock() {
 }
 
 function updateHudStats() {
+  // Real numbers only. This used to show a hard-coded "99.8%" uptime and
+  // called lifetime trades "tasks/24h" — upstream's demo labels, kept after the
+  // demo data was replaced, so the header was the one part still invented.
   document.getElementById('stat-agents').textContent = AGENTS.length;
   document.getElementById('stat-active').textContent = AGENTS.filter(a => a.status === 'active').length;
   document.getElementById('stat-tasks').textContent = AGENTS.reduce((s, a) => s + (a.tasks24h || 0), 0);
-  document.getElementById('stat-uptime').textContent = '99.8%';
+  const eq = AGENTS.reduce((s, a) => s + Number(a.equity || 0), 0);
+  document.getElementById('stat-uptime').textContent = '$' + Math.round(eq).toLocaleString();
 }
 
 // ---- UTILS ----
@@ -982,13 +992,17 @@ const PLANETS = [
   { planet: 'Uranus',  color: '#88d8d8' }, { planet: 'Neptune', color: '#4466cc' },
 ];
 const DEAD = '#5a5a6a';
+const DEAD_FIRMS = [];
 
 function toAgent(firm, index, biggest) {
   const skin = PLANETS[index % PLANETS.length];
   const allocation = Number(firm.allocation || 0);
   const trades = Number(firm.closed_trades || 0);
-  const killed = firm.status === 'killed';
+  // Wound-up firms are 'bankrupt', not 'killed'. Only checking 'killed' drew all
+  // thirty-eight of them as active planets.
+  const killed = firm.status === 'killed' || firm.status === 'bankrupt';
   const paused = firm.status === 'paused';
+  const broke = !killed && Number(firm.equity || 0) < 1;
   return {
     id: firm.key,
     name: (firm.key || '').toUpperCase(),
@@ -1000,10 +1014,11 @@ function toAgent(firm, index, biggest) {
     size: 5 + Math.round(9 * (biggest ? allocation / biggest : 0)),
     orbit: 70 + index * 45,
     // Speed is how much it actually trades. A paused firm barely moves.
-    speed: paused || killed ? 0.0015 : 0.004 + Math.min(0.012, trades * 0.0004),
+    speed: paused || killed || broke ? 0.0015 : 0.004 + Math.min(0.012, trades * 0.0004),
     role: `${firm.name || firm.key} — ${firm.asset_class || 'unclassified'}`,
     model: firm.venue || 'paper',
-    status: killed ? 'error' : paused ? 'idle' : 'active',
+    status: killed ? 'error' : (paused || broke) ? 'idle' : 'active',
+    state: killed ? 'dead' : paused ? 'paused' : broke ? 'broke' : 'trading',
     tasks24h: trades,
     // Below the sample gate a win rate is not a verdict, so it is not shown as
     // one. The rest of this system refuses to draw that conclusion and so does
@@ -1019,9 +1034,17 @@ async function loadFirms() {
   const res = await fetch('/api/firms');
   if (!res.ok) throw new Error('/api/firms returned ' + res.status);
   const data = await res.json();
-  const firms = data.firms || [];
-  const biggest = Math.max(1, ...firms.map(f => Number(f.allocation || 0)));
-  return { agents: firms.map((f, i) => toAgent(f, i, biggest)), as_of: data.as_of,
+  const all = data.firms || [];
+  const dead = f => f.status === 'killed' || f.status === 'bankrupt';
+  // Only the living orbit, the richest closest to the sun. Thirty-eight wound-up
+  // firms took the inner orbits by creation order and pushed every desk that is
+  // actually trading off the edge of the screen.
+  const living = all.filter(f => !dead(f))
+    .sort((a, b) => Number(b.equity || 0) - Number(a.equity || 0));
+  const biggest = Math.max(1, ...living.map(f => Number(f.allocation || 0)));
+  DEAD_FIRMS.length = 0;
+  all.filter(dead).forEach(f => DEAD_FIRMS.push(f));
+  return { agents: living.map((f, i) => toAgent(f, i, biggest)), as_of: data.as_of,
            source: data.source };
 }
 
@@ -1044,6 +1067,21 @@ async function refresh(first) {
     saySystem('LEDGER UNREACHABLE — ' + err.message);
   }
 }
+
+// The app puts its read-only and sign-in notices at the top of <body>, which on
+// this full-screen canvas lands them underneath the HUD, text on text. Gather
+// them into one small panel in the corner instead.
+(function tuckNotices() {
+  const notes = Array.from(document.querySelectorAll('body > .card.alarm'));
+  if (!notes.length) return;
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:12px;bottom:40px;max-width:460px;z-index:60;' +
+    'font:11px/1.45 system-ui,sans-serif;color:#cbd5e1;background:rgba(8,12,28,.92);' +
+    'border:1px solid #334155;border-radius:8px;padding:8px 12px';
+  notes.forEach(n => { n.style.cssText = 'margin:0 0 4px 0'; box.appendChild(n); });
+  box.querySelectorAll('a').forEach(a => { a.style.color = '#38bdf8'; });
+  document.body.appendChild(box);
+})();
 
 refresh(true).catch(err => saySolarFailed('Could not start: ' + err.message));
 setInterval(() => refresh(false), 15000);
