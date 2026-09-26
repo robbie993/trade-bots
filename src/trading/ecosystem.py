@@ -143,6 +143,7 @@ class Ecosystem:
         self._news = None
         self._meme_radar = None
         self._repo_scout = None
+        self._crypto_pulse = None
         self._shadow = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
@@ -269,6 +270,19 @@ class Ecosystem:
 
             self._repo_scout = RepoScout(self.db)
         return self._repo_scout
+
+    @property
+    def crypto_pulse(self):
+        """Funding, fear & greed, market mood and OI, or None unless switched on."""
+        if self._crypto_pulse is None:
+            import os
+
+            if not os.environ.get("TRADE_CRYPTO_PULSE_ENABLED", "").strip():
+                return None
+            from .crypto_pulse import CryptoPulse
+
+            self._crypto_pulse = CryptoPulse(self.signals)
+        return self._crypto_pulse
 
     @property
     def news(self):
@@ -673,6 +687,11 @@ class Ecosystem:
                 report.signals.extend(self.meme_radar.run(market))
             except Exception as exc:  # noqa: BLE001 - a source, never a precondition
                 report.bot_notes.append(f"meme radar failed: {str(exc)[:160]}")
+        if self.crypto_pulse is not None:
+            try:
+                report.signals.extend(self.crypto_pulse.run(market))
+            except Exception as exc:  # noqa: BLE001 - a source, never a precondition
+                report.bot_notes.append(f"crypto pulse failed: {str(exc)[:160]}")
         if self.repo_scout is not None:
             try:
                 report.signals.extend(self.repo_scout.run())
