@@ -51,3 +51,5 @@ PyYAML>=6.0
 # only; nothing in the village or the worker imports it.
 yt-dlp>=2025.1
 curl_cffi>=0.7        # lets yt-dlp look like a browser to YouTube
+# faster-whisper hears a video's audio when YouTube refuses its captions. PC only;
+# the model (base.en) lives in ~/.cache/village-whisper, fetched once by hand.

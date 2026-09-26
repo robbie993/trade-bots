@@ -104,25 +104,80 @@ def latest_videos(handle: str, n: int) -> list:
     return [e["id"] for e in (info or {}).get("entries") or [] if e.get("id")]
 
 
+#: Where the speech-to-text model lives on the operator's PC (faster-whisper,
+#: base.en, int8 on CPU: a 6.5-minute clip transcribes in about 34 seconds on a
+#: two-core Pentium). Downloaded once; the watcher never fetches it itself.
+WHISPER_MODEL = Path.home() / ".cache" / "village-whisper" / "base.en"
+#: Transcribe at most this much of one video, so a three-hour stream cannot
+#: take the whole half-hour.
+MAX_AUDIO_S = 2400
+
+_whisper = None
+
+
+def _captions(y, info) -> str:
+    tracks = (info.get("subtitles") or {}).get("en") or         (info.get("automatic_captions") or {}).get("en") or []
+    url = next((t["url"] for t in tracks if t.get("ext") == "json3"), None)
+    if not url:
+        return ""
+    # Through yt-dlp's own session, not urllib: the same headers, cookies and
+    # (with curl_cffi) browser fingerprint as the page request.
+    data = json.loads(y.urlopen(url).read().decode("utf-8"))
+    return " ".join(s.get("utf8", "") for e in data.get("events", [])
+                    for s in e.get("segs") or [])
+
+
+def _listen(video_id: str) -> str:
+    """Download only the audio and transcribe it here. Deletes the audio after.
+
+    YouTube stopped serving captions to this PC on its first day (HTTP 429 on
+    every caption file, while pages and audio still load), and some videos have
+    no captions at all. Hearing the audio needs neither.
+    """
+    global _whisper
+    import tempfile
+
+    import yt_dlp
+
+    if not WHISPER_MODEL.exists():
+        raise RuntimeError(f"no speech model at {WHISPER_MODEL}")
+    with tempfile.TemporaryDirectory() as tmp:
+        opts = {"quiet": True, "no_warnings": True, "noprogress": True,
+                "format": "bestaudio[abr<=64]/worstaudio",
+                "outtmpl": str(Path(tmp) / "a.%(ext)s")}
+        with yt_dlp.YoutubeDL(opts) as y:
+            y.download([f"https://www.youtube.com/watch?v={video_id}"])
+        audio = next(Path(tmp).glob("a.*"))
+        if _whisper is None:
+            from faster_whisper import WhisperModel
+
+            _whisper = WhisperModel(str(WHISPER_MODEL), device="cpu", compute_type="int8")
+        segments, _info = _whisper.transcribe(str(audio), beam_size=1, vad_filter=True)
+        words = []
+        for seg in segments:
+            if seg.start > MAX_AUDIO_S:
+                break
+            words.append(seg.text.strip())
+        return " ".join(words)
+
+
 def transcript(video_id: str) -> dict:
-    """Title, channel, publish time and caption text. Downloads captions only."""
+    """Title, channel, publish time and what was said: captions, else the audio."""
     import yt_dlp
 
     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
                            "skip_download": True}) as y:
         info = y.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-        tracks = (info.get("subtitles") or {}).get("en") or \
-            (info.get("automatic_captions") or {}).get("en") or []
-        url = next((t["url"] for t in tracks if t.get("ext") == "json3"), None)
-        text = ""
-        if url:
-            # Through yt-dlp's own session, not urllib: the same headers,
-            # cookies and (with curl_cffi) browser fingerprint as the page
-            # request. A bare urllib fetch of the caption URL is what drew
-            # YouTube's 429s on the first run.
-            data = json.loads(y.urlopen(url).read().decode("utf-8"))
-            text = " ".join(s.get("utf8", "") for e in data.get("events", [])
-                            for s in e.get("segs") or [])
+        how = "captions"
+        try:
+            text = _captions(y, info)
+        except Exception as exc:  # noqa: BLE001 - a refused caption file is not the end
+            if "429" not in str(exc) and "Too Many" not in str(exc):
+                raise
+            text = ""
+    if not text:
+        how = "whisper"
+        text = _listen(video_id)
     ts = info.get("timestamp")
     return {
         "id": video_id,
@@ -131,6 +186,7 @@ def transcript(video_id: str) -> dict:
         "published": (datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
                       if ts else None),
         "text": " ".join(text.split()),
+        "heard_by": how,
     }
 
 
@@ -243,7 +299,7 @@ def _read_channel(ch, ids, seen, symbols, db, read, failed, budget) -> int:
         read.append(video)
         called = ", ".join(f"{c['symbol']}{'+' if c['direction'] > 0 else '-'}"
                            for c in video["calls"]) or "no calls"
-        caps = "" if video["text"] else " [no captions]"
+        caps = f" [{video.get('heard_by')}]" if video["text"] else " [nothing heard]"
         print(f"  @{handle:<16} {video['title'][:60]:<60} {called}{caps}")
         if db is not None:
             intel.upsert(db, SOURCE, vid,
@@ -254,6 +310,7 @@ def _read_channel(ch, ids, seen, symbols, db, read, failed, budget) -> int:
                          detail={"channel": video["channel"], "group": video["group"],
                                  "published": video["published"], "calls": video["calls"],
                                  "words": len(video["text"].split()),
+                                 "heard_by": video.get("heard_by"),
                                  "captions": bool(video["text"])})
     return budget
 
