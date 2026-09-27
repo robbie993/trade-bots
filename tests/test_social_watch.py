@@ -45,7 +45,7 @@ def test_one_author_is_one_voice():
 
 def test_agreeing_authors_add_up():
     out = {r["symbol"]: r for r in sw.readings(
-        [_post("a", "buying bitcoin"), _post("b", "buy bitcoin"), _post("c", "bought nvidia")],
+        [_post("a", "buying bitcoin"), _post("b", "buy bitcoin"), _post("c", "bought nvidia shares")],
         24, now=NOW)}
     assert out["BTC-USD"]["confidence"] == 24.0 and out["NVDA"]["score"] == 100.0
 
@@ -78,3 +78,13 @@ def test_platforms_merge_and_a_stopped_one_drops_out(tmp_path):
     _snap(tmp_path, "x_calls", [{"symbol": "NVDA", "score": 100, "confidence": 12}], hours_old=5)
     (btc,) = m.scan(None)
     assert btc["symbol"] == "BTC-USD" and btc["score"] == -50.0 and btc["confidence"] == 48.0
+
+
+def test_a_company_name_in_everyday_speech_is_not_a_call():
+    shopping = {"title": "", "text": "we compared renting vs buying via Amazon Prime"}
+    trading = {"title": "", "text": "buying Amazon shares on this dip"}
+    ticker = {"title": "", "text": "buying AMZN here"}
+    syms = ["AMZN"]
+    assert sw.calls_in(shopping, syms) == []
+    assert sw.calls_in(trading, syms)[0]["symbol"] == "AMZN"
+    assert sw.calls_in(ticker, syms)[0]["symbol"] == "AMZN"

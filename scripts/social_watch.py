@@ -88,10 +88,36 @@ def fetch(subs: list, limit: int) -> list:
         return parse_feed(r.read().decode("utf-8", "replace"))
 
 
+#: Words that make a post about a company a post about its stock. See calls_in.
+TRADE_WORDS = re.compile(
+    r"\b(stock|stocks|shares?|calls?|puts?|options?|position|long|short|ticker|"
+    r"earnings|price target|bullish|bearish|portfolio|holding|holdings|dip|rally|"
+    r"coin|coins|token|crypto|chart|breakout)\b|\$[A-Za-z]", re.I)
+
+
 def calls_in(post: dict, symbols) -> list:
-    text = normalise(f"{post['title']}. {post['text']}", symbols)
-    return [{"symbol": c.symbol, "direction": c.direction, "phrase": c.phrase}
-            for c in crowd.extract_calls(text, symbols)]
+    """Explicit calls, with one guard the crowd module cannot have.
+
+    `crowd.extract_calls` is fixed by a preregistration and stays as it is. But
+    here names are turned into tickers first, so everyday speech about a
+    company becomes a "call": "renting vs buying via Amazon Prime" was an AMZN
+    buy. A call is kept at once when the post names the ticker itself (AMZN,
+    $AMZN); when only the company's name was there, the post must also talk
+    like a trade (stock, shares, calls, a position, a $ ticker...). Crypto names
+    (bitcoin, dogecoin) always count.
+    """
+    raw = f"{post['title']}. {post['text']}"
+    text = normalise(raw, symbols)
+    trade_talk = bool(TRADE_WORDS.search(raw))
+    out = []
+    for c in crowd.extract_calls(text, symbols):
+        head = c.symbol.split("-")[0]
+        named = re.search(rf"(?<![A-Za-z])\$?{re.escape(head)}(?![A-Za-z])", raw) is not None
+        # A coin's name is not everyday speech the way "Amazon" is: nobody buys
+        # bitcoin via a subscription. Crypto names always count.
+        if named or trade_talk or c.symbol.endswith("-USD"):
+            out.append({"symbol": c.symbol, "direction": c.direction, "phrase": c.phrase})
+    return out
 
 
 def readings(posts: list, max_age_hours: float, now=None) -> list:
