@@ -809,14 +809,22 @@ def _signals_panel(eco, market) -> str:
                 # "this bar", not "now": a reading is fresh for the bar it was
                 # stamped with, and the whole staleness rule is stated in bars.
                 "heard": ("<span class=good>this bar</span>" if fresh
-                          else "<span class=muted>stale</span>"),
+                          else "<span class=muted>earlier bar</span>"),
                 "why": e(str(row["note"] or "")[:70]),
             })
         if not rows:
             continue
+        # "Stale" read as broken when a source had simply said nothing new this
+        # bar. Say which of three it is; only the last one is a fault.
+        if any(r["heard"].endswith("this bar</span>") for r in rows):
+            status = "<span class=good>speaking this bar</span>"
+        elif eco.signals.published(pub, market.as_of()):
+            status = "<span class=muted>ran this bar, nothing new to say</span>"
+        else:
+            status = f"<span class=warn>silent since {rows[0]['at']}</span>"
         blocks.append(
             f"<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>{e(pub)} "
-            f"<span class=muted>— {len(rows)} reading(s)</span></h3>"
+            f"<span class=muted>— {len(rows)} reading(s)</span> · {status}</h3>"
             "<div style='max-height:16rem;overflow-y:auto;border:1px solid var(--line);"
             "border-radius:6px'>" + _table(rows) + "</div>"
         )

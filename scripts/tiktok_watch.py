@@ -43,6 +43,7 @@ from scripts import video_watch  # noqa: E402
 from scripts.insta_watch import browser  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from src.trading import intel  # noqa: E402
+from src.trading.topics import tag  # noqa: E402
 
 CONFIG = REPO / "config" / "tiktok_sources.yaml"
 STATE = REPO / "data" / "tiktok_state.json"
@@ -202,7 +203,8 @@ def main(argv=None) -> int:
                          symbols=sorted({c["symbol"] for c in v["calls"]}),
                          score=len(v["calls"]),
                          detail={"author": h, "published": v["published"], "calls": v["calls"],
-                                 "words": len(v["text"].split())})
+                                 "words": len(v["text"].split()),
+                                 "topics": tag(f"{v['title']} {v['text']}")})
 
     pool = list(fresh)
     if db is not None:

@@ -171,6 +171,8 @@ def test_one(eco, market) -> Optional[str]:
         verdict, status = (f"won the held-out bars ({t['holdout_before']} -> "
                            f"{t['holdout_after']}); filed to the council", "filed")
     values.update({"verdict": verdict, "status": status})
+    if status == "refused" and t["enough_holdout"]:
+        _try_again(eco.db, row, firm, verdict, t)
     if status == "filed":
         approval = eco.gate.request(
             ApprovalAction.ADOPT_GENOME.value,
@@ -181,6 +183,35 @@ def test_one(eco, market) -> Optional[str]:
         values["approval_id"] = approval.id
     eco.db.update("ai_proposals", row["id"], values)
     return f"proposal #{row['id']} for {firm.firm_key}: {verdict}"
+
+
+#: Rounds a firm may go back to its advisers in one day after a refusal. Two
+#: machines can otherwise argue in a circle all day for free.
+RETRIES_PER_DAY = 3
+
+
+def _try_again(db, row, firm, verdict: str, trial: dict) -> Optional[int]:
+    """The firm tells the adviser its idea lost, with the numbers, and asks again."""
+    from . import ask
+
+    today = utcnow_iso()[:10]
+    retries = db.query_one(
+        "SELECT COUNT(*) AS n FROM ai_questions WHERE firm_key = ? AND topic = 'proposal' "
+        "AND dedupe_key LIKE 'retry:%' AND asked_at LIKE ?", (firm.firm_key, f"{today}%"))
+    if int((retries or {}).get("n") or 0) >= RETRIES_PER_DAY:
+        return None
+    return ask.ask(
+        db, firm.firm_key, "proposal",
+        f"The village tested your change {row['changes']} and refused it: {verdict}. "
+        "Given that result, is there a different gene change worth testing? Reply with "
+        'ONLY a JSON object like {"changes": {"gene_name": value}, "why": "one sentence"}, '
+        f'at most {MAX_CHANGES} genes, each inside its min and max, or {{"changes": {{}}, '
+        '"why": "..."} if nothing else is worth trying.',
+        {"refused_change": json.loads(row["changes"]), "result": {
+            k: str(trial.get(k)) for k in ("fitted_before", "fitted_after",
+                                           "holdout_before", "holdout_after", "holdout_bars")},
+         "genes": genes_for(firm), "earlier_reasoning": row.get("why")},
+        f"retry:{row['id']}")
 
 
 def adopt(eco, details: dict, approved_by: str) -> str:

@@ -51,6 +51,7 @@ import yaml  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from scripts.video_watch import universe  # noqa: E402
 from src.trading import intel  # noqa: E402
+from src.trading.topics import tag  # noqa: E402
 
 CONFIG = REPO / "config" / "instagram_sources.yaml"
 STATE = REPO / "data" / "instagram_state.json"
@@ -246,7 +247,8 @@ def main(argv=None) -> int:
                          url=post["url"], symbols=sorted({c["symbol"] for c in post["calls"]}),
                          score=len(post["calls"]),
                          detail={"author": post["author"], "published": post["published"],
-                                 "calls": post["calls"], "from_feed": post.get("from_feed", False)})
+                                 "calls": post["calls"], "from_feed": post.get("from_feed", False),
+                                 "topics": tag(post["text"])})
     pool = list(fresh)
     if db is not None:
         ids = {p["id"] for p in fresh}

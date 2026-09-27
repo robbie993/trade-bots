@@ -58,6 +58,7 @@ sys.path.insert(0, str(REPO))
 import yaml  # noqa: E402
 
 from src.trading import crowd, intel  # noqa: E402
+from src.trading.topics import tag  # noqa: E402
 from src.trading.news import _aliases_for  # noqa: E402
 
 CONFIG = REPO / "config" / "video_channels.yaml"
@@ -311,6 +312,7 @@ def _read_channel(ch, ids, seen, symbols, db, read, failed, budget) -> int:
                                  "published": video["published"], "calls": video["calls"],
                                  "words": len(video["text"].split()),
                                  "heard_by": video.get("heard_by"),
+                                 "topics": tag(f"{video['title']} {video['text']}"),
                                  "captions": bool(video["text"])})
     return budget
 

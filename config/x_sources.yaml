@@ -26,6 +26,11 @@ accounts:
   - {handle: CryptoHayes, group: crypto}
   - {handle: cz_binance, group: crypto}
   - {handle: solana, group: crypto}
+  # AI agents and the labs building them
+  - {handle: AnthropicAI, group: ai}
+  - {handle: OpenAI, group: ai}
+  - {handle: karpathy, group: ai}
+  - {handle: huggingface, group: ai}
   # memes
   - {handle: elonmusk, group: memes}         # moves DOGE when he posts about it
   - {handle: dogecoin, group: memes}

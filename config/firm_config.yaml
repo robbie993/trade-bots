@@ -247,8 +247,8 @@ firms:
 # from live market structure.
 # =========================================================================
 scanners:
-  example:
-    bot: bots/example_scanner.py
+  # (bots/example_scanner.py is the template for writing a scanner. It was listed
+  # here and voted in live debates on every bar; a demo has no business doing that.)
   # The live fleet, heard rather than re-implemented. fleet_sync (on a machine
   # logged in to Railway) and the worker's once-a-bar account read put their
   # output in the ledger; these read it. Each is silent when its data is stale.

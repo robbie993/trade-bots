@@ -11,7 +11,7 @@ contract in the shared ledger (migration 028).
 * **a new heir** asks what to change, given exactly why its predecessor died;
 * **a funded firm that has gone quiet** — no fill in three days — asks why it
   is finding nothing to do;
-* **every funded firm, weekly**, asks for a read on its own numbers.
+* **every funded firm, daily**, asks for a read on its own numbers.
 
 At most `MAX_OPEN` questions wait unanswered at a time, so a village with no
 answerer running stops asking rather than piling up a backlog.
@@ -241,11 +241,22 @@ def _research_review(eco, now: datetime) -> list:
                           "stars_or_likes": r.get("score"),
                           "about": (r.get("title") or "")[:200],
                           "detail": r.get("detail")})
+    # Ideas the social and video watchers tagged (strategies, AI agents,
+    # village-like systems): not calls, so they never vote, but worth a look.
+    for source in ("reddit", "youtube", "instagram", "x", "tiktok"):
+        for r in intel.recent(eco.db, source, limit=40):
+            topics = (r.get("detail") or {}).get("topics") or []
+            if topics:
+                finds.append({"source": source, "name": r["item_key"], "url": r.get("url"),
+                              "topics": topics, "about": (r.get("title") or "")[:240]})
+    finds = finds[:40]
     if not finds:
         return []
     q = ask(eco.db, "village", "research",
-            "These are the newest GitHub repositories and Hugging Face models and "
-            "datasets the village's scout found. For each, is it worth testing here, "
+            "These are the newest GitHub repositories, Hugging Face models and datasets, "
+            "and posts and videos about trading strategies, AI agents (Jarvis-style "
+            "assistants, trading bots) and multi-agent systems like this village, that "
+            "the village's scouts found. For each, is it worth testing here, "
             "and if so what exactly would we test and how would we know it worked? "
             "Flag anything that looks like a scam, a malware lure, or survivorship-"
             "biased backtesting. Be brief per item; most will be 'skip'.",
@@ -302,9 +313,9 @@ def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
                 notes.append(f"{firm.firm_key} asked why it has gone quiet (#{q})")
 
         q = ask(eco.db, firm.firm_key, "review",
-                "Here is my week. What is your read on these numbers, and what one "
-                "thing would you look at first?",
-                profile, f"review:{firm.firm_key}:{week}")
+                "Here are my numbers today. What is your read, and what one thing "
+                "would you look at first?",
+                profile, f"review:{firm.firm_key}:{now.strftime('%Y-%m-%d')}")
         if q:
             notes.append(f"{firm.firm_key} asked for its weekly review (#{q})")
     return notes

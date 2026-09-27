@@ -127,3 +127,31 @@ def test_the_same_change_twice_is_one_proposal(ecosystem):
         qid = ask.ask(eco.db, firm.firm_key, "proposal", "genes?", {}, f"p:{i}")
         ask.answer(eco.db, qid, "claude", '{"changes": {"stop_loss_pct": 8}, "why": "w"}')
     assert len(proposals.recent(eco.db)) == 1
+
+
+def test_a_refused_proposal_goes_back_to_the_adviser_with_its_numbers(ecosystem, monkeypatch):
+    eco = ecosystem
+    pid = _pending(eco, {"fast_window": 5})
+    monkeypatch.setattr(eco.evolver, "trial", lambda *a, **k: {
+        "enough_holdout": True, "holdout_bars": 60, "fitted_before": Decimal("1"),
+        "fitted_after": Decimal("1"), "holdout_before": Decimal("2"),
+        "holdout_after": Decimal("1")})
+    proposals.test_one(eco, eco.market())
+    (q,) = [q for q in ask.open_questions(eco.db, limit=50) if q["dedupe_key"] == f"retry:{pid}"]
+    assert q["context"]["result"]["holdout_after"] == "1"
+    assert "refused" in q["question"]
+
+
+def test_retries_are_capped_per_firm_per_day(ecosystem, monkeypatch):
+    eco = ecosystem
+    monkeypatch.setattr(proposals, "RETRIES_PER_DAY", 1)
+    monkeypatch.setattr(eco.evolver, "trial", lambda *a, **k: {
+        "enough_holdout": True, "holdout_bars": 60, "fitted_before": Decimal("1"),
+        "fitted_after": Decimal("1"), "holdout_before": Decimal("2"),
+        "holdout_after": Decimal("1")})
+    _pending(eco, {"fast_window": 5})
+    _pending(eco, {"fast_window": 6})
+    proposals.test_one(eco, eco.market())
+    proposals.test_one(eco, eco.market())
+    retries = [q for q in ask.recent(eco.db, 50) if q["dedupe_key"].startswith("retry:")]
+    assert len(retries) == 1

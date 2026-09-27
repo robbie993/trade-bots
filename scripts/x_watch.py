@@ -41,6 +41,7 @@ from scripts.insta_watch import browser  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from scripts.video_watch import universe  # noqa: E402
 from src.trading import intel  # noqa: E402
+from src.trading.topics import tag  # noqa: E402
 
 CONFIG = REPO / "config" / "x_sources.yaml"
 STATE = REPO / "data" / "x_state.json"
@@ -181,7 +182,7 @@ def main(argv=None) -> int:
                          url=t["url"], symbols=sorted({c["symbol"] for c in t["calls"]}),
                          score=len(t["calls"]),
                          detail={"author": t["author"], "published": t["published"],
-                                 "calls": t["calls"]})
+                                 "calls": t["calls"], "topics": tag(t["text"])})
     pool = list(fresh)
     if db is not None:
         ids = {t["id"] for t in fresh}

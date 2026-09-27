@@ -69,3 +69,10 @@ def test_a_rate_limited_site_is_named_and_the_other_still_runs(db):
 
 def test_the_scout_is_off_unless_switched_on(ecosystem):
     assert ecosystem.repo_scout is None
+
+
+def test_it_also_looks_for_ai_agents_and_strategies():
+    from src.trading.repo_scout import github_queries
+
+    labels = [label for label, _ in github_queries()]
+    assert "ai agents: jarvis" in labels and "strategies" in labels

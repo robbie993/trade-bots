@@ -14,7 +14,7 @@ name on it, the same rule `scripts/research_scout.py` keeps for papers — and
 the strategy court is where that step already goes.
 
 No keys. GitHub's unauthenticated search allows ten queries a minute; this
-makes three an hour.
+makes seven an hour.
 
 Off unless `TRADE_REPO_SCOUT_ENABLED` is set.
 """
@@ -46,6 +46,13 @@ def github_queries() -> list:
         ("new: trading bots", f"topic:trading-bot created:>{_since(14)}"),
         ("active: quant frameworks",
          f"quantitative trading pushed:>{_since(7)} stars:>200"),
+        # What the operator asked the village to watch for as well: AI agents
+        # (Jarvis-style assistants and trading agents), multi-agent systems like
+        # the village, and trading strategies with published backtests.
+        ("ai agents: jarvis", f"jarvis ai agent pushed:>{_since(14)} stars:>50"),
+        ("ai agents: trading", f"llm trading agent pushed:>{_since(14)} stars:>30"),
+        ("multi-agent systems", f"multi-agent trading pushed:>{_since(30)} stars:>30"),
+        ("strategies", f"trading strategy backtest pushed:>{_since(14)} stars:>50"),
     ]
 
 

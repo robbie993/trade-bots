@@ -44,6 +44,7 @@ import yaml  # noqa: E402
 
 from scripts.video_watch import normalise, universe  # noqa: E402
 from src.trading import crowd, intel  # noqa: E402
+from src.trading.topics import tag  # noqa: E402
 
 CONFIG = REPO / "config" / "social_sources.yaml"
 SOURCE = "reddit"
@@ -157,7 +158,8 @@ def main(argv=None) -> int:
                          url=p["url"], symbols=sorted({c["symbol"] for c in p["calls"]}),
                          score=len(p["calls"]),
                          detail={"sub": p["sub"], "author": p["author"],
-                                 "published": p["published"], "calls": p["calls"]})
+                                 "published": p["published"], "calls": p["calls"],
+                                 "topics": tag(f"{p['title']} {p['text']}")})
     print(f"  {len(subs)} subreddits in one feed: {len(posts)} posts, {len(new)} new, "
           f"{sum(1 for p in new if p['calls'])} with calls")
 
