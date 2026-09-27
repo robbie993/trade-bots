@@ -82,6 +82,7 @@ pops up to be closed by accident), logging to `logs/`:
 | Village social watch | 30 min | `social_watch.py`: eleven subreddits from one public RSS feed, no account |
 | Village socials watch | 1 h | `insta_watch.py`, `x_watch.py`, `tiktok_watch.py` in turn, through the village browser |
 | Village answer questions | 1 h | `answer_questions.py`: Claude Code headless answers the firms' questions and proposals |
+| Village answer duck | 1 h | `answer_duck.py`: the second mind, DuckDuckGo's free AI chat (duck.ai) in the village browser, no account |
 
 **The village browser** is Edge with its own profile at
 `%LOCALAPPDATA%illage-browser`, signed in to Instagram, X and TikTok by the
