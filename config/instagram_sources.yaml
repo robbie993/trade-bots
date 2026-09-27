@@ -22,6 +22,7 @@ accounts:
   - {handle: investopedia, group: trading}
   - {handle: stocktwits, group: trading}
   - {handle: unusual_whales, group: trading}
+  - {handle: daytrading, group: trading}      # suggested by the operator
   # crypto
   - {handle: coindesk, group: crypto}
   - {handle: cointelegraph, group: crypto}
