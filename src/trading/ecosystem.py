@@ -143,6 +143,7 @@ class Ecosystem:
         self._news = None
         self._meme_radar = None
         self._repo_scout = None
+        self._paper_scout = None
         self._crypto_pulse = None
         self._shadow = None
         #: Which unpriceable symbols have already been reported on this bar.
@@ -283,6 +284,19 @@ class Ecosystem:
 
             self._crypto_pulse = CryptoPulse(self.signals)
         return self._crypto_pulse
+
+    @property
+    def paper_scout(self):
+        """arXiv and OpenAlex, every six hours, or None unless TRADE_PAPER_SCOUT_ENABLED."""
+        if self._paper_scout is None:
+            import os
+
+            if not os.environ.get("TRADE_PAPER_SCOUT_ENABLED", "").strip():
+                return None
+            from .paper_scout import PaperScout
+
+            self._paper_scout = PaperScout(self.db)
+        return self._paper_scout
 
     @property
     def news(self):
@@ -700,6 +714,11 @@ class Ecosystem:
                 report.signals.extend(self.crypto_pulse.run(market))
             except Exception as exc:  # noqa: BLE001 - a source, never a precondition
                 report.bot_notes.append(f"crypto pulse failed: {str(exc)[:160]}")
+        if self.paper_scout is not None:
+            try:
+                report.signals.extend(self.paper_scout.run())
+            except Exception as exc:  # noqa: BLE001 - research, never a precondition
+                report.bot_notes.append(f"paper scout failed: {str(exc)[:160]}")
         if self.repo_scout is not None:
             try:
                 report.signals.extend(self.repo_scout.run())

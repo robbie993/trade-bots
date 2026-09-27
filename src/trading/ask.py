@@ -235,6 +235,11 @@ def _research_review(eco, now: datetime) -> list:
     from . import intel
 
     finds = []
+    for r in intel.recent(eco.db, "papers", limit=12):
+        d = r.get("detail") or {}
+        finds.append({"source": "paper", "name": r.get("title"), "url": r.get("url"),
+                      "venue": d.get("venue"), "published": d.get("published"),
+                      "abstract": (d.get("abstract") or "")[:600]})
     for source in ("github", "huggingface_models", "huggingface_datasets"):
         for r in intel.recent(eco.db, source, limit=8):
             finds.append({"source": source, "name": r["item_key"], "url": r.get("url"),
@@ -259,7 +264,10 @@ def _research_review(eco, now: datetime) -> list:
             "the village's scouts found. For each, is it worth testing here, "
             "and if so what exactly would we test and how would we know it worked? "
             "Flag anything that looks like a scam, a malware lure, or survivorship-"
-            "biased backtesting. Be brief per item; most will be 'skip'.",
+            "biased backtesting. For papers, also say whether it is peer-reviewed or "
+            "a preprint, whether it shows real out-of-sample results, whether trading "
+            "costs would erase it, and whether its market conditions still hold. Be "
+            "brief per item; most will be 'skip'.",
             {"village": "paper-trading firms on Alpaca: US equities/ETFs and crypto "
                         "majors plus DOGE/SHIB/PEPE/WIF, 15-minute bars; strategies are "
                         "small genomes judged by a strategy court; no code from these "
