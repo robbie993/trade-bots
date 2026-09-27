@@ -155,3 +155,24 @@ def test_retries_are_capped_per_firm_per_day(ecosystem, monkeypatch):
     proposals.test_one(eco, eco.market())
     retries = [q for q in ask.recent(eco.db, 50) if q["dedupe_key"].startswith("retry:")]
     assert len(retries) == 1
+
+
+def test_a_proposal_tested_on_an_older_genome_is_retested_not_adopted(ecosystem, monkeypatch):
+    """Live 2026-09-27: two winners for one firm, the second overwrote the first."""
+    eco = ecosystem
+    firm = _firm(eco)
+    monkeypatch.setattr(eco.evolver, "trial", lambda *a, **k: {
+        "enough_holdout": True, "holdout_bars": 60, "fitted_before": Decimal("1"),
+        "fitted_after": Decimal("2"), "holdout_before": Decimal("1"),
+        "holdout_after": Decimal("3")})
+    first, second = _pending(eco, {"fast_window": 9}), _pending(eco, {"fast_window": 6})
+    proposals.test_one(eco, eco.market())
+    proposals.test_one(eco, eco.market())
+    a = eco.gate.get(eco.db.query_one("SELECT approval_id FROM ai_proposals WHERE id = ?", (first,))["approval_id"])
+    b = eco.gate.get(eco.db.query_one("SELECT approval_id FROM ai_proposals WHERE id = ?", (second,))["approval_id"])
+    proposals.adopt(eco, a.details, "the council")
+    note = proposals.adopt(eco, b.details, "the council")
+    assert "not adopted" in note
+    assert eco.store.get_firm(firm.firm_key).genome["fast_window"] == 9
+    row = eco.db.query_one("SELECT status FROM ai_proposals WHERE id = ?", (second,))
+    assert row["status"] == "awaiting_test"

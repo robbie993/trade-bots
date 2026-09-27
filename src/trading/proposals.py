@@ -156,6 +156,8 @@ def test_one(eco, market) -> Optional[str]:
 
     changes = json.loads(row["changes"])
     proposed = {**(firm.genome or {}), **changes}
+    # Record what it is being tested against, so adoption can tell if that moved.
+    eco.db.update("ai_proposals", row["id"], {"genome_before": json.dumps(firm.genome or {})})
     analysts = tuple((firm.genome or {}).get("analysts") or ("technical", "sentiment", "macro"))
     t = eco.evolver.trial(firm, market, proposed, analysts=analysts)
     values = {k: t[k] for k in ("fitted_before", "fitted_after", "holdout_before",
@@ -223,7 +225,24 @@ def adopt(eco, details: dict, approved_by: str) -> str:
     if row is None or firm is None:
         raise ValueError("the proposal or its firm no longer exists")
     changes = {k: v for k, v in json.loads(row["changes"]).items() if k in GENES}
-    genome = {**(firm.genome or {}), **changes}
+    # **Only adopt against the genome it was tested against.** Two proposals for
+    # one firm were each tested against the same incumbent, both won, both were
+    # granted — and the second adoption overwrote the first, leaving the firm
+    # on the weaker change (live, 2026-09-27: fast_window 9 won the held-out
+    # bars by 0.50, fast_window 6 by 0.03, and 6 is what stuck). If the firm's
+    # genes have moved since the test, the win no longer means anything: the
+    # proposal goes back to be tested against what the firm is now.
+    tested_on = json.loads(row.get("genome_before") or "{}")
+    current = firm.genome or {}
+    moved = [g for g in GENES if str(tested_on.get(g)) != str(current.get(g))]
+    if moved:
+        eco.db.update("ai_proposals", row["id"], {
+            "status": "awaiting_test", "tested_at": None,
+            "verdict": f"not adopted: {', '.join(moved)} changed since it was tested; re-testing",
+            "genome_before": json.dumps(current)})
+        return (f"proposal #{row['id']} for {firm.firm_key} not adopted: the firm changed "
+                "since it was tested, so it will be tested again")
+    genome = {**current, **changes}
     eco.store.update_firm_fields(firm.id, genome=json.dumps(genome, sort_keys=True))
     eco.store.record_event(
         "evolution",
