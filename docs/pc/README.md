@@ -67,26 +67,34 @@ evolver's look-counter is now a hard gate rather than a log line.
 measured against. Its Phase 0 is the priority, and three of its four items are
 still open.
 
-## What this PC does for the village (set up 2026-09-25)
+## What this PC does for the village (set up 2026-09-25, updated 2026-09-27)
 
 The village runs on Railway (`ai-village` project: `village-worker`,
 `village-web`, `Postgres`). This PC does the jobs that need a home connection,
-`railway login`, or Claude Code. Three Windows scheduled tasks, each a `.cmd`
-in `scripts/` that logs to `logs/`:
+`railway login`, Claude Code or a logged-in browser. Windows scheduled tasks,
+each a `.cmd` in `scripts/` run headless (`conhost --headless`, so no window
+pops up to be closed by accident), logging to `logs/`:
 
 | task | every | what |
 |---|---|---|
-| Village fleet sync | 30 min | `fleet_sync.py --to-railway`: every fleet bot's state file over `railway ssh` into `fleet_snapshots` |
-| Village video watch | 30 min | `video_watch.py --to-railway`: new uploads on `config/video_channels.yaml`, explicit calls into `youtube_calls` and `intel` |
-| Village answer questions | 2 h | `answer_questions.py --to-railway`: Claude Code headless answers the firms' questions |
+| Village fleet sync | 30 min | `fleet_sync.py --to-railway`: every fleet bot's state (incl. supercrypto) over `railway ssh` into `fleet_snapshots` |
+| Village video watch | 30 min | `video_watch.py`: YouTube channels in `config/video_channels.yaml`; captions, or the audio heard by Whisper when YouTube refuses them |
+| Village social watch | 30 min | `social_watch.py`: eleven subreddits from one public RSS feed, no account |
+| Village socials watch | 1 h | `insta_watch.py`, `x_watch.py`, `tiktok_watch.py` in turn, through the village browser |
+| Village answer questions | 1 h | `answer_questions.py`: Claude Code headless answers the firms' questions and proposals |
 
-None of them stores a password: the database URL is asked of Railway each run
-(through the Postgres service's public TCP proxy), and the Alpaca keys live only
-in Railway's variables. If a task's log shows `railway ... Unauthorized`, run
-`railway login` again in PowerShell.
+**The village browser** is Edge with its own profile at
+`%LOCALAPPDATA%illage-browser`, signed in to Instagram, X and TikTok by the
+operator by hand. The readers attach to it on port 9333; they never see a
+password. If a site signs it out or asks for a check, the reader stops and says
+so in `logs/socials_watch.log` — log in again in that window.
 
-Known state at hand-off: YouTube has rate-limited this PC's caption requests
-since the first burst on 2026-09-25 (lists and titles still load; captions
-429). Audio downloads work, and a Whisper fallback is next once its model can
-be downloaded (Hugging Face was unreachable from here that evening).
+**Whisper** (faster-whisper, base.en) lives in `~/.cache/village-whisper/base.en`.
+The Visual C++ runtime it needs was copied into its `ctranslate2` package folder.
 
+None of this stores a password: the database URL is asked of Railway each run,
+and the Alpaca keys live only in Railway's variables. If a log shows `railway ...
+Unauthorized`, run `railway login` again in PowerShell.
+
+**The tasks run only while this Windows user is logged in.** After a reboot,
+log in, and open nothing else: the tasks start on their own.
