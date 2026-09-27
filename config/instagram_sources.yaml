@@ -33,6 +33,31 @@ accounts:
   # memes
   - {handle: dogecoin, group: memes}
   - {handle: pepecoineth, group: memes}
+  # From the accounts @daytrading follows (operator's suggestion, 2026-09-27)
+  - {handle: hedgefundinvestor, group: trading}
+  - {handle: stockstoearn, group: trading}
+  - {handle: wallstreetintern, group: trading}
+  - {handle: litquidity, group: trading}
+  - {handle: stocksharks, group: trading}
+  - {handle: charan.invests, group: trading}
+  - {handle: portfoliobreakdown, group: trading}
+  - {handle: wehavethedata, group: trading}
+  - {handle: wealth, group: trading}
+  - {handle: richkleiman, group: trading}
+  - {handle: publicapp, group: trading}
+  - {handle: notjeromepowell, group: trading}
+  - {handle: tryfomo, group: memes}
+  - {handle: orangieyt, group: memes}
+  - {handle: coingrams, group: crypto}
+  - {handle: watcher.guru, group: news}
+  - {handle: polymarket, group: prediction}
+  - {handle: polymarketmoney, group: prediction}
+  - {handle: artificialintelligenceee, group: ai}
+  - {handle: ycombinator, group: ai}
+  - {handle: mytechceo, group: ai}
+  - {handle: lovable.dev, group: ai}
+  - {handle: robotic, group: ai}
+  - {handle: 1x.technologies, group: ai}
 
 # Follows per run while seeding, and seconds between them. A new account that
 # follows twenty accounts in a minute looks like what it is.
