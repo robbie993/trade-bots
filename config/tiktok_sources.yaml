@@ -1,0 +1,26 @@
+# TikTok accounts the village account follows and reads (scripts/tiktok_watch.py).
+#
+# TikTok is mostly speech, so the reader keeps each video's caption AND a
+# transcript of what is said (the same Whisper model the YouTube watcher uses).
+# Each handle is opened before it is followed; a missing one is skipped. Edit freely.
+accounts:
+  - {handle: cnbc, group: news}
+  - {handle: bloombergbusiness, group: news}
+  - {handle: yahoofinance, group: news}
+  - {handle: wsj, group: news}
+  - {handle: unusual_whales, group: trading}
+  - {handle: investopedia, group: trading}
+  - {handle: coindesk, group: crypto}
+  - {handle: cointelegraph, group: crypto}
+  - {handle: binance, group: crypto}
+  - {handle: coinbase, group: crypto}
+
+follows_per_run: 3
+follow_pause_s: 60
+
+# Newest videos looked at per profile, profiles per run, and the longest video
+# worth transcribing (seconds). Calls older than max_age_hours stop voting.
+videos_per_profile: 3
+profiles_per_run: 4
+max_video_s: 600
+max_age_hours: 24
