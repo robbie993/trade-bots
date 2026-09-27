@@ -426,7 +426,7 @@ each one exists.
 | `PORT` | the platform | what the web service listens on. Railway sets it |
 
 The worker's outside sources are each off until switched on, because each one
-reaches the open internet on its own. All five are on for the Railway worker:
+reaches the open internet on its own. All six are on for the Railway worker:
 
 | variable | what it turns on |
 |---|---|
@@ -435,6 +435,7 @@ reaches the open internet on its own. All five are on for the Railway worker:
 | `TRADE_CRYPTO_PULSE_ENABLED` | Hyperliquid funding and open interest, Fear & Greed, total market cap, as btcc reads them (`crypto_pulse.py`) |
 | `TRADE_REPO_SCOUT_ENABLED` | hourly GitHub and Hugging Face finds, recorded and never run (`repo_scout.py`) |
 | `TRADE_ASK_ENABLED` | firms file questions for outside minds (`ask.py`); answered from the operator's PC |
+| `TRADE_PAPER_SCOUT_ENABLED` | every six hours, new arXiv and OpenAlex papers on trading, markets and AI agents (`paper_scout.py`) |
 
 `TRADE_HISTORY_DAYS=720` is required on a 15-minute bar. It is a bar count on
 intraday bars, and evolution's split needs a 90-bar warmup and a 150-bar purge
