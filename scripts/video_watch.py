@@ -229,6 +229,8 @@ def main(argv=None) -> int:
     ap.add_argument("--to-railway", action="store_true", help="write to the village's Railway Postgres")
     ap.add_argument("--database-url", default="", help="write to this database instead")
     ap.add_argument("--dry-run", action="store_true", help="read and print; write nothing")
+    ap.add_argument("--video", action="append", default=[],
+                    help="read this video (URL or id) too; repeatable. For links the operator sends.")
     args = ap.parse_args(argv)
 
     cfg = yaml.safe_load(CONFIG.read_text()) or {}
@@ -248,6 +250,12 @@ def main(argv=None) -> int:
 
     read, failed = [], []
     budget = int(cfg.get("max_new_per_run", MAX_NEW_PER_RUN))
+    # Videos the operator sent by hand come first and do not use the budget.
+    sent = [re.search(r"(?:v=|youtu\.be/|/live/|/shorts/)?([A-Za-z0-9_-]{11})", v).group(1)
+            for v in args.video]
+    if sent:
+        _read_channel({"handle": "sent-by-operator", "group": "operator"},
+                      sent, seen, symbols, db, read, failed, len(sent))
     try:
         for ch in cfg.get("channels") or []:
             handle = ch["handle"]

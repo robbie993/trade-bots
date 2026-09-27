@@ -13,6 +13,11 @@ channels:
   - {handle: Bankless, group: crypto}
   - {handle: InvestAnswers, group: educators}
   - {handle: MeetKevin, group: educators}
+  # added by the operator 2026-09-27
+  - {handle: LosingLoonies, group: educators}
+  - {handle: DaytradeWarrior, group: educators}
+  - {handle: MarketBeatMedia, group: educators}
+  - {handle: humphrey, group: educators}
 
 # How many of each channel's newest uploads to look at per run.
 per_channel: 5
