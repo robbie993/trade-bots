@@ -1,0 +1,38 @@
+# X accounts the village account follows and reads (scripts/x_watch.py).
+#
+# The reader reads the Following timeline only, so these are exactly the voices
+# the village hears. Each handle is opened before it is followed; one that does
+# not exist or is suspended is recorded as missing and skipped. Edit freely.
+accounts:
+  # fast market news
+  - {handle: DeItaone, group: news}          # Walter Bloomberg: headlines as they cross
+  - {handle: unusual_whales, group: news}
+  - {handle: zerohedge, group: news}
+  - {handle: WatcherGuru, group: news}
+  - {handle: FirstSquawk, group: news}
+  - {handle: Newsquawk, group: news}
+  - {handle: business, group: news}          # Bloomberg
+  - {handle: CNBC, group: news}
+  - {handle: WSJmarkets, group: news}
+  - {handle: TheStalwart, group: news}       # Joe Weisenthal
+  # traders and analysts
+  - {handle: KobeissiLetter, group: trading}
+  - {handle: charliebilello, group: trading}
+  - {handle: markminervini, group: trading}
+  - {handle: MacroCharts, group: trading}
+  # crypto
+  - {handle: saylor, group: crypto}
+  - {handle: APompliano, group: crypto}
+  - {handle: CryptoHayes, group: crypto}
+  - {handle: cz_binance, group: crypto}
+  - {handle: solana, group: crypto}
+  # memes
+  - {handle: elonmusk, group: memes}         # moves DOGE when he posts about it
+  - {handle: dogecoin, group: memes}
+
+follows_per_run: 4
+follow_pause_s: 45
+
+# Tweets read from the Following timeline per run, and how old a call may be.
+tweets_per_run: 60
+max_age_hours: 24

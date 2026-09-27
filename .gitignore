@@ -123,3 +123,4 @@ data/ai_queue/
 
 # Which Instagram accounts the village account has followed (scripts/insta_watch.py).
 data/instagram_state.json
+data/x_state.json
