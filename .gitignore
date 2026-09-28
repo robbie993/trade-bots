@@ -79,6 +79,7 @@ bots/*
 !bots/astral_vs_*.py
 !bots/astral_run_*.py
 !bots/astral_vt_*.py
+!bots/astral_bk_*.py
 !bots/atlas.py
 !bots/btcc.py
 !bots/coinbase.py

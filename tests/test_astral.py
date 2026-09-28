@@ -177,7 +177,7 @@ def test_astral_is_not_in_the_village_yet():
 from pathlib import Path  # noqa: E402
 
 VARIANTS = sorted(str(p).replace("\\", "/") for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py",
-                                   "astral_vt_*.py")
+                                   "astral_vt_*.py", "astral_bk_*.py")
                   for p in Path("bots").glob(pattern))
 
 
@@ -193,6 +193,7 @@ def test_there_are_ten_of_each_iteration():
     assert sum("astral_vs_" in v for v in VARIANTS) == 10, VARIANTS
     assert sum("astral_run_" in v for v in VARIANTS) == 10, VARIANTS
     assert sum("astral_vt_" in v for v in VARIANTS) == 10, VARIANTS
+    assert sum("astral_bk_" in v for v in VARIANTS) == 10, VARIANTS
 
 
 def test_with_a_trail_a_winner_survives_a_momentum_turn(core):
