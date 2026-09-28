@@ -264,3 +264,115 @@ def test_a_backtest_runs_the_firms_bot_not_the_pod(monkeypatch):
         risk_limit=Decimal("0.2"), strategy="bot:bots/vol_rotation/08_crypto_majors.py",
     )
     assert result.trades > 0
+
+
+# =========================================================================
+# take profit
+# =========================================================================
+from src.trading import take_profit  # noqa: E402
+
+TP_BOTS = sorted((REPO / "bots" / "vol_rotation_tp").glob("*.py"))
+
+
+def _tp(mode, **extra):
+    return vol_rotation.Params(target_vol=10.0, take_profit=mode, **extra)
+
+
+def _rally(n=200, drift=0.002, last=None):
+    return _series("AAA", drift, n=n, last=last)
+
+
+def test_there_are_ten_take_profit_iterations_and_each_loads():
+    assert len(TP_BOTS) == 10
+    modes = set()
+    for path in TP_BOTS:
+        params = adapter.load(path).__globals__["PARAMS"]
+        vol_rotation.Params.from_mapping(params)        # every name is a real one
+        modes.add(params["take_profit"])
+    assert modes == set(take_profit.MODES)       # ten different ideas, not one ten times
+
+
+def test_an_unknown_take_profit_is_refused():
+    with pytest.raises(ValueError, match="take_profit"):
+        vol_rotation.Params.from_mapping({"take_profit": "moon"})
+
+
+def test_a_winner_short_of_its_target_ignores_the_soft_exits():
+    """Negative momentum would sell this without a take profit. With one, it holds."""
+    bars = _series("AAA", -0.002)
+    entry = float(bars[-1].close) * 0.5              # bought far lower: deep in profit
+    ctx = _context({"AAA": bars}, held={"AAA": 40})
+    ctx._positions["AAA"] = adapter.Holding("AAA", Decimal("40"), Decimal(str(entry)))
+    assert _by(vol_rotation.propose(ctx, P), "AAA", "sell")                 # no TP: out
+    assert not _by(vol_rotation.propose(ctx, _tp("atr_target", tp_atr=1000.0)), "AAA", "sell")
+
+
+def test_a_loser_still_gets_every_original_exit():
+    bars = _series("AAA", -0.002)
+    entry = float(bars[-1].close) * 2                # bought far higher: underwater
+    ctx = _context({"AAA": bars}, held={"AAA": 40})
+    ctx._positions["AAA"] = adapter.Holding("AAA", Decimal("40"), Decimal(str(entry)))
+    sells = _by(vol_rotation.propose(ctx, _tp("atr_target")), "AAA", "sell")
+    assert sells and "all out" in sells[0]["rationale"]
+
+
+def test_a_target_that_is_reached_sells_everything():
+    bars = _rally()
+    entry = float(bars[-1].close) * 0.9
+    ctx = _context({"AAA": bars}, held={"AAA": 40})
+    ctx._positions["AAA"] = adapter.Holding("AAA", Decimal("40"), Decimal(str(entry)))
+    sells = _by(vol_rotation.propose(ctx, _tp("atr_target", tp_atr=1.0)), "AAA", "sell")
+    assert float(sells[0]["quantity"]) == 40 and "take profit" in sells[0]["rationale"]
+
+
+def test_r_multiple_stops_out_under_the_swing_low():
+    """1R is entry to the swing low, so the stop is the swing low itself."""
+    bars = _series("AAA", 0.0)
+    low = take_profit.lowest(bars, 128)
+    entry = min(float(b.close) for b in bars[-4:])   # the trade has closed above it
+    reading = vol_rotation.read("AAA", bars, P)
+    held = take_profit.decide(bars, entry, reading, _tp("r_multiple"), 1000, 3000)
+    assert held.sell_fraction == 0.0
+    assert held.target > entry + 6 * 1.5 * take_profit.atr(bars, 32) * 0.99
+
+    crash = Bar(symbol="AAA", as_of=bars[-1].as_of + timedelta(minutes=15),
+                open=bars[-1].close, high=bars[-1].close,
+                low=Decimal(str(round(low * 0.97, 4))), close=Decimal(str(round(low * 0.98, 4))),
+                volume=Decimal(1000))
+    broken = bars + [crash]
+    stopped = take_profit.decide(broken, entry, vol_rotation.read("AAA", broken, P),
+                                 _tp("r_multiple"), 1000, 3000)
+    assert stopped.sell_fraction == 1.0 and "stop" in stopped.why
+
+
+def test_the_ladder_takes_a_third_off_then_stops_adding():
+    bars = _rally()
+    a = take_profit.atr(bars, 32)
+    p = _tp("ladder", tp_r=2.0, tp_stop_atr=1.0)     # rungs at 1R and 2R
+    price = float(bars[-1].close)
+    reading = vol_rotation.read("AAA", bars, p)
+    first_rung = take_profit.decide(bars, price - 1.5 * a, reading, p, 3000, 3000)
+    assert first_rung.sell_fraction == pytest.approx(1 / 3, rel=0.01)
+    assert first_rung.allow_adds is False
+
+
+def test_a_level_is_measured_from_before_the_run():
+    """The first swing_high measured over recent bars; the rally moved its own target."""
+    bars = _series("AAA", 0.0, n=100) + [
+        Bar(symbol="AAA", as_of=START + timedelta(minutes=15 * (100 + i)),
+            open=Decimal(100 + i), high=Decimal(101 + i), low=Decimal(99 + i),
+            close=Decimal(100 + i), volume=Decimal(1000))
+        for i in range(1, 30)
+    ]
+    base = take_profit.before_the_run(bars, entry=101.0)
+    assert float(base[-1].close) <= 101.0
+    assert take_profit.highest(base, 240) < take_profit.highest(bars, 240)
+
+
+def test_every_rule_answers_on_real_looking_bars():
+    bars = _rally(last=(0.99, 5000))
+    reading = vol_rotation.read("AAA", bars, P)
+    entry = float(bars[-1].close) * 0.98
+    for mode in take_profit.MODES:
+        decision = take_profit.decide(bars, entry, reading, _tp(mode), 3000, 3000)
+        assert 0.0 <= decision.sell_fraction <= 1.0, mode

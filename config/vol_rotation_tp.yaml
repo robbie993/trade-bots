@@ -1,0 +1,97 @@
+# Ten take-profit iterations of the Treasuries rotation bot. See
+# bots/vol_rotation_tp/README.md. Same settings as config/vol_rotation.yaml:
+#
+#   export TRADE_FIRMS_CONFIG=config/vol_rotation_tp.yaml
+#   export TRADE_BAR_TIMEFRAME=15m TRADE_TICK_INTERVAL_S=900 TRADE_HISTORY_DAYS=1500
+#   python -m src.main trade init && python -m src.main trade backtest
+
+firms:
+  vrtp_atr_target:
+    name: "Treasuries TP: ATR Target"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp01_atr_target.py
+
+  vrtp_vol_target:
+    name: "Treasuries TP: Volatility Target"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp02_vol_target.py
+
+  vrtp_r_multiple:
+    name: "Treasuries TP: 8R Target"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp03_r_multiple.py
+
+  vrtp_swing_high:
+    name: "Treasuries TP: Swing High Breakout"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp04_swing_high.py
+
+  vrtp_measured_move:
+    name: "Treasuries TP: Measured Move"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp05_measured_move.py
+
+  vrtp_vwap_band:
+    name: "Treasuries TP: VWAP Band"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp06_vwap_band.py
+
+  vrtp_chandelier:
+    name: "Treasuries TP: Chandelier Trail"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp07_chandelier.py
+
+  vrtp_ladder:
+    name: "Treasuries TP: Profit Ladder"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp08_ladder.py
+
+  vrtp_volume_climax:
+    name: "Treasuries TP: Volume Climax"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp09_volume_climax.py
+
+  vrtp_fib_extension:
+    name: "Treasuries TP: Fibonacci Extension"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation_tp/tp10_fib_extension.py

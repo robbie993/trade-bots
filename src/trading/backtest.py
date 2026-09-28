@@ -46,6 +46,24 @@ class BacktestResult:
     fees: Decimal = ZERO
     equity_curve: list = field(default_factory=list)
     bars: int = 0
+    # Every realised P&L, one per closing fill — a sale in tranches is
+    # several. What a take-profit rule is judged on: how big the wins get.
+    realized: list = field(default_factory=list)
+
+    @property
+    def average_win(self) -> Optional[Decimal]:
+        wins = [D(x) for x in self.realized if D(x) > 0]
+        return money(sum(wins, ZERO) / len(wins)) if wins else None
+
+    @property
+    def average_loss(self) -> Optional[Decimal]:
+        losses = [D(x) for x in self.realized if D(x) < 0]
+        return money(sum(losses, ZERO) / len(losses)) if losses else None
+
+    @property
+    def largest_win(self) -> Optional[Decimal]:
+        wins = [D(x) for x in self.realized if D(x) > 0]
+        return max(wins) if wins else None
 
     @property
     def fitness(self) -> Decimal:
@@ -177,6 +195,7 @@ class Backtester:
             fees=fees,
             equity_curve=curve,
             bars=len(curve),
+            realized=realized,
         )
 
 

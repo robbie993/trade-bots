@@ -1,4 +1,7 @@
-"""Write bots/vol_rotation/ASTRAL.md from the ten bots' own parameters.
+"""Write ASTRAL.md for the rotation bots from their own parameters.
+
+One file per folder: bots/vol_rotation/ (the ten groups) and
+bots/vol_rotation_tp/ (ten take-profit iterations of the Treasuries bot).
 
 Astral (heyastral.ai) builds a strategy from a plain-English description, so
 each bot becomes one self-contained prompt with every number spelled out.
@@ -13,7 +16,6 @@ from __future__ import annotations
 import ast
 import importlib.util
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -21,8 +23,15 @@ sys.path.insert(0, str(REPO))
 
 from src.trading import vol_rotation  # noqa: E402
 
-BOTS = REPO / "bots" / "vol_rotation"
-OUT = BOTS / "ASTRAL.md"
+HEADINGS = {
+    "vol_rotation": "The ten bots, as Astral prompts",
+    "vol_rotation_tp": "The ten take-profit iterations, as Astral prompts",
+}
+
+FOLDERS = {
+    REPO / "bots" / "vol_rotation": "Vol Rotation",
+    REPO / "bots" / "vol_rotation_tp": "Treasuries TP",
+}
 
 
 def _module(path: Path):
@@ -43,13 +52,75 @@ def _about(path: Path) -> str:
     return " ".join(doc.split("\n\n")[1].split())
 
 
-def prompt(title: str, universe: list, p: vol_rotation.Params) -> str:
+def take_profit_rules(p: vol_rotation.Params) -> str:
+    """The take-profit section of a prompt, or nothing when there is none."""
+    if not p.take_profit:
+        return ""
+    atr = f"ATR = average true range over the last {p.atr_window} bars."
+    trail = (f"trailing stop = highest high of the last {p.tp_lookback} bars minus "
+             f"{p.tp_trail_atr:g} x ATR")
+    before = ("measured over the bars up to the last close at or below the average "
+              "entry price (the bars before the current run up), not over the rally itself")
+    rule = {
+        "atr_target": f"Sell the whole position when close >= average entry + {p.tp_atr:g} x ATR.",
+        "vol_target": (
+            f"Sell the whole position when close >= average entry x exp({p.tp_sigma:g} x "
+            f"per-bar volatility x sqrt({p.tp_horizon})), per-bar volatility being the "
+            "short volatility above."),
+        "r_multiple": (
+            f"Swing low = lowest low of the last {p.tp_lookback} bars, measured over the "
+            "bars before the most recent run above the average entry price, anchored to the "
+            "last bar that closed above entry, so the stop does not move down as price falls. "
+            f"Risk (1R) = max(average entry - swing low, {p.tp_stop_atr:g} x ATR); if no bar "
+            f"has closed above entry yet, 1R = {p.tp_stop_atr:g} x ATR. Sell the whole "
+            f"position when close >= average entry + {p.tp_r:g}R. Stop: sell the whole "
+            "position when close <= average entry - 1R."),
+        "swing_high": (
+            f"Resistance = highest high of the last {p.tp_lookback} bars, {before}. Sell "
+            f"the whole position when close >= max(resistance, average entry) + "
+            f"{p.tp_atr:g} x ATR."),
+        "measured_move": (
+            f"Range = highest high minus lowest low of the last {p.tp_lookback} bars, "
+            f"{before}. Sell the whole position when close >= average entry + "
+            f"{p.tp_mult:g} x range."),
+        "vwap_band": (
+            f"Band = VWAP of the last {p.tp_lookback} bars + {p.tp_sigma:g} x the standard "
+            "deviation of their closes around that VWAP. Sell the whole position when "
+            "close >= max(band, average entry + 2 x ATR)."),
+        "chandelier": (
+            f"No fixed target. Once close >= average entry + {p.tp_arm_atr:g} x ATR, sell "
+            f"the whole position when close < {trail}."),
+        "ladder": (
+            f"Risk (1R) = {p.tp_stop_atr:g} x ATR. At close >= average entry + "
+            f"{p.tp_r / 2:g}R, cut the position to 2/3 of a full position. At close >= "
+            f"average entry + {p.tp_r:g}R, cut it to 1/3, and sell that last third when "
+            f"close < {trail}. Once the first rung is reached, stop scaling in."),
+        "volume_climax": (
+            f"Once close >= average entry + {p.tp_arm_atr:g} x ATR: sell the whole position "
+            f"on an up bar with RVOL >= {p.tp_climax_rvol:g} (a volume climax), or when "
+            f"close < {trail}."),
+        "fib_extension": (
+            f"Swing low = lowest low of the last {p.tp_lookback} bars. Leg = average entry "
+            f"- swing low (at least 1 ATR). Sell the whole position when close >= swing "
+            f"low + {p.tp_mult:g} x leg."),
+    }[p.take_profit]
+    return f"""
+
+Take profit (this overrides the scaling-out rules above):
+- {atr}
+- {rule}
+- While close > average entry price, ignore every scaling-out rule above (rotation, distribution, negative score, vol spike, trim). Only this take profit closes a winning position.
+- When close falls back to or below the average entry price, all the scaling-out rules above apply again.
+- A winning position held after it stops being a target still counts toward the number of tickers held, so do not open a new ticker in its place until it is closed."""
+
+
+def prompt(title: str, universe: list, p: vol_rotation.Params, prefix: str = "Vol Rotation") -> str:
     crypto = p.bars_per_year == vol_rotation.CRYPTO_15M_BARS_PER_YEAR
     session = ("24/7, every 15-minute bar" if crypto
                else "regular US market hours only (9:30-16:00 ET), 15-minute bars")
     held = "the single best-ranked ticker" if p.hold == 1 else f"the top {p.hold} ranked tickers"
     tickers = ", ".join(universe)
-    return f"""Build a volatility rotation strategy called "Vol Rotation: {title}".
+    return f"""Build a volatility rotation strategy called "{prefix}: {title}".
 
 Universe: {tickers}. Long only, no leverage, no shorting. Timeframe: {session}.
 Evaluate on each bar close.
@@ -85,22 +156,22 @@ Scaling out:
 - If a holding is worth more than 110% of its full position (volatility rose), trim it back to the full position.
 - If a sale would leave less than a quarter of a tranche, sell the whole position.
 
-Process sells before buys on each bar. Backtest with commissions and slippage on."""
+Process sells before buys on each bar. Backtest with commissions and slippage on.{take_profit_rules(p)}"""
 
 
-def main() -> int:
+def write(folder: Path, prefix: str) -> int:
     sections = []
-    for path in sorted(BOTS.glob("*.py")):
+    for path in sorted(folder.glob("*.py")):
         bot = _module(path)
         universe = bot.UNIVERSE
         params = vol_rotation.Params.from_mapping(bot.PARAMS)
         title = _title(path)
         sections.append(
-            f"## {path.stem[:2]}. {title}\n\n{_about(path)}\n\n"
-            f"Repo version: `bots/vol_rotation/{path.name}`\n\n"
-            "```text\n" + prompt(title, universe, params) + "\n```\n"
+            f"## {''.join(c for c in path.stem if c.isdigit())[:2]}. {title}\n\n{_about(path)}\n\n"
+            f"Repo version: `{path.relative_to(REPO)}`\n\n"
+            "```text\n" + prompt(title, universe, params, prefix) + "\n```\n"
         )
-    header = """# The ten bots, as Astral prompts
+    header = f"""# {HEADINGS[folder.name]}
 
 Paste one block at a time into Astral's strategy builder (heyastral.ai). Each
 block is self-contained and describes exactly what the matching file in this
@@ -117,8 +188,15 @@ example by dropping the volume gate or reading "tranche" loosely. Its editor
 shows the rules it wrote, so check them against the block you pasted.
 
 """
-    OUT.write_text(header + "\n".join(sections))
-    print(f"wrote {OUT.relative_to(REPO)} ({len(sections)} strategies)")
+    out = folder / "ASTRAL.md"
+    out.write_text(header + "\n".join(sections))
+    print(f"wrote {out.relative_to(REPO)} ({len(sections)} strategies)")
+    return 0
+
+
+def main() -> int:
+    for folder, prefix in FOLDERS.items():
+        write(folder, prefix)
     return 0
 
 
