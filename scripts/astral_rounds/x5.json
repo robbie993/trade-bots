@@ -1,0 +1,14 @@
+{"round": "x5", "parent": "astral_x4_lighter_volume",
+ "note": "the best of round x4 (profit factor 0.98): laggard reversion with a lighter volume gate (1.0x a tranche, 2.0x for two).",
+ "variants": {
+  "stop5": {"title": "STOP AT 5 ATR.", "doc": "The wider stop that helped in round x4.", "params": {"STOP_ATRS": 5.0}},
+  "three": {"title": "THREE LAGGARDS.", "doc": "Three names at 27% instead of two at 40%.", "params": {"LEADERS": 3, "LEADER_WEIGHT": 0.27}},
+  "tight_basket": {"title": "CORRELATION 0.5.", "doc": "Only baskets correlated at 0.5 or more.", "params": {"MIN_CORRELATION": 0.5}},
+  "overshoot": {"title": "LET IT OVERSHOOT.", "doc": "Holds until +0.5 sigma.", "params": {"REVERT_EXIT_Z": 0.5}},
+  "stop5_three": {"title": "STOP 5 ATR, THREE LAGGARDS.", "doc": "Two of round x4's improvements together.", "params": {"STOP_ATRS": 5.0, "LEADERS": 3, "LEADER_WEIGHT": 0.27}},
+  "stop5_tight": {"title": "STOP 5 ATR, CORRELATION 0.5.", "doc": "Two of round x4's improvements together.", "params": {"STOP_ATRS": 5.0, "MIN_CORRELATION": 0.5}},
+  "stop5_three_tight": {"title": "STOP 5, THREE LAGGARDS, CORRELATION 0.5.", "doc": "Three of round x4's improvements together.", "params": {"STOP_ATRS": 5.0, "LEADERS": 3, "LEADER_WEIGHT": 0.27, "MIN_CORRELATION": 0.5}},
+  "all_four": {"title": "ALL FOUR.", "doc": "Stop 5 ATR, three laggards, correlation 0.5 and holding to +0.5 sigma.", "params": {"STOP_ATRS": 5.0, "LEADERS": 3, "LEADER_WEIGHT": 0.27, "MIN_CORRELATION": 0.5, "REVERT_EXIT_Z": 0.5}},
+  "stop5_overshoot": {"title": "STOP 5 ATR, OVERSHOOT.", "doc": "A wider stop and a later exit: room both ways.", "params": {"STOP_ATRS": 5.0, "REVERT_EXIT_Z": 0.5}},
+  "lightest_volume": {"title": "LIGHTEST VOLUME GATE.", "doc": "A tranche at 0.5x relative volume, two at 1.5x: lighter still, since lightening it was round x4's biggest gain.", "params": {"RVOL_ADD": 0.5, "RVOL_SURGE": 1.5}}
+ }}

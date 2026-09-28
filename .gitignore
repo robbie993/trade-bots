@@ -75,12 +75,7 @@ bots/*
 
 # -- the fleet ports, first-party --------------------------------------------
 !bots/astral.py
-!bots/astral_tp_*.py
-!bots/astral_vs_*.py
-!bots/astral_run_*.py
-!bots/astral_vt_*.py
-!bots/astral_bk_*.py
-!bots/astral_nx_*.py
+!bots/astral_*.py
 !bots/atlas.py
 !bots/btcc.py
 !bots/coinbase.py

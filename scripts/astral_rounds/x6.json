@@ -1,0 +1,14 @@
+{"round": "x6", "parent": "astral_x5_all_four",
+ "note": "the first profitable version on the search window (+$2,250, profit factor 1.24): laggard reversion, stop 5 ATR, three laggards, correlation 0.5, held to +0.5 sigma.",
+ "variants": {
+  "exit_1": {"title": "HOLD TO +1 SIGMA.", "doc": "The later exit was the biggest single gain in round x5; this holds to +1.0 sigma instead of +0.5.", "params": {"REVERT_EXIT_Z": 1.0}},
+  "exit_075": {"title": "HOLD TO +0.75 SIGMA.", "doc": "Halfway between the parent's +0.5 and +1.0.", "params": {"REVERT_EXIT_Z": 0.75}},
+  "stop6": {"title": "STOP AT 6 ATR.", "doc": "A little more room than the parent's 5.", "params": {"STOP_ATRS": 6.0}},
+  "stop4": {"title": "STOP AT 4 ATR.", "doc": "A little less room than the parent's 5.", "params": {"STOP_ATRS": 4.0}},
+  "corr06": {"title": "CORRELATION 0.6.", "doc": "Tighter baskets still.", "params": {"MIN_CORRELATION": 0.6}},
+  "four": {"title": "FOUR LAGGARDS.", "doc": "Four names at 20% each.", "params": {"LEADERS": 4, "LEADER_WEIGHT": 0.2}},
+  "deeper": {"title": "0.75 SIGMA BEHIND.", "doc": "Opens at -0.75 sigma rather than -0.5.", "params": {"MIN_ENTRY_Z": 0.75}},
+  "heavier_volume": {"title": "VOLUME GATE BACK TO 1.5X.", "doc": "Tests whether the lighter gate still helps with the other changes in place.", "params": {"RVOL_ADD": 1.5, "RVOL_SURGE": 2.5}},
+  "exit_1_stop6": {"title": "HOLD TO +1 SIGMA, STOP 6 ATR.", "doc": "More room both ways.", "params": {"REVERT_EXIT_Z": 1.0, "STOP_ATRS": 6.0}},
+  "fewer_doubles": {"title": "FEWER DOUBLE TRANCHES.", "doc": "Two tranches at once need 3.0x relative volume instead of 2.0x.", "params": {"RVOL_SURGE": 3.0}}
+ }}

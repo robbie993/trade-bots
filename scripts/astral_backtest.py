@@ -42,10 +42,7 @@ LOOKBACK = 250                     # what the village hands a bot
 # Per side, in basis points. The village's defaults for equities, and the
 # measured Alpaca crypto costs `firm_c_crypto` carries.
 COSTS = {"equity": (Decimal("2"), Decimal("5")), "crypto": (Decimal("25"), Decimal("5.3"))}
-STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py",
-                                                  "astral_vt_*.py", "astral_bk_*.py",
-                                                  "astral_nx_*.py")
-                                 for p in (REPO / "bots").glob(pattern))
+STRATEGIES = ["astral"] + sorted(p.stem for p in (REPO / "bots").glob("astral_*.py"))
 
 
 # =========================================================================
@@ -160,7 +157,7 @@ class Book:
 
 def _reason(rationale):
     """The exit rule that closed a trade, from the order's rationale."""
-    for name in ("take profit", "trailing stop", "stop", "momentum gone", "rotating out",
+    for name in ("take profit", "trailing stop", "stop", "momentum gone", "reverted", "rotating out",
                  "distribution"):
         if rationale.startswith(name):
             return name
@@ -169,16 +166,17 @@ def _reason(rationale):
 
 def replay(job):
     """One basket, every strategy, in lockstep over the basket's clock."""
-    name, symbols, rows = job
+    name, symbols, rows, strategies, start, end = job
     from src.trading import adapter
     from src.trading.adapter import Context, Holding
 
     import bots.astral as core
 
     _memoise(core)
-    bots = {"astral": core.propose}
-    for stem in STRATEGIES[1:]:
-        bots[stem] = adapter.load(REPO / "bots" / f"{stem}.py")
+    bots = {}
+    for stem in strategies:
+        bots[stem] = (core.propose if stem == "astral"
+                      else adapter.load(REPO / "bots" / f"{stem}.py"))
     # Each iteration imports `bots.astral`; loaded after the patch, they all
     # share this one memoised module.
 
@@ -186,7 +184,10 @@ def replay(job):
     kind = "crypto" if any("-" in s for s in symbols) else "equity"
     books = {k: Book(*COSTS[kind]) for k in bots}
     pending = {k: [] for k in bots}
-    clock = sorted({t for s in symbols for t in series[s].stamps})
+    # Earlier bars stay in the series as history; only the clock is cut, so a
+    # window that starts late still hands the bot a full lookback.
+    clock = sorted(t for t in {t for s in symbols for t in series[s].stamps}
+                   if start <= t <= end)
     curves = {k: [] for k in bots}
     peak = {k: START_CASH for k in bots}
     drawdown = {k: Decimal(0) for k in bots}
@@ -244,7 +245,11 @@ def replay(job):
                     pending[key].append(order)
 
     out = {}
-    last = {s: series[s].closes[-1] for s in symbols if series[s].closes}
+    last = {}
+    for s in symbols:
+        i = bisect.bisect_right(series[s].stamps, end) - 1
+        if i >= 0:
+            last[s] = series[s].closes[i]
     for key, book in books.items():
         final = book.cash + sum(q * last[s] for s, q in book.qty.items())
         pnls = [float(p) for _, p, _ in book.closed]
@@ -283,12 +288,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--json", type=Path, help="also write the results here")
+    parser.add_argument("--start", help="first day traded, YYYY-MM-DD (UTC)")
+    parser.add_argument("--end", help="last day traded, YYYY-MM-DD (UTC), inclusive")
+    parser.add_argument("--only", help="comma-separated strategy names or globs, "
+                                       "e.g. astral_vt_basket,astral_x1_*")
     args = parser.parse_args()
+
+    import fnmatch
+
+    strategies = STRATEGIES
+    if args.only:
+        wanted = [w.strip() for w in args.only.split(",") if w.strip()]
+        strategies = [k for k in STRATEGIES if any(fnmatch.fnmatch(k, w) for w in wanted)]
+    day = lambda text, extra=0: (datetime.strptime(text, "%Y-%m-%d")  # noqa: E731
+                                 .replace(tzinfo=timezone.utc).timestamp() + extra)
+    start = day(args.start) if args.start else float("-inf")
+    end = day(args.end, 86400 - 1) if args.end else float("inf")
 
     from bots.astral import BASKETS
 
     rows = fetch(sorted({s for names in BASKETS.values() for s in names}), args.refresh)
-    jobs = [(name, names, {s: rows[s] for s in names}) for name, names in BASKETS.items()]
+    jobs = [(name, names, {s: rows[s] for s in names}, strategies, start, end)
+            for name, names in BASKETS.items()]
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(replay, jobs))
 
@@ -301,11 +322,11 @@ def main():
     print(f"\n{'strategy':<30}{'trades':>7}{'win%':>7}{'P&L $':>11}{'return':>8}"
           f"{'avg win':>9}{'avg loss':>9}{'PF':>6}{'worst DD':>9}")
     report = {}
-    for key in STRATEGIES:
+    for key in strategies:
         baskets = per[key]
         pnls = [p for r in baskets.values() for p in r["pnls"]]
-        start = float(START_CASH) * len(baskets)
-        s = summarise(pnls, sum(r["final"] for r in baskets.values()), start)
+        capital = float(START_CASH) * len(baskets)
+        s = summarise(pnls, sum(r["final"] for r in baskets.values()), capital)
         s["worst_dd"] = max(r["max_dd"] for r in baskets.values())
         s["baskets"] = {n: summarise(r["pnls"], r["final"], float(START_CASH)) | {
             "max_dd": r["max_dd"], "open": r["open"], "fees": r["fees"]} for n, r in baskets.items()}
@@ -315,11 +336,11 @@ def main():
               f"{fmt(s['avg_loss'], ',.0f'):>9}{fmt(s['pf'], '.2f'):>6}"
               f"{s['worst_dd'] * 100:>8.1f}%")
 
-    reasons = ("take profit", "trailing stop", "stop", "momentum gone", "rotating out",
+    reasons = ("take profit", "trailing stop", "stop", "momentum gone", "reverted", "rotating out",
                "distribution")
     print("\nHow trades ended (count / win% / P&L $):")
     print(f"{'strategy':<30}" + "".join(f"{r:>22}" for r in reasons))
-    for key in STRATEGIES:
+    for key in strategies:
         exits = {}
         for r in per[key].values():
             for why, ps in r["exits"].items():
@@ -335,12 +356,13 @@ def main():
     print("\nReturn by basket:")
     names = list(BASKETS)
     print(f"{'strategy':<30}" + "".join(f"{n[:9]:>10}" for n in names))
-    for key in STRATEGIES:
+    for key in strategies:
         b = report[key]["baskets"]
         print(f"{key:<30}" + "".join(f"{b[n]['ret'] * 100:>9.1f}%" for n in names))
 
-    first = min(datetime.fromtimestamp(rows[s][0][0], tz=timezone.utc) for s in rows)
-    last = max(datetime.fromtimestamp(rows[s][-1][0], tz=timezone.utc) for s in rows)
+    stamps = [r[0] for s in rows for r in rows[s] if start <= r[0] <= end]
+    first = datetime.fromtimestamp(min(stamps), tz=timezone.utc)
+    last = datetime.fromtimestamp(max(stamps), tz=timezone.utc)
     print(f"\n{len(BASKETS)} baskets x $25,000 each, {first:%Y-%m-%d} to {last:%Y-%m-%d}, "
           "fills at next bar's open with fees and slippage.")
     if args.json:

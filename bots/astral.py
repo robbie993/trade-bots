@@ -155,6 +155,28 @@ EQUITY_BARS_PER_SESSION = 26
 CRYPTO_BARS_PER_SESSION = 96
 
 
+#: Every setting `run` reads, so an iteration can override any of them.
+SETTINGS = {
+    "LEADERS": LEADERS,
+    "MIN_CORRELATION": MIN_CORRELATION,
+    "MIN_SIZE_SCALE": MIN_SIZE_SCALE,
+    "LEADER_WEIGHT": LEADER_WEIGHT,
+    "TRANCHES": TRANCHES,
+    "RVOL_DISTRIBUTION": RVOL_DISTRIBUTION,
+    "STOP_ATRS": STOP_ATRS,
+    "RVOL_ADD": RVOL_ADD,
+    "MIN_PARTICIPATION": MIN_PARTICIPATION,
+    "MIN_ENTRY_Z": MIN_ENTRY_Z,
+    "MIN_VOL_EXPANSION": MIN_VOL_EXPANSION,
+    "RVOL_SURGE": RVOL_SURGE,
+    "ROTATE": True,
+    "DISTRIBUTION": True,
+    "MOMENTUM_EXIT": True,
+    "MODE": "momentum",      # or "reversion": buy the basket's laggards
+    "REVERT_EXIT_Z": 0.0,      # reversion: caught up once z is at least this
+}
+
+
 # =========================================================================
 # arithmetic
 # =========================================================================
@@ -365,7 +387,7 @@ def propose(context):
     return run(context)
 
 
-def run(context, take_profit=None, trail=None):
+def run(context, take_profit=None, trail=None, params=None, entry_filter=None):
     """The strategy. ``take_profit`` is how the astral_tp_* iterations differ.
 
     ``trail`` is ``(bars, atrs)`` or None, and only matters with a target. With
@@ -390,7 +412,15 @@ def run(context, take_profit=None, trail=None):
     The bot has no memory, so the ladder is recomputed every bar from the
     current average entry and the current volatility. Adding a tranche moves
     the entry, and the target moves with it.
+
+    ``params`` overrides any of the settings in ``SETTINGS`` for this call
+    only: thresholds, sizing, the stop, and three switches for the soft exits
+    (``ROTATE``, ``DISTRIBUTION``, ``MOMENTUM_EXIT``). ``entry_filter`` is
+    ``entry_filter(context, symbol, read, basket) -> bool`` and can veto a new
+    position; it never touches one already held. Both default to plain
+    Astral, so nothing that passes neither behaves any differently.
     """
+    cfg = dict(SETTINGS, **(params or {}))
     reads = {s: _read(context, s) for s in context.universe}
     live = {s: r for s, r in reads.items() if r is not None}
     if not live:
@@ -399,11 +429,19 @@ def run(context, take_profit=None, trail=None):
     correlation = _basket_correlation(context, list(live)) if len(live) > 1 else None
     basket_z = _mean([r["z"] for r in live.values()])
     median_vol = _median([r["slow_vol"] for r in live.values()])
-    ranked = sorted(live, key=lambda s: live[s]["score"], reverse=True)
-    leaders = {s for s in ranked[:LEADERS] if live[s]["score"] > 0}
+    # MODE "reversion" turns the rotation around: the names wanted are the
+    # basket's laggards, bought on a reversal bar and sold once caught up.
+    reversion = cfg["MODE"] == "reversion"
+    ranked = sorted(live, key=lambda s: live[s]["score"], reverse=not reversion)
+    if reversion:
+        leaders = {s for s in ranked[:cfg["LEADERS"]] if live[s]["score"] < 0}
+    else:
+        leaders = {s for s in ranked[:cfg["LEADERS"]] if live[s]["score"] > 0}
 
-    basket_ok = (correlation is not None and correlation >= MIN_CORRELATION
-                 and basket_z is not None and basket_z > 0)
+    # A laggard is only a laggard against a group that moves together, so
+    # reversion keeps the correlation gate and drops the "basket rising" one.
+    basket_ok = (correlation is not None and correlation >= cfg["MIN_CORRELATION"]
+                 and basket_z is not None and (reversion or basket_z > 0))
     basket_note = (f"basket corr {correlation:.2f}" if correlation is not None
                    else "basket corr unknown") + f", basket z {basket_z:+.2f}"
 
@@ -419,15 +457,16 @@ def run(context, take_profit=None, trail=None):
         if held < 0:
             continue                          # long only; a short is not ours
 
-        scale = min(1.0, max(MIN_SIZE_SCALE, median_vol / read["slow_vol"]))
-        full = context.equity * LEADER_WEIGHT * Decimal(str(round(scale, 4)))
-        tranche = full / TRANCHES
+        scale = min(1.0, max(cfg["MIN_SIZE_SCALE"], median_vol / read["slow_vol"]))
+        weight = Decimal(str(cfg["LEADER_WEIGHT"]))  # an override may be a float
+        full = context.equity * weight * Decimal(str(round(scale, 4)))
+        tranche = full / cfg["TRANCHES"]
         if tranche <= 0:
             continue
         tranche_qty = tranche / price
         held_value = held * price
         rvol = read["rvol"]
-        heavy = rvol is not None and rvol >= RVOL_DISTRIBUTION
+        heavy = rvol is not None and rvol >= cfg["RVOL_DISTRIBUTION"]
         tag = (f"z {read['z']:+.2f}, vol x{read['expansion']:.2f}, "
                + (f"rvol {rvol:.1f}" if rvol is not None else "no volume"))
 
@@ -444,8 +483,8 @@ def run(context, take_profit=None, trail=None):
         if held > 0:
             pnl = context.unrealized_pct(symbol)
             if (pnl is not None and read["atr_pct"]
-                    and float(pnl) <= -STOP_ATRS * read["atr_pct"] * 100):
-                sell(None, f"stop: {float(pnl):.2f}% is past {STOP_ATRS:g} ATR")
+                    and float(pnl) <= -cfg["STOP_ATRS"] * read["atr_pct"] * 100):
+                sell(None, f"stop: {float(pnl):.2f}% is past {cfg["STOP_ATRS"]:g} ATR")
                 continue
 
             ladder = _ladder(context, symbol, read, live, take_profit)
@@ -461,6 +500,15 @@ def run(context, take_profit=None, trail=None):
                              quantity=None if keep <= 0 else excess / price)
                     continue                  # past a target: no adding back
 
+            if reversion:
+                # A laggard is bought to catch up, and it has once its move
+                # is no longer negative. Rotation, distribution and the
+                # momentum exit all read a dip as a reason to sell, which is
+                # the opposite of this trade, so none of them apply.
+                if read["z"] >= cfg["REVERT_EXIT_Z"]:
+                    sell(None, "reverted: caught up with its basket")
+                continue
+
             # A winner short of its target is left to reach it.
             running = bool(ladder) and pnl is not None and pnl > 0
             if running and trail:
@@ -474,26 +522,30 @@ def run(context, take_profit=None, trail=None):
                     sell(None, f"trailing stop: {float(price):.2f} fell {atrs:g} ATR "
                                f"off the {bars}-bar high {peak:.2f}")
                     continue
-            elif read["z"] <= 0:
+            elif read["z"] <= 0 and cfg["MOMENTUM_EXIT"]:
                 sell(None, "momentum gone")
                 continue
-            if symbol not in leaders and not running:
+            if symbol not in leaders and not running and cfg["ROTATE"]:
                 sell(2 if heavy else 1, f"rotating out: ranked {ranked.index(symbol) + 1}")
                 continue
-            if heavy and not read["up_bar"] and not running:
+            if heavy and not read["up_bar"] and not running and cfg["DISTRIBUTION"]:
                 sell(1, "distribution: heavy volume on a down bar")
                 continue
 
         # -- scaling in --------------------------------------------------------
-        if symbol not in leaders or rvol is None or rvol < RVOL_ADD:
+        if symbol not in leaders or rvol is None or rvol < cfg["RVOL_ADD"]:
             continue
-        if not read["up_bar"] or (read["participation"] or 0) < MIN_PARTICIPATION:
+        if not read["up_bar"] or (read["participation"] or 0) < cfg["MIN_PARTICIPATION"]:
             continue
-        if held == 0 and not (basket_ok and read["z"] >= MIN_ENTRY_Z
-                              and read["expansion"] >= MIN_VOL_EXPANSION):
+        stretched = (read["z"] <= -cfg["MIN_ENTRY_Z"] if reversion
+                     else read["z"] >= cfg["MIN_ENTRY_Z"])
+        if held == 0 and not (basket_ok and stretched
+                              and read["expansion"] >= cfg["MIN_VOL_EXPANSION"]):
+            continue
+        if held == 0 and entry_filter is not None and not entry_filter(context, symbol, read, live):
             continue
 
-        n = 2 if rvol >= RVOL_SURGE else 1
+        n = 2 if rvol >= cfg["RVOL_SURGE"] else 1
         notional = min(tranche * n, full - held_value, cash)
         if notional < tranche / 4:
             continue                          # full, or nothing left to spend

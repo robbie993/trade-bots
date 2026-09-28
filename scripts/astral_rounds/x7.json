@@ -1,0 +1,14 @@
+{"round": "x7", "parent": "astral_x6_stop6",
+ "note": "the best of round x6 (+$2,957, profit factor 1.36): the x5 reversion with a 6 ATR stop.",
+ "variants": {
+  "corr06": {"title": "CORRELATION 0.6.", "doc": "Round x6's second-best change.", "params": {"MIN_CORRELATION": 0.6}},
+  "fewer_doubles": {"title": "FEWER DOUBLE TRANCHES.", "doc": "Two tranches need 3.0x relative volume.", "params": {"RVOL_SURGE": 3.0}},
+  "corr06_doubles": {"title": "CORRELATION 0.6, FEWER DOUBLES.", "doc": "Round x6's two other improvements together.", "params": {"MIN_CORRELATION": 0.6, "RVOL_SURGE": 3.0}},
+  "stop7": {"title": "STOP AT 7 ATR.", "doc": "Each step wider has helped so far: 3, 5, then 6.", "params": {"STOP_ATRS": 7.0}},
+  "stop8": {"title": "STOP AT 8 ATR.", "doc": "Wider again.", "params": {"STOP_ATRS": 8.0}},
+  "stop7_corr06": {"title": "STOP 7 ATR, CORRELATION 0.6.", "doc": "A wider stop in tighter baskets.", "params": {"STOP_ATRS": 7.0, "MIN_CORRELATION": 0.6}},
+  "corr07": {"title": "CORRELATION 0.7.", "doc": "Tighter baskets again.", "params": {"MIN_CORRELATION": 0.7}},
+  "exit_025": {"title": "HOLD TO +0.25 SIGMA.", "doc": "Holding longer hurt in round x6; this tries a shade shorter than the parent's +0.5.", "params": {"REVERT_EXIT_Z": 0.25}},
+  "all_three": {"title": "STOP 7, CORRELATION 0.6, FEWER DOUBLES.", "doc": "Every direction that has helped, one step further.", "params": {"STOP_ATRS": 7.0, "MIN_CORRELATION": 0.6, "RVOL_SURGE": 3.0}},
+  "two_laggards": {"title": "TWO LAGGARDS AT 40%.", "doc": "Back to two names at 40% each: fewer, larger positions with the new stop.", "params": {"LEADERS": 2, "LEADER_WEIGHT": 0.4}}
+ }}
