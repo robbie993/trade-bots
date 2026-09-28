@@ -570,3 +570,5 @@ def test_symbols_outside_the_universe_are_named_once_not_once_each():
     assert lines[1].startswith("12 symbol(s) outside the village's universe, dropped: S0, S1")
     assert lines[1].endswith("(+4 more)")
     assert _outside_in_one_line(["X: no score"]) == ["X: no score"]
+    twice = ["A is not in this scanner's universe"] * 2
+    assert _outside_in_one_line(twice) == ["1 symbol(s) outside the village's universe, dropped: A"]

@@ -541,7 +541,8 @@ def _outside_in_one_line(complaints: list, shown: int = 8) -> list:
     The fleet scanners relay the other bots' books and filings, which name
     dozens of symbols the village has no market for; one line each, every
     tick, buried the log. They are still dropped and still named, just once."""
-    outside = [c[: -len(OUTSIDE)] for c in complaints if c.endswith(OUTSIDE)]
+    # A filing list can name the same ticker twice; count and name it once.
+    outside = list(dict.fromkeys(c[: -len(OUTSIDE)] for c in complaints if c.endswith(OUTSIDE)))
     rest = [c for c in complaints if not c.endswith(OUTSIDE)]
     if outside:
         more = f" (+{len(outside) - shown} more)" if len(outside) > shown else ""
