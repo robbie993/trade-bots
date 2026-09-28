@@ -15,10 +15,16 @@ and skipping anything longer than `max_video_s`. Caption plus transcript go
 through the usual rule, `crowd.extract_calls`, one account one voice. Videos go
 to `intel` (source `tiktok`), the aggregate to the `tiktok_calls` snapshot.
 
-It also scrolls the For You page, one video at a time with a pause on
-each (`for_you_videos`, `for_you_dwell_s`; 0 turns it off), so what TikTok
-recommends to an account that follows markets people is read too, whoever
-posted it. Those videos are marked `for_you` in `intel`.
+It also scrolls the For You page, one video at a time (`for_you_videos`; 0 turns
+it off), so what TikTok recommends to an account that follows markets people is
+read too, whoever posted it. How long a video is watched is what For You learns
+from, so the scroll steers it: a video whose caption is about markets is watched
+to the end (up to `for_you_watch_max_s`), anything else is left after a second
+or two. Those videos are transcribed like the rest, and one is kept only if its
+caption or what is said is about markets (`topics.on_topic`) or makes a call;
+the rest are remembered as skipped. Kept ones are marked `for_you` in `intel`,
+and every kept video carries the start of what was said (`said`), which the
+daily research review reads.
 
 A verification page stops the run with a message; nothing tries to get past it.
 """
@@ -49,7 +55,7 @@ from scripts import video_watch  # noqa: E402
 from scripts.insta_watch import browser  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from src.trading import intel  # noqa: E402
-from src.trading.topics import tag  # noqa: E402
+from src.trading.topics import on_topic, tag  # noqa: E402
 
 CONFIG = REPO / "config" / "tiktok_sources.yaml"
 STATE = REPO / "data" / "tiktok_state.json"
@@ -118,25 +124,50 @@ def video_ids(page, handle: str, limit: int) -> list:
 
 # Each For You video is an <article data-scroll-index=N> that only fills in near
 # the screen. It carries no link to itself: the author is the avatar's /@handle
-# link and the video id is in the player's element id, xgwrapper-0-<id>.
-FOR_YOU_ITEMS = """() => [...document.querySelectorAll(
-    'article[data-e2e="recommend-list-item-container"]')].map(a => {
+# link and the video id is in the player's element id, xgwrapper-0-<id>. The
+# caption is its video-desc when that is there, else the article's own text.
+FOR_YOU_ITEM = """a => {
   const who = a.querySelector('a[href^="/@"]');
   const player = [...a.querySelectorAll('[id^="xgwrapper-"]')].map(e => e.id)[0] || '';
   const id = (player.match(/(\\d{15,})$/) || [])[1];
-  return who && id ? 'https://www.tiktok.com' + who.getAttribute('href') + '/video/' + id : '';
-})"""
+  const desc = a.querySelector('[data-e2e="video-desc"]');
+  const video = a.querySelector('video');
+  return {
+    link: who && id ? 'https://www.tiktok.com' + who.getAttribute('href') + '/video/' + id : '',
+    caption: (desc || a).innerText || '',
+    duration: video && isFinite(video.duration) ? video.duration : 0,
+  };
+}"""
+
+#: What is said is kept up to this many characters: enough to know what a video
+#: is about, not a transcript archive.
+SAID_CHARS = 1000
+
+
+def watch_for(caption: str, duration: float, cfg: dict) -> float:
+    """Seconds to stay on one For You video.
+
+    Watch time is what the For You page learns from, so this is what steers it
+    toward markets: a video about them is watched to the end (at most
+    `for_you_watch_max_s`), anything else is left after a second or two. A
+    caption that could not be read gets the ordinary pause, `for_you_dwell_s`."""
+    low, high = cfg.get("for_you_dwell_s") or (4, 9)
+    if not (caption or "").strip():
+        return random.uniform(float(low), float(high))
+    if on_topic(caption):
+        whole = duration if duration and duration > 0 else float(high) * 3
+        return max(float(low), min(float(whole), float(cfg.get("for_you_watch_max_s", 90))))
+    return random.uniform(1.0, 2.0)
 
 
 def for_you(page, cfg: dict) -> list:
     """(author, video id) from the For You page, nothing transcribed yet.
 
-    The page plays one video at a time. Each is brought on screen in turn,
-    watched for a while, and read from the page before moving on."""
+    The page plays one video at a time. Each is brought on screen in turn, read,
+    and watched for as long as `watch_for` says before moving on."""
     limit = int(cfg.get("for_you_videos", 8))
     if not limit:
         return []
-    low, high = cfg.get("for_you_dwell_s") or (4, 9)
     page.goto("https://www.tiktok.com/foryou", wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     _check(page)
@@ -147,13 +178,17 @@ def for_you(page, cfg: dict) -> list:
             break
         item.first.scroll_into_view_if_needed()
         page.wait_for_timeout(2000)
-        for pair in feed_videos(page.evaluate(FOR_YOU_ITEMS)):
+        try:
+            shown = item.first.evaluate(FOR_YOU_ITEM, timeout=5000) or {}
+        except Exception:  # noqa: BLE001 - a video that went away costs a step
+            shown = {}
+        for pair in feed_videos([shown.get("link")]):
             if pair[1] not in [v for _, v in out]:
                 out.append(pair)
+        time.sleep(watch_for(shown.get("caption", ""), shown.get("duration", 0), cfg))
+        _check(page)
         if len(out) >= limit:
             break
-        time.sleep(random.uniform(float(low), float(high)))
-        _check(page)
     return out[:limit]
 
 
@@ -216,6 +251,7 @@ def main(argv=None) -> int:
             "SELECT item_key FROM intel WHERE source = ?", (SOURCE,))}
 
     fresh, notes, todo_videos, for_you_ids = [], [], [], set()
+    skipped = state.setdefault("skipped", [])     # For You videos judged off topic
     with sync_playwright() as p:
         ctx = browser(p).contexts[0]
         page = ctx.new_page()
@@ -242,7 +278,7 @@ def main(argv=None) -> int:
             # For You: what TikTok picks unasked, whoever posted it
             queued = {v for _, v in todo_videos}
             for h, vid in for_you(page, cfg):
-                if vid not in seen and vid not in queued:
+                if vid not in seen and vid not in queued and vid not in skipped:
                     todo_videos.append((h, vid))
                     queued.add(vid)
                     for_you_ids.add(vid)
@@ -259,6 +295,13 @@ def main(argv=None) -> int:
             notes.append(f"{h}/{vid}: {str(exc)[:100]}")
             continue
         v["calls"] = calls_in(v, symbols)
+        said = f"{v['title']} {v['text']}"
+        # TikTok picked it unasked: kept only if it is about markets or calls a trade
+        if vid in for_you_ids and not (v["calls"] or on_topic(said)):
+            if not args.dry_run:
+                skipped.append(vid)
+            notes.append(f"{h}/{vid}: For You, off topic, skipped")
+            continue
         fresh.append(v)
         if db is not None:
             intel.upsert(db, SOURCE, vid, title=f"@{h}: {v['title'][:150]}", url=v["url"],
@@ -266,8 +309,11 @@ def main(argv=None) -> int:
                          score=len(v["calls"]),
                          detail={"author": h, "published": v["published"], "calls": v["calls"],
                                  "words": len(v["text"].split()),
+                                 "said": v["text"][:SAID_CHARS],
                                  "for_you": vid in for_you_ids,
-                                 "topics": tag(f"{v['title']} {v['text']}")})
+                                 "topics": tag(said)})
+    state["skipped"] = skipped[-1000:]
+    _save(state)
 
     pool = list(fresh)
     if db is not None:

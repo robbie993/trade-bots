@@ -47,4 +47,33 @@ def tag(text: str) -> list:
     return sorted(t for t, pat in _PATTERNS.items() if pat.search(text))
 
 
-__all__ = ["TOPICS", "tag"]
+#: Markets talk in general: what the village trades and the talk around it.
+#: Wider than TOPICS and kept out of it on purpose, because a tag sends a post
+#: to the research review and "stocks" is not an idea to test. It only decides
+#: whether a post a For You feed picked unasked is worth keeping.
+MARKETS = (
+    "stock", "stocks", "stock market", "shares", "trading", "trader", "traders",
+    "day trading", "daytrading", "day trader", "invest", "investing", "investor",
+    "options trading", "call options", "put options", "0dte", "forex", "futures",
+    "nasdaq", "s&p", "sp500", "dow jones", "wall street", "earnings", "dividend",
+    "dividends", "etf", "etfs", "portfolio", "bull market", "bear market", "bullish",
+    "bearish", "hedge fund", "candlestick", "federal reserve", "fomc", "interest rates",
+    "inflation", "recession", "market", "markets", "crypto", "cryptocurrency",
+    "bitcoin", "btc", "ethereum", "eth", "solana", "memecoin", "memecoins",
+    "meme coin", "meme coins", "altcoin", "altcoins", "dogecoin", "doge", "shib",
+    "shiba inu", "pepe", "pump.fun", "pumpfun", "dexscreener", "defi", "airdrop",
+    "blockchain", "polymarket", "kalshi", "prediction market", "robinhood", "webull",
+    "coinbase", "binance",
+)
+
+_MARKETS = re.compile(r"\b(" + "|".join(re.escape(w) for w in MARKETS) + r")\b"
+                      r"|\$[A-Za-z]{2,6}\b", re.I)
+
+
+def on_topic(text: str) -> bool:
+    """Whether a text is about markets ($TICKER included) or a TOPICS idea."""
+    text = text or ""
+    return bool(_MARKETS.search(text)) or bool(tag(text))
+
+
+__all__ = ["MARKETS", "TOPICS", "on_topic", "tag"]

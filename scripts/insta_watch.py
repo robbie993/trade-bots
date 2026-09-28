@@ -19,11 +19,20 @@ once for whatever Instagram now recommends. Then it scrolls what Instagram picks
 for the account rather than who it follows, the For You side: the Reels tab one
 reel at a time, pausing on each like a person watching, and the Explore grid
 (`for_you_reels`, `for_you_explore`, `for_you_dwell_s`; 0 turns either off).
-Those posts are read the same way and marked with where they came from.
-Captions go through the same rule
-as Reddit and YouTube (`crowd.extract_calls`, names turned into tickers first):
-a ticker with a directional word beside it is a call, a bare mention is not.
-One account is one voice.
+Those posts are read the same way and marked with where they came from, and one
+is kept only if it is about markets (`topics.on_topic`) or makes a call; the
+rest are remembered as skipped, so Instagram's pranks never reach the village.
+
+**Hearing.** A reel is speech more than caption, so each new reel (at most
+`reels_heard_per_run`) is also heard: yt-dlp fetches its audio as the signed-in
+account, with the browser's own Instagram cookies handed over in a temporary
+file, and the local Whisper model the YouTube and TikTok watchers use
+transcribes it. Audio and cookie file are deleted straight after. Captions and
+what is said go through the same rule as Reddit and YouTube
+(`crowd.extract_calls`, names turned into tickers first): a ticker with a
+directional word beside it is a call, a bare mention is not. One account is one
+voice. The start of what was said is kept with the post (`said`) for the daily
+research review.
 
 Every post read goes to `intel` (source `instagram`); the aggregate of the last
 `max_age_hours` is stored as the `instagram_calls` snapshot for
@@ -54,10 +63,11 @@ for _stream in (sys.stdout, sys.stderr):
 
 import yaml  # noqa: E402
 
+from scripts import video_watch  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from scripts.video_watch import universe  # noqa: E402
 from src.trading import intel  # noqa: E402
-from src.trading.topics import tag  # noqa: E402
+from src.trading.topics import on_topic, tag  # noqa: E402
 
 CONFIG = REPO / "config" / "instagram_sources.yaml"
 STATE = REPO / "data" / "instagram_state.json"
@@ -67,6 +77,9 @@ PORT = 9333
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 PROFILE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "village-browser"
 PROFILES_PER_RUN = 6
+#: What is said in a reel is kept up to this many characters: enough to know what
+#: it is about, not a transcript archive.
+SAID_CHARS = 1000
 
 
 class Challenged(RuntimeError):
@@ -216,6 +229,63 @@ def read_post(page, kind: str, code: str, author_hint: str = "") -> dict:
             .replace("Z", "+00:00")}
 
 
+def jar(cookies: list) -> str:
+    """The browser's cookies in the Netscape format yt-dlp reads."""
+    lines = ["# Netscape HTTP Cookie File"]
+    for c in cookies:
+        domain = c.get("domain") or ""
+        lines.append("\t".join((
+            domain, "TRUE" if domain.startswith(".") else "FALSE", c.get("path") or "/",
+            "TRUE" if c.get("secure") else "FALSE", str(max(int(c.get("expires") or 0), 0)),
+            c["name"], c["value"])))
+    return "\n".join(lines) + "\n"
+
+
+def heard(url: str, cookies: str, max_s: int, agent: str = "") -> str:
+    """What is said in one reel, up to `max_s` seconds in.
+
+    yt-dlp fetches only the audio as the browser would, signed in with its
+    cookies (`jar`) and under its user agent, and the local Whisper model
+    transcribes it. The audio and the cookie file live in a temporary folder
+    that is deleted on the way out."""
+    import tempfile
+
+    import yt_dlp
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cookie_file = Path(tmp) / "cookies.txt"
+        cookie_file.write_text(cookies, encoding="utf-8")
+        opts = {"quiet": True, "no_warnings": True, "noprogress": True,
+                "format": "bestaudio/best", "cookiefile": str(cookie_file),
+                "outtmpl": str(Path(tmp) / "a.%(ext)s")}
+        if agent:
+            opts["http_headers"] = {"User-Agent": agent}
+        with yt_dlp.YoutubeDL(opts) as y:
+            y.download([url])
+        audio = next(Path(tmp).glob("a.*"))
+        if video_watch._whisper is None:
+            from faster_whisper import WhisperModel
+
+            video_watch._whisper = WhisperModel(str(video_watch.WHISPER_MODEL),
+                                                device="cpu", compute_type="int8")
+        segments, _ = video_watch._whisper.transcribe(str(audio), beam_size=1, vad_filter=True)
+        words = []
+        for seg in segments:
+            if seg.start > max_s:
+                break
+            words.append(seg.text.strip())
+        return " ".join(words)
+
+
+def keeps(post: dict) -> bool:
+    """Whether a read post goes to the village. Everything from the followed side
+    does; a post Instagram picked unasked (For You) only if its caption or what
+    is said in it is about markets, or it makes a call."""
+    if not post.get("for_you"):
+        return True
+    return bool(post.get("calls")) or on_topic(f"{post['text']} {post.get('heard', '')}")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -245,7 +315,8 @@ def main(argv=None) -> int:
         seen = {r["item_key"] for r in db.query(
             "SELECT item_key FROM intel WHERE source = ?", (SOURCE,))}
 
-    fresh, notes = [], []
+    fresh, notes, cookies, agent = [], [], "", ""
+    skipped = state.setdefault("skipped", [])     # For You posts judged off topic
     with sync_playwright() as p:
         b = browser(p)
         ctx = b.contexts[0]
@@ -295,7 +366,7 @@ def main(argv=None) -> int:
                 seen.add(post["id"])
             # 4. For You: the Reels tab and Explore, what Instagram picks unasked
             for kind, code, where in for_you(page, cfg):
-                if f"{kind}/{code}" in seen:
+                if f"{kind}/{code}" in seen or f"{kind}/{code}" in skipped:
                     continue
                 post = read_post(page, kind, code)
                 post["calls"] = calls_in(post, symbols)
@@ -308,9 +379,38 @@ def main(argv=None) -> int:
             notes.append(f"STOPPED: {exc}")
         finally:
             _save(state)
+            try:
+                cookies = jar(ctx.cookies("https://www.instagram.com"))
+                agent = page.evaluate("() => navigator.userAgent")
+            except Exception as exc:  # noqa: BLE001 - no cookies, no audio; captions still count
+                notes.append(f"reels not heard: no cookies ({str(exc)[:80]})")
             page.close()
 
+    # 5. what each new reel says, not only its caption
+    reels = [post for post in fresh if post["id"].startswith("reel/")] if cookies else []
+    misses = 0
+    for post in reels[: int(cfg.get("reels_heard_per_run", 20))]:
+        if misses >= 3:                     # Instagram is refusing: stop asking this run
+            notes.append("reels not heard: three failures in a row, the rest wait")
+            break
+        try:
+            post["heard"] = heard(post["url"], cookies, int(cfg.get("max_video_s", 600)), agent)
+        except Exception as exc:  # noqa: BLE001 - one reel is not the run
+            misses += 1
+            notes.append(f"{post['id']}: not heard ({str(exc)[:80]})")
+            continue
+        misses = 0
+        post["calls"] = calls_in({"title": post["text"], "text": post["heard"]}, symbols)
+
+    kept = [post for post in fresh if keeps(post)]
+    if not args.dry_run:
+        skipped += [post["id"] for post in fresh if not keeps(post)]
+    dropped, fresh = len(fresh) - len(kept), kept
+    state["skipped"] = skipped[-1000:]
+    _save(state)
+
     for post in fresh:
+        said = post.get("heard", "")
         if db is not None:
             intel.upsert(db, SOURCE, post["id"],
                          title=f"@{post['author']}: {post['text'][:150]}",
@@ -319,7 +419,8 @@ def main(argv=None) -> int:
                          detail={"author": post["author"], "published": post["published"],
                                  "calls": post["calls"], "from_feed": post.get("from_feed", False),
                                  "for_you": post.get("for_you", ""),
-                                 "topics": tag(post["text"])})
+                                 "words": len(said.split()), "said": said[:SAID_CHARS],
+                                 "topics": tag(f"{post['text']} {said}")})
     pool = list(fresh)
     if db is not None:
         ids = {p["id"] for p in fresh}
@@ -339,6 +440,8 @@ def main(argv=None) -> int:
     for n in notes:
         print(" ", n)
     print(f"\n{len(fresh)} new post(s), {sum(1 for p in fresh if p['calls'])} with calls, "
+          f"{sum(1 for p in fresh if p.get('heard'))} reel(s) heard, "
+          f"{dropped} For You post(s) off topic and skipped, "
           f"{len(out)} reading(s)" + (" (dry run)" if args.dry_run else ""))
     for post in fresh[:12]:
         called = ", ".join(f"{c['symbol']}{'+' if c['direction'] > 0 else '-'}"

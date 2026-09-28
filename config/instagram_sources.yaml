@@ -72,7 +72,13 @@ max_age_hours: 24
 # rather than who it follows. Reels are watched one at a time with a pause of
 # for_you_dwell_s (a random number of seconds in that range) on each; Explore
 # is a grid, scrolled a few times. Read only: nothing there is liked or
-# followed. 0 turns either off.
+# followed. 0 turns either off. A For You post is kept only if it is about
+# markets or makes a call.
 for_you_reels: 15
 for_you_explore: 12
 for_you_dwell_s: [4, 9]
+
+# Reels are heard, not just read: at most this many new reels a run have their
+# audio transcribed by the local Whisper model, up to max_video_s of each.
+reels_heard_per_run: 20
+max_video_s: 600

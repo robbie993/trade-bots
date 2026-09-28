@@ -248,12 +248,17 @@ def _research_review(eco, now: datetime) -> list:
                           "detail": r.get("detail")})
     # Ideas the social and video watchers tagged (strategies, AI agents,
     # village-like systems): not calls, so they never vote, but worth a look.
+    # A video comes with the start of what is said in it, not just its caption.
     for source in ("reddit", "youtube", "instagram", "x", "tiktok"):
         for r in intel.recent(eco.db, source, limit=40):
-            topics = (r.get("detail") or {}).get("topics") or []
+            d = r.get("detail") or {}
+            topics = d.get("topics") or []
             if topics:
-                finds.append({"source": source, "name": r["item_key"], "url": r.get("url"),
-                              "topics": topics, "about": (r.get("title") or "")[:240]})
+                find = {"source": source, "name": r["item_key"], "url": r.get("url"),
+                        "topics": topics, "about": (r.get("title") or "")[:240]}
+                if d.get("said"):
+                    find["said"] = d["said"][:600]
+                finds.append(find)
     finds = finds[:40]
     if not finds:
         return []

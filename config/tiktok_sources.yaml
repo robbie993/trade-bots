@@ -25,8 +25,12 @@ profiles_per_run: 4
 max_video_s: 600
 max_age_hours: 24
 
-# For You: videos taken from the For You page each run, whoever posted them,
-# with a pause of for_you_dwell_s (random, in that range) on each. Each one is
-# transcribed like the rest, so keep this modest. 0 turns it off.
+# For You: videos taken from the For You page each run, whoever posted them.
+# Watch time steers the page: a video whose caption is about markets is watched
+# to the end (at most for_you_watch_max_s), anything else is left after a second
+# or two, and one whose caption cannot be read gets for_you_dwell_s (random, in
+# that range). Each is transcribed like the rest, so keep this modest, and kept
+# only if it is about markets or makes a call. 0 turns it off.
 for_you_videos: 8
 for_you_dwell_s: [4, 9]
+for_you_watch_max_s: 90
