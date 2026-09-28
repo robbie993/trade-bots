@@ -1,11 +1,17 @@
 """ASTRAL — volatility rotation across a basket of correlated names, on
 fifteen-minute bars, scaled in and out on volume.
 
-One file, ten firms. Every Astral firm in `config/firm_config.yaml` runs this
-same function; what separates them is the basket they are handed. The idea only
-works on names that move together, so each basket is a group the market
-already treats as one trade: semiconductors, money-centre banks, gold, the
-bitcoin proxies.
+One file, ten bots. Each Astral bot runs this same function on one of the
+baskets in `BASKETS` below; what separates them is the basket they are handed.
+The idea only works on names that move together, so each basket is a group the
+market already treats as one trade: semiconductors, money-centre banks, gold,
+the bitcoin proxies.
+
+**Not in the village yet.** No firm names this file, so nothing runs it. To
+wire one up, add a firm to `config/firm_config.yaml` with `bot: bots/astral.py`
+and one basket as its `universe`. The crypto basket should also carry Alpaca's
+crypto costs (`fee_bps: 25`, `slippage_bps: 5.3`, as `firm_c_crypto` does). A
+50+ bps round trip is a lot for a 15m rotation to clear. Needs `TRADE_BAR=15m`.
 
 ## The rotation
 
@@ -87,6 +93,22 @@ opinion, and the smaller number wins.
 
 import math
 from decimal import Decimal
+
+#: The ten baskets, one per bot. Nothing reads this at run time: the firm's
+#: `universe` is what the bot trades. It is here so the baskets live with the
+#: strategy until they have firms of their own. No name sits in two baskets.
+BASKETS = {
+    "semis": ["NVDA", "AMD", "AVGO", "MU", "TSM"],
+    "megacap": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+    "indices": ["SPY", "QQQ", "IWM", "DIA", "RSP"],
+    "banks": ["JPM", "BAC", "C", "WFC", "GS"],
+    "energy": ["XOM", "CVX", "COP", "OXY", "SLB"],
+    "metals": ["GLD", "SLV", "GDX", "GDXJ", "NEM"],
+    "btc_proxies": ["MSTR", "COIN", "MARA", "RIOT", "CLSK"],
+    "airlines": ["DAL", "UAL", "AAL", "LUV", "ALK"],
+    "homebuilders": ["DHI", "LEN", "PHM", "TOL", "KBH"],
+    "crypto": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "LINK-USD"],
+}
 
 # -- windows, in fifteen-minute bars --------------------------------------
 MOMENTUM_BARS = 16        # 4 hours

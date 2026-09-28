@@ -148,12 +148,22 @@ def test_it_declines_without_enough_history(propose):
     assert propose(context(bars)) == []
 
 
-def test_every_astral_firm_runs_this_bot_on_a_five_name_basket():
+def test_ten_five_name_baskets_with_no_name_in_two():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("astral_bot", BOT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert len(module.BASKETS) == 10
+    assert all(len(names) == 5 for names in module.BASKETS.values())
+    names = [sym for names in module.BASKETS.values() for sym in names]
+    assert len(names) == len(set(names))
+
+
+def test_astral_is_not_in_the_village_yet():
+    """Held out on purpose until it is ready. Wiring a firm to it is a
+    decision, and this test is where that decision gets noticed."""
     from src.trading.firms.spec import load_firm_specs
 
-    astral = [s for s in load_firm_specs() if s.firm_key.startswith("astral_")]
-    assert len(astral) == 10
-    assert all(s.strategy == f"bot:{BOT}" for s in astral)
-    assert all(len(s.universe) == 5 for s in astral)
-    names = [sym for s in astral for sym in s.universe]
-    assert len(names) == len(set(names)), "no name sits in two baskets"
+    assert not [s.firm_key for s in load_firm_specs() if s.strategy == f"bot:{BOT}"]
