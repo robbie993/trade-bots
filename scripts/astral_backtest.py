@@ -42,7 +42,8 @@ LOOKBACK = 250                     # what the village hands a bot
 # Per side, in basis points. The village's defaults for equities, and the
 # measured Alpaca crypto costs `firm_c_crypto` carries.
 COSTS = {"equity": (Decimal("2"), Decimal("5")), "crypto": (Decimal("25"), Decimal("5.3"))}
-STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py")
+STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py",
+                                                  "astral_vt_*.py")
                                  for p in (REPO / "bots").glob(pattern))
 
 
