@@ -59,7 +59,12 @@ def fetch(symbols, refresh=False):
         feed = YahooFeed(days=10 ** 6, interval="15m")
         for symbol in missing:
             rows = []
-            for b in feed.series(symbol):
+            try:
+                bars = feed.series(symbol)
+            except Exception as exc:  # noqa: BLE001 - one bad ticker is not the run
+                print(f"  skipped {symbol}: {exc}", flush=True)
+                bars = []
+            for b in bars:
                 # Yahoo's newest bar is the one still forming. Only whole
                 # fifteen-minute bars are kept.
                 if b.as_of.minute % 15 or b.as_of.second:
@@ -290,6 +295,8 @@ def main():
     parser.add_argument("--json", type=Path, help="also write the results here")
     parser.add_argument("--start", help="first day traded, YYYY-MM-DD (UTC)")
     parser.add_argument("--end", help="last day traded, YYYY-MM-DD (UTC), inclusive")
+    parser.add_argument("--validation", action="store_true",
+                        help="replay on VALIDATION_BASKETS, which nothing was chosen on")
     parser.add_argument("--only", help="comma-separated strategy names or globs, "
                                        "e.g. astral_vt_basket,astral_x1_*")
     args = parser.parse_args()
@@ -305,7 +312,9 @@ def main():
     start = day(args.start) if args.start else float("-inf")
     end = day(args.end, 86400 - 1) if args.end else float("inf")
 
-    from bots.astral import BASKETS
+    from bots import astral
+
+    BASKETS = astral.VALIDATION_BASKETS if args.validation else astral.BASKETS
 
     rows = fetch(sorted({s for names in BASKETS.values() for s in names}), args.refresh)
     jobs = [(name, names, {s: rows[s] for s in names}, strategies, start, end)

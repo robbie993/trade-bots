@@ -117,6 +117,24 @@ BASKETS = {
     "crypto": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "LINK-USD"],
 }
 
+#: Ten more correlated groups that no iteration was ever chosen on. Added
+#: after round x10, once the held-out 20 days had judged four picks and could
+#: no longer be trusted to judge a fifth. A pick has to hold up here, on
+#: stocks it has never seen, as well as on the days it was not chosen on.
+#: Nothing may be chosen *because* of these; they only confirm or reject.
+VALIDATION_BASKETS = {
+    "payments": ["V", "MA", "AXP", "PYPL", "COF"],
+    "software": ["CRM", "NOW", "ADBE", "ORCL", "INTU"],
+    "chip_equipment": ["AMAT", "LRCX", "KLAC", "ASML", "TER"],
+    "retail": ["WMT", "TGT", "COST", "HD", "LOW"],
+    "pharma": ["PFE", "MRK", "JNJ", "ABBV", "BMY"],
+    "rails": ["UNP", "CSX", "NSC", "CP", "CNI"],
+    "utilities": ["NEE", "DUK", "SO", "D", "AEP"],
+    "cruise_travel": ["CCL", "RCL", "NCLH", "BKNG", "EXPE"],
+    "oil_services": ["HAL", "BKR", "NOV", "FTI", "CHX"],
+    "regional_banks": ["KRE", "USB", "PNC", "TFC", "FITB"],
+}
+
 # -- windows, in fifteen-minute bars --------------------------------------
 MOMENTUM_BARS = 16        # 4 hours
 FAST_VOL_BARS = 8         # 2 hours
