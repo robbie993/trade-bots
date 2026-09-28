@@ -510,7 +510,7 @@ class Scanners:
             return [f"{spec.name}: {error}"]
 
         readings, complaints = to_readings(result, universe)
-        notes = [f"{spec.name}: {why}" for why in complaints]
+        notes = [f"{spec.name}: {why}" for why in _outside_in_one_line(complaints)]
         if readings:
             written = self.board.publish(spec.name, readings, as_of)
             notes.append(
@@ -521,6 +521,24 @@ class Scanners:
         elif not complaints:
             notes.append(f"{spec.name}: nothing caught its eye")
         return notes
+
+
+OUTSIDE = " is not in this scanner's universe"
+
+
+def _outside_in_one_line(complaints: list, shown: int = 8) -> list:
+    """Symbols a scanner named that the village does not trade, as one line.
+
+    The fleet scanners relay the other bots' books and filings, which name
+    dozens of symbols the village has no market for; one line each, every
+    tick, buried the log. They are still dropped and still named, just once."""
+    outside = [c[: -len(OUTSIDE)] for c in complaints if c.endswith(OUTSIDE)]
+    rest = [c for c in complaints if not c.endswith(OUTSIDE)]
+    if outside:
+        more = f" (+{len(outside) - shown} more)" if len(outside) > shown else ""
+        rest.append(f"{len(outside)} symbol(s) outside the village's universe, dropped: "
+                    + ", ".join(outside[:shown]) + more)
+    return rest
 
 
 def build_context(symbols: Sequence[str], market, lookback: int = 250) -> Context:

@@ -519,3 +519,14 @@ def test_the_tick_survives_a_scanner_that_explodes(ecosystem, tmp_path):
     report = ecosystem.tick()
     assert any("bad:" in n for n in report.signals)
     assert report.errors == [] or all("bad.py" not in e for e in report.errors)
+
+
+def test_symbols_outside_the_universe_are_named_once_not_once_each():
+    from src.trading.signals import _outside_in_one_line
+
+    complaints = [f"S{i} is not in this scanner's universe" for i in range(12)] + ["X: no score"]
+    lines = _outside_in_one_line(complaints)
+    assert lines[0] == "X: no score"
+    assert lines[1].startswith("12 symbol(s) outside the village's universe, dropped: S0, S1")
+    assert lines[1].endswith("(+4 more)")
+    assert _outside_in_one_line(["X: no score"]) == ["X: no score"]
