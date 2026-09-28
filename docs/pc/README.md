@@ -80,7 +80,7 @@ pops up to be closed by accident), logging to `logs/`:
 | Village fleet sync | 30 min | `fleet_sync.py --to-railway`: every fleet bot's state (incl. supercrypto) over `railway ssh` into `fleet_snapshots` |
 | Village video watch | 30 min | `video_watch.py`: YouTube channels in `config/video_channels.yaml`; captions, or the audio heard by Whisper when YouTube refuses them |
 | Village social watch | 30 min | `social_watch.py`: eleven subreddits from one public RSS feed, no account |
-| Village socials watch | 1 h | `insta_watch.py`, `x_watch.py`, `tiktok_watch.py` in turn, through the village browser |
+| Village socials watch | 1 h | `insta_watch.py`, `x_watch.py`, `tiktok_watch.py` in turn, through the village browser; Instagram also scrolls Reels and Explore and hears each new reel with Whisper, TikTok its For You page, watching markets videos through so the page leans that way; off-topic For You posts are skipped |
 | Village answer questions | 1 h | `answer_questions.py`: Claude Code headless answers the firms' questions and proposals |
 | Village answer duck | 1 h | `answer_duck.py`: the second mind, DuckDuckGo's free AI chat (duck.ai) in the village browser, no account |
 

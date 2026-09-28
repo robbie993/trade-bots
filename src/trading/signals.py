@@ -510,7 +510,7 @@ class Scanners:
             return [f"{spec.name}: {error}"]
 
         readings, complaints = to_readings(result, universe)
-        notes = [f"{spec.name}: {why}" for why in complaints]
+        notes = [f"{spec.name}: {why}" for why in _outside_in_one_line(complaints)]
         if readings:
             written = self.board.publish(spec.name, readings, as_of)
             notes.append(
@@ -518,9 +518,37 @@ class Scanners:
                 + ", ".join(f"{r.symbol} {r.score:+.0f}" for r in readings[:5])
                 + (f" (+{len(readings) - 5} more)" if len(readings) > 5 else "")
             )
-        elif not complaints:
+        elif complaints:
+            # It spoke and every word was refused, most often names outside its
+            # universe (the fleet's Form 4 picks are small caps nobody here
+            # trades). Asked again next tick it says the same and is refused the
+            # same, a line per name per minute until the bar turns. Its silence
+            # for this bar is recorded instead, as the scribe's is. A scanner
+            # that returned nothing is still asked again: its data may land
+            # mid-bar.
+            self.board.mark_silent(spec.name, as_of)
+        else:
             notes.append(f"{spec.name}: nothing caught its eye")
         return notes
+
+
+OUTSIDE = " is not in this scanner's universe"
+
+
+def _outside_in_one_line(complaints: list, shown: int = 8) -> list:
+    """Symbols a scanner named that the village does not trade, as one line.
+
+    The fleet scanners relay the other bots' books and filings, which name
+    dozens of symbols the village has no market for; one line each, every
+    tick, buried the log. They are still dropped and still named, just once."""
+    # A filing list can name the same ticker twice; count and name it once.
+    outside = list(dict.fromkeys(c[: -len(OUTSIDE)] for c in complaints if c.endswith(OUTSIDE)))
+    rest = [c for c in complaints if not c.endswith(OUTSIDE)]
+    if outside:
+        more = f" (+{len(outside) - shown} more)" if len(outside) > shown else ""
+        rest.append(f"{len(outside)} symbol(s) outside the village's universe, dropped: "
+                    + ", ".join(outside[:shown]) + more)
+    return rest
 
 
 def build_context(symbols: Sequence[str], market, lookback: int = 250) -> Context:

@@ -14,6 +14,13 @@ accounts:
   - {handle: cointelegraph, group: crypto}
   - {handle: binance, group: crypto}
   - {handle: coinbase, group: crypto}
+  # trading creators, to steer the For You page (each is opened before it is followed)
+  - {handle: humbledtrader, group: trading}
+  - {handle: charttrader, group: trading}
+  - {handle: meetkevin, group: trading}
+  - {handle: grahamstephan, group: trading}
+  - {handle: andreijikh, group: trading}
+  - {handle: tradingview, group: trading}
 
 follows_per_run: 3
 follow_pause_s: 60
@@ -24,3 +31,31 @@ videos_per_profile: 3
 profiles_per_run: 4
 max_video_s: 600
 max_age_hours: 24
+
+# For You: videos taken from the For You page each run, whoever posted them.
+# Watch time steers the page: a video whose caption is about markets is watched
+# to the end (at most for_you_watch_max_s), anything else is left after a second
+# or two, and one whose caption cannot be read gets for_you_dwell_s (random, in
+# that range). Each is transcribed like the rest, so keep this modest, and kept
+# only if it is about markets or makes a call. 0 turns it off.
+for_you_videos: 8
+for_you_dwell_s: [4, 9]
+for_you_watch_max_s: 90
+# Scroll past at most this many For You videos a run looking for
+# for_you_videos on-topic ones; a caption plainly about something else is
+# watched for a second and not transcribed.
+for_you_scan: 30
+
+# One search a run, rotating through these: after watch time, what an account
+# searches for is what TikTok builds its For You page from. The top
+# search_videos results are heard too.
+search_videos: 3
+search_terms:
+  - stock market news
+  - day trading strategy
+  - crypto trading
+  - bitcoin price analysis
+  - options trading
+  - memecoin trading
+  - AI trading bot
+  - prediction markets

@@ -116,3 +116,15 @@ def test_the_village_asks_for_a_daily_research_review(ecosystem):
     assert q["context"]["finds"][0]["name"] == "someone/quant"
     ask.consider(ecosystem, {}, now=day)
     assert len([q for q in ask.recent(ecosystem.db, 50) if q["topic"] == "research"]) == 1
+
+
+def test_the_research_review_hears_what_a_tagged_video_says(ecosystem):
+    from src.trading import intel
+
+    intel.upsert(ecosystem.db, "tiktok", "7401", title="@quantguy: my bot",
+                 url="https://www.tiktok.com/@quantguy/video/7401",
+                 detail={"topics": ["ai_agent"], "said": "I let an AI agent trade for a week " * 40})
+    ask.consider(ecosystem, {}, now=datetime(2026, 9, 26, tzinfo=timezone.utc))
+    (q,) = [q for q in ask.open_questions(ecosystem.db, limit=50) if q["topic"] == "research"]
+    (find,) = [f for f in q["context"]["finds"] if f["name"] == "7401"]
+    assert find["said"].startswith("I let an AI agent trade") and len(find["said"]) == 600
