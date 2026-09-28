@@ -1,0 +1,20 @@
+{"round": "x9", "parent": "astral_x8_all_in",
+ "note": "the best strategy so far: +$7,486 at profit factor 1.75 on the search window, +$4,074 at 2.25 held out. It takes profit when a laggard's move reaches +0.5 sigma; every iteration here takes it much later.",
+ "variants": {
+  "z1": {"title": "CATCH-UP AT +1 SIGMA.", "doc": "Sells at +1.0 sigma instead of +0.5.", "params": {"REVERT_EXIT_Z": 1.0}},
+  "z15": {"title": "CATCH-UP AT +1.5 SIGMA.", "doc": "Sells at +1.5 sigma: three times the parent's overshoot.", "params": {"REVERT_EXIT_Z": 1.5}},
+  "z2": {"title": "CATCH-UP AT +2 SIGMA.", "doc": "Sells at +2 sigma: a laggard that becomes the leader.", "params": {"REVERT_EXIT_Z": 2.0}},
+  "run_trail": {"title": "CAUGHT UP, THEN TRAIL.", "doc": "Once caught up (+0.5 sigma) it is not sold; it is held until it falls 4 ATR off the last session's high. No ceiling on the take-profit at all.", "params": {"REVERT_RUN": true}},
+  "atr8": {"title": "PRICE TARGET, 8 ATR.", "doc": "No catch-up exit. The take-profit is 8 ATR above the entry.", "params": {"REVERT_EXIT_Z": 99.0},
+    "targets": "    return [(entry * (1 + 8 * read[\"atr_pct\"]), 0.0)]"},
+  "atr12": {"title": "PRICE TARGET, 12 ATR.", "doc": "No catch-up exit. The take-profit is 12 ATR above the entry.", "params": {"REVERT_EXIT_Z": 99.0},
+    "targets": "    return [(entry * (1 + 12 * read[\"atr_pct\"]), 0.0)]"},
+  "tiered": {"title": "HALF AT 4 ATR, HALF AT 10.", "doc": "Half the position at 4 ATR above the entry, the rest at 10. The catch-up exit moves to +1 sigma as a backstop.", "params": {"REVERT_EXIT_Z": 1.0},
+    "targets": "    atr = read[\"atr_pct\"]\n    return [(entry * (1 + 4 * atr), 0.5), (entry * (1 + 10 * atr), 0.0)]"},
+  "close_gap_twice": {"title": "CLOSE THE GAP TO THE LEADER, TWICE.", "doc": "The gap is how far this name's last 16 bars trail the basket's best name's. The target is twice that gap above the entry: catch the leader and pass it. No catch-up exit.", "params": {"REVERT_EXIT_Z": 99.0},
+    "targets": "    closes = {s: [float(c) for c in context.closes(s, 17)] for s in basket}\n    moves = {s: c[-1] / c[0] - 1 for s, c in closes.items() if len(c) == 17 and c[0] > 0}\n    if symbol not in moves or len(moves) < 2:\n        return [(entry, 0.0)]  # lifted to the 2R floor\n    gap = max(0.0, max(moves.values()) - moves[symbol])\n    return [(entry * (1 + 2 * gap), 0.0)]  # no gap: lifted to the 2R floor"},
+  "range_high": {"title": "BACK TO THE RANGE HIGH.", "doc": "A laggard fell from somewhere. The target is the highest high of the last three sessions plus 2 ATR: all the way back, and a little past. No catch-up exit.", "params": {"REVERT_EXIT_Z": 99.0},
+    "targets": "    highs = [float(h) for h in context.highs(symbol, 78)]\n    if not highs:\n        return []\n    return [(max(highs) + 2 * read[\"atr_pct\"] * entry, 0.0)]"},
+  "vwap_band": {"title": "VWAP PLUS TWO SIGMA.", "doc": "The three-session volume-weighted price plus two volume-weighted standard deviations: from below the group's fair price to well above it. No catch-up exit.", "params": {"REVERT_EXIT_Z": 99.0}, "imports": ["import math"],
+    "targets": "    closes = [float(c) for c in context.closes(symbol, 78)]\n    volumes = [float(v) for v in context.volumes(symbol, 78)]\n    total = sum(volumes)\n    if len(closes) != len(volumes) or total <= 0:\n        return []\n    vwap = sum(c * v for c, v in zip(closes, volumes)) / total\n    sd = math.sqrt(sum(v * (c - vwap) ** 2 for c, v in zip(closes, volumes)) / total)\n    return [(vwap + 2 * sd, 0.0)]"}
+ }}

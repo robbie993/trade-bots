@@ -174,6 +174,7 @@ SETTINGS = {
     "MOMENTUM_EXIT": True,
     "MODE": "momentum",      # or "reversion": buy the basket's laggards
     "REVERT_EXIT_Z": 0.0,      # reversion: caught up once z is at least this
+    "REVERT_RUN": False,       # reversion: once caught up, trail instead of selling
 }
 
 
@@ -506,7 +507,17 @@ def run(context, take_profit=None, trail=None, params=None, entry_filter=None):
                 # momentum exit all read a dip as a reason to sell, which is
                 # the opposite of this trade, so none of them apply.
                 if read["z"] >= cfg["REVERT_EXIT_Z"]:
-                    sell(None, "reverted: caught up with its basket")
+                    if not (cfg["REVERT_RUN"] and trail):
+                        sell(None, "reverted: caught up with its basket")
+                        continue
+                    # REVERT_RUN: caught up, but kept while it keeps going,
+                    # until it falls `atrs` ATR off its recent high.
+                    bars, atrs = trail
+                    recent = context.highs(symbol, bars) or context.closes(symbol, bars)
+                    peak = float(max(recent)) if recent else float(price)
+                    if float(price) < peak * (1 - atrs * read["atr_pct"]):
+                        sell(None, f"trailing stop: caught up, then fell {atrs:g} ATR "
+                                   f"off the {bars}-bar high {peak:.2f}")
                 continue
 
             # A winner short of its target is left to reach it.
