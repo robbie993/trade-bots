@@ -376,6 +376,13 @@ class DataConfig:
     )
     seed: int = field(default_factory=lambda: _env_int("TRADE_DATA_SEED", 20260808))
     history_days: int = field(default_factory=lambda: _env_int("TRADE_HISTORY_DAYS", 180))
+    # How long one bar is. `1d` is what everything here was built on; `15m`,
+    # `1h` and the like turn the real feeds intraday. `history_days` is then
+    # read as a number of *bars*, which is what it always meant downstream —
+    # every indicator counts bars, not calendar days.
+    bar_timeframe: str = field(
+        default_factory=lambda: os.environ.get("TRADE_BAR_TIMEFRAME", "1d")
+    )
     # Paper fills cross the spread and pay a fee, because a backtest that
     # fills at mid for free is a backtest that always wins.
     slippage_bps: Decimal = field(default_factory=lambda: _env_decimal("TRADE_SLIPPAGE_BPS", "5"))

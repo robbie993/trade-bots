@@ -996,6 +996,7 @@ class Ecosystem:
                     capital=record.initial_allocation or self.config.firm.allocation,
                     risk_limit=record.risk_limit,
                     steps=days,
+                    strategy=record.strategy or "",
                 )
             )
         return results

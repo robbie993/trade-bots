@@ -50,3 +50,4 @@ bots/*
 !bots/example_reversion.yaml
 !bots/example_adapter.py
 !bots/example_scanner.py
+!bots/vol_rotation/

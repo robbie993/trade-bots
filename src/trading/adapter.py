@@ -102,6 +102,7 @@ class Context:
     equity: Decimal
     as_of: object
     _closes: dict = field(default_factory=dict, repr=False)
+    _bars: dict = field(default_factory=dict, repr=False)
     _marks: dict = field(default_factory=dict, repr=False)
     _positions: dict = field(default_factory=dict, repr=False)
 
@@ -113,6 +114,19 @@ class Context:
     def closes(self, symbol: str, lookback: int = 0) -> list:
         """Closing prices, oldest first. `lookback` 0 means everything held."""
         series = self._closes.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def volumes(self, symbol: str, lookback: int = 0) -> list:
+        """Traded volume per bar, oldest first, lined up with `closes`."""
+        return [b.volume for b in self.bars(symbol, lookback)]
+
+    def bars(self, symbol: str, lookback: int = 0) -> list:
+        """Whole bars, oldest first: `.open .high .low .close .volume .as_of`.
+
+        The same bars `closes` is read from, so the two never disagree about
+        which bar is the latest.
+        """
+        series = self._bars.get(str(symbol).upper(), [])
         return list(series[-lookback:] if lookback else series)
 
     # -- your book --------------------------------------------------------
@@ -130,16 +144,17 @@ class Context:
 
 def build_context(record, market, positions: Sequence[Position], equity, lookback: int = 250):
     universe = tuple(record.universe or [])
-    closes, marks = {}, {}
+    closes, bars, marks = {}, {}, {}
     for symbol in universe:
         try:
             marks[symbol] = D(market.mark(symbol))
         except Exception:  # noqa: BLE001 - a symbol the feed lacks is not fatal
             marks[symbol] = None
         try:
-            closes[symbol] = [D(c) for c in market.closes(symbol, lookback)]
+            bars[symbol] = list(market.history(symbol, lookback))
         except Exception:  # noqa: BLE001
-            closes[symbol] = []
+            bars[symbol] = []
+        closes[symbol] = [D(b.close) for b in bars[symbol]]
     held = {
         str(p.symbol).upper(): Holding(
             symbol=str(p.symbol).upper(),
@@ -154,6 +169,7 @@ def build_context(record, market, positions: Sequence[Position], equity, lookbac
         equity=D(equity),
         as_of=market.as_of(),
         _closes=closes,
+        _bars=bars,
         _marks=marks,
         _positions=held,
     )

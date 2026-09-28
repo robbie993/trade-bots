@@ -29,6 +29,8 @@ You decide what you want; you do not decide what happens.
     context.as_of               the timestamp of the latest bar
     context.price(symbol)       the latest mark, or None
     context.closes(symbol, n)   the last n closes, oldest first
+    context.volumes(symbol, n)  the last n volumes, lined up with closes
+    context.bars(symbol, n)     the last n whole bars (open, high, low, close, volume)
     context.position(symbol)    what you hold, or None
     context.quantity(symbol)    how much, as a Decimal — 0 if nothing
 

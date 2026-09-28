@@ -62,6 +62,8 @@ See `example_adapter.py` for a working one.
 | `context.cash` / `context.equity` | Decimals |
 | `context.price(symbol)` | the latest mark, or `None` |
 | `context.closes(symbol, n)` | the last n closes, oldest first |
+| `context.volumes(symbol, n)` | the last n bars' volume, lined up with `closes` |
+| `context.bars(symbol, n)` | the last n whole bars: `.open .high .low .close .volume .as_of` |
 | `context.quantity(symbol)` | how much you hold — `0` if nothing |
 | `context.as_of` | the timestamp of the latest bar |
 

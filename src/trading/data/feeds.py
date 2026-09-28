@@ -154,6 +154,55 @@ class FeedNotConfigured(RuntimeError):
     """The requested source cannot run here — missing dependency, key or file."""
 
 
+# =========================================================================
+# bar length
+# =========================================================================
+def timeframe_minutes(timeframe: str) -> int:
+    """`15m`, `15min`, `1h`, `4H`, `1d`, `1Day` -> minutes in one bar.
+
+    Spelled the way people spell it, because every venue spells it
+    differently and the village should not make anybody learn which.
+    Raises FeedNotConfigured on anything it cannot read — a bar length the
+    feed silently misread would quietly change every indicator.
+    """
+    text = str(timeframe or "1d").strip().lower()
+    digits = "".join(ch for ch in text if ch.isdigit())
+    unit = text[len(digits):].strip()
+    count = int(digits) if digits else 1
+    units = {
+        "m": 1, "min": 1, "mins": 1, "minute": 1, "minutes": 1, "t": 1,
+        "h": 60, "hr": 60, "hour": 60, "hours": 60,
+        "d": 1440, "day": 1440, "days": 1440,
+    }
+    if unit not in units or count <= 0:
+        raise FeedNotConfigured(
+            f"TRADE_BAR_TIMEFRAME={timeframe!r} is not a bar length. "
+            "Try 15m, 1h or 1d"
+        )
+    return count * units[unit]
+
+
+def _venue_timeframe(minutes: int, style: str) -> str:
+    """The same bar length in a particular venue's spelling."""
+    if style == "alpaca":
+        if minutes % 1440 == 0:
+            return f"{minutes // 1440}Day"
+        if minutes % 60 == 0:
+            return f"{minutes // 60}Hour"
+        return f"{minutes}Min"
+    if style == "yahoo":
+        # Yahoo spells an hour `60m` and has no multi-hour bars at all.
+        if minutes == 1440:
+            return "1d"
+        return f"{minutes}m"
+    # ccxt: 15m, 1h, 4h, 1d
+    if minutes % 1440 == 0:
+        return f"{minutes // 1440}d"
+    if minutes % 60 == 0:
+        return f"{minutes // 60}h"
+    return f"{minutes}m"
+
+
 class MarketFeed(Protocol):
     name: str
 
@@ -174,10 +223,16 @@ class SyntheticFeed:
 
     name = "synthetic"
 
-    def __init__(self, seed: int = 0, days: int = 180, start: Optional[datetime] = None):
+    def __init__(self, seed: int = 0, days: int = 180, start: Optional[datetime] = None,
+                 bar_minutes: int = 1440):
         self.seed = int(seed)
         self.days = int(days)
         self.start = start or datetime(2026, 1, 1, tzinfo=timezone.utc)
+        # Shorter bars move less: volatility scales with the square root of
+        # time, so a 15-minute bar gets a tenth of a day's. Drift scales
+        # linearly. At the default 1440 both factors are exactly one, which
+        # keeps every existing seeded series byte-identical.
+        self.bar_minutes = int(bar_minutes)
         self._cache: dict[str, list[Bar]] = {}
 
     def _params(self, symbol: str) -> tuple[int, Decimal, Decimal, Decimal]:
@@ -194,6 +249,11 @@ class SyntheticFeed:
             return self._cache[symbol]
 
         stream, base, drift, vol = self._params(symbol)
+        if self.bar_minutes != 1440:
+            fraction = D(self.bar_minutes) / D(1440)
+            drift = drift * fraction
+            vol = vol * fraction.sqrt()
+        step = timedelta(minutes=self.bar_minutes)
         rng = random.Random(stream)
         bars: list[Bar] = []
         close = base
@@ -211,7 +271,7 @@ class SyntheticFeed:
             bars.append(
                 Bar(
                     symbol=symbol,
-                    as_of=self.start + timedelta(days=i),
+                    as_of=self.start + step * i,
                     open=price(open_),
                     high=high,
                     low=low,
@@ -281,12 +341,18 @@ def _col(row: dict, name: str) -> Decimal:
 
 def _parse_date(raw: str) -> Optional[datetime]:
     raw = raw.strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%d/%m/%Y", "%m/%d/%Y"):
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%d/%m/%Y", "%m/%d/%Y",
+                "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
         try:
             return datetime.strptime(raw, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
-    return None
+    # Intraday exports usually carry an offset: 2026-09-28T14:45:00-04:00.
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 # =========================================================================
@@ -304,20 +370,39 @@ class YahooFeed:
     name = "yahoo"
     ENDPOINT = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
-    def __init__(self, days: int = 180, timeout_s: int = 20):
+    def __init__(self, days: int = 180, timeout_s: int = 20, bar_minutes: int = 1440):
         self.days = int(days)
         self.timeout_s = timeout_s
+        self.bar_minutes = int(bar_minutes)
         self._cache: dict[str, list[Bar]] = {}
+
+    def _span(self) -> str:
+        """How far back to ask. Yahoo caps intraday history hard.
+
+        Sub-hourly bars go back 60 days and hourly ones about two years; ask
+        for more and the endpoint refuses outright rather than trimming. So
+        intraday asks for the most it will give and the slice keeps `days`.
+        """
+        if self.bar_minutes >= 1440:
+            return "1y" if self.days <= 365 else "5y"
+        if self.bar_minutes < 60:
+            return "60d"
+        return "730d"
 
     def series(self, symbol: str) -> list[Bar]:
         if symbol in self._cache:
             return self._cache[symbol]
 
-        span = "1y" if self.days <= 365 else "5y"
+        if self.bar_minutes not in (1, 2, 5, 15, 30, 60, 90, 1440):
+            raise FeedNotConfigured(
+                f"yahoo has no {self.bar_minutes}-minute bars; it serves "
+                "1m, 2m, 5m, 15m, 30m, 60m, 90m and 1d"
+            )
         try:
             payload = _get_json(
                 self.ENDPOINT.format(symbol=symbol),
-                {"range": span, "interval": "1d"},
+                {"range": self._span(),
+                 "interval": _venue_timeframe(self.bar_minutes, "yahoo")},
                 {"User-Agent": "ai-village-trading/1.0"},
                 self.timeout_s,
             )
@@ -500,11 +585,12 @@ class AlpacaFeed:
     CRYPTO = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
 
     def __init__(self, days: int = 180, timeout_s: int = 20,
-                 timeframe: str = "1Day", stock_feed: str = "",
-                 min_interval_s: float = 0.35):
+                 timeframe: str = "", stock_feed: str = "",
+                 min_interval_s: float = 0.35, bar_minutes: int = 1440):
         self.days = int(days)
         self.timeout_s = timeout_s
-        self.timeframe = timeframe
+        self.bar_minutes = int(bar_minutes)
+        self.timeframe = timeframe or _venue_timeframe(self.bar_minutes, "alpaca")
         self.stock_feed = stock_feed or os.environ.get("TRADE_ALPACA_FEED", "iex")
         self.min_interval_s = float(min_interval_s)   # ~170 requests a minute
         self._cache: dict[str, list[Bar]] = {}
@@ -568,7 +654,24 @@ class AlpacaFeed:
         half-session. Over-asking is free — `limit` and the slice below cut it
         back — and under-asking silently shortens every indicator.
         """
-        span = int(self.days * 1.7) + 10
+        return self._start_for(crypto=False)
+
+    def _start_for(self, crypto: bool) -> str:
+        """`_start`, for a bar length and a market that may not sleep.
+
+        Daily bars keep the rule above. Intraday it is a count of bars back to
+        a calendar date: a stock trades 6.5 hours a day on about seven days in
+        ten, crypto trades all of them. Under-asking silently shortens every
+        indicator; over-asking crypto by weeks is worse than it looks, because
+        the bars come back oldest first and `limit` would keep the old end.
+        """
+        minutes = self.bar_minutes
+        if minutes >= 1440:
+            span = int(self.days * 1.7) + 10
+        elif crypto:
+            span = int(self.days * minutes / 1440 * 1.1) + 2
+        else:
+            span = int(self.days * minutes / 390 * 1.6) + 5
         return (datetime.now(timezone.utc) - timedelta(days=span)).date().isoformat()
 
     def series(self, symbol: str) -> list[Bar]:
@@ -579,10 +682,10 @@ class AlpacaFeed:
         if crypto:
             url = self.CRYPTO
             params = {"symbols": self.pair(upper), "timeframe": self.timeframe,
-                      "start": self._start(), "limit": 10000}
+                      "start": self._start_for(crypto=True), "limit": 10000}
         else:
             url = self.STOCKS.format(symbol=upper)
-            params = {"timeframe": self.timeframe, "start": self._start(),
+            params = {"timeframe": self.timeframe, "start": self._start_for(crypto=False),
                       "limit": 10000, "feed": self.stock_feed}
 
         # A village of forty symbols asks forty times in a burst, and the free
@@ -742,19 +845,23 @@ class ChainFeed:
 
 def _one_feed(source: str, config: DataConfig) -> MarketFeed:
     source = (source or "synthetic").strip().lower()
+    minutes = timeframe_minutes(getattr(config, "bar_timeframe", "1d"))
     if source == "synthetic":
-        return SyntheticFeed(seed=config.seed, days=config.history_days)
+        return SyntheticFeed(seed=config.seed, days=config.history_days, bar_minutes=minutes)
     if source == "csv":
         return CsvFeed(config.csv_dir)
     if source == "yahoo":
-        return YahooFeed(days=config.history_days)
+        return YahooFeed(days=config.history_days, bar_minutes=minutes)
     if source == "alpaca":
-        return AlpacaFeed(days=config.history_days)
+        return AlpacaFeed(days=config.history_days, bar_minutes=minutes)
     if source == "ccxt":
         return CcxtFeed(
             exchange=os.environ.get("TRADE_CCXT_EXCHANGE", "binance"),
             days=config.history_days,
-            timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME", "1d"),
+            # The old knob still wins if somebody set it; otherwise the
+            # village-wide bar length decides.
+            timeframe=os.environ.get("TRADE_CCXT_TIMEFRAME")
+            or _venue_timeframe(minutes, "ccxt"),
         )
     raise FeedNotConfigured(
         f"unknown TRADE_DATA_SOURCE={source!r}; expected synthetic, csv, yahoo, "

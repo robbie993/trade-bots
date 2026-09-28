@@ -88,6 +88,7 @@ class Backtester:
         capital: Optional[Decimal] = None,
         risk_limit: Optional[Decimal] = None,
         steps: Optional[int] = None,
+        strategy: str = "",
     ) -> BacktestResult:
         start_capital = money(capital if capital is not None else self.config.firm.allocation)
         record = FirmRecord(
@@ -100,6 +101,10 @@ class Backtester:
             risk_limit=D(risk_limit if risk_limit is not None else self.config.firm.risk_limit),
             genome=dict(genome or {}),
             universe=[s.upper() for s in symbols],
+            # `bot:<path>` here makes the firm run that file instead of the
+            # pod — the same switch the live loop reads, so a bot is
+            # backtested by the code that will trade it.
+            strategy=strategy or "",
             id=None,
         )
         firm = Firm(

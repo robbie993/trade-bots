@@ -1,0 +1,106 @@
+# Ten volatility-rotation firms on 15-minute bars. See bots/vol_rotation/README.md.
+#
+# This is its own firms file rather than an addition to firm_config.yaml, so
+# trying it does not touch the village you already run:
+#
+#   export TRADE_FIRMS_CONFIG=config/vol_rotation.yaml
+#   export TRADE_BAR_TIMEFRAME=15m TRADE_TICK_INTERVAL_S=900
+#   export TRADE_HISTORY_DAYS=1500          # bars, not days, once intraday
+#   python -m src.main trade init
+#   python -m src.main trade backtest
+#
+# risk_limit caps a single order at that fraction of the allocation. A full
+# position is 25% of equity in three tranches, and a volume surge buys two
+# tranches (about 17%) in one order, so 0.20 leaves room for that. The
+# village-wide TRADE_MAX_POSITION_PCT (25% by default) still caps each name.
+
+firms:
+  vr_index_etfs:
+    name: "Vol Rotation: Index ETFs"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [SPY, QQQ, IWM, DIA]
+    bot: bots/vol_rotation/01_index_etfs.py
+
+  vr_semiconductors:
+    name: "Vol Rotation: Semiconductors"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [NVDA, AMD, AVGO, SMH]
+    bot: bots/vol_rotation/02_semiconductors.py
+
+  vr_megacap_tech:
+    name: "Vol Rotation: Megacap Tech"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [AAPL, MSFT, GOOGL, META, AMZN]
+    bot: bots/vol_rotation/03_megacap_tech.py
+
+  vr_precious_metals:
+    name: "Vol Rotation: Precious Metals"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [GLD, SLV, GDX]
+    bot: bots/vol_rotation/04_precious_metals.py
+
+  vr_energy:
+    name: "Vol Rotation: Energy"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [XLE, XOM, CVX, XOP]
+    bot: bots/vol_rotation/05_energy.py
+
+  vr_banks:
+    name: "Vol Rotation: Banks"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [JPM, BAC, WFC, XLF]
+    bot: bots/vol_rotation/06_banks.py
+
+  vr_treasuries:
+    name: "Vol Rotation: Treasuries"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [TLT, TLH, IEF]
+    bot: bots/vol_rotation/07_treasuries.py
+
+  vr_crypto_majors:
+    name: "Vol Rotation: Crypto Majors"
+    asset_class: "Cryptocurrency"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [BTC-USD, ETH-USD, SOL-USD]
+    bot: bots/vol_rotation/08_crypto_majors.py
+
+  vr_crypto_equities:
+    name: "Vol Rotation: Crypto Equities"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [COIN, MSTR, MARA, RIOT]
+    bot: bots/vol_rotation/09_crypto_equities.py
+
+  vr_homebuilders:
+    name: "Vol Rotation: Homebuilders"
+    asset_class: "Equities"
+    venue: "paper"
+    risk_limit: 0.20
+    capital_allocation: 25000
+    universe: [ITB, XHB, DHI, LEN]
+    bot: bots/vol_rotation/10_homebuilders.py
