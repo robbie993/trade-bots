@@ -216,6 +216,21 @@ def test_a_close_only_feed_serves_no_highs_rather_than_zeros(firm_record, market
     assert context.closes("SPY"), "closes still come through"
     assert context.highs("SPY") == []
     assert context.lows("SPY") == []
+    assert context.volumes("SPY") == [], "no volume anywhere is no series, not zeros"
+
+
+def test_the_context_carries_volume_and_time_bar_for_bar(context):
+    """Sizing on participation needs the tape, and comparing a bar with the
+    same slot yesterday needs its clock: bar index is not time once a feed
+    carries extended hours or a thin name skips a bar."""
+    closes = context.closes("SPY")
+    assert len(context.volumes("SPY")) == len(closes)
+    assert len(context.times("SPY")) == len(closes)
+    assert all(v >= 0 for v in context.volumes("SPY"))
+    times = context.times("SPY")
+    assert times == sorted(times)
+    assert context.volumes("NOTREAL") == []
+    assert context.times("NOTREAL") == []
 
 
 # =========================================================================

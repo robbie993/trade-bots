@@ -74,6 +74,7 @@ bots/*
 !bots/example_scanner.py
 
 # -- the fleet ports, first-party --------------------------------------------
+!bots/astral.py
 !bots/atlas.py
 !bots/btcc.py
 !bots/coinbase.py

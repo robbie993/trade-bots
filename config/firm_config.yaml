@@ -214,6 +214,107 @@ firms:
       fair_band_pct: 24       # "fair value" is close to meaningless here
       calm_vol_pct: 85        # nothing about this is calm
 
+  # ---------------------------------------------------------------------
+  # ASTRAL: ten firms, one strategy. Volatility rotation inside a basket of
+  # correlated names on 15m bars, scaled in and out in thirds on relative
+  # volume. See bots/astral.py for the rules.
+  #
+  # The code is identical across all ten, and so are the size and the risk.
+  # What differs is the basket, so the leaderboard compares the idea across
+  # ten groups rather than ten tunings of it. Each basket is a group the
+  # market already trades as one thing; the bot stops opening positions in a
+  # basket whose names stop moving together.
+  #
+  # Needs TRADE_BAR=15m. The windows are counted in bars, so on daily bars
+  # "4 hours of momentum" becomes sixteen days and it is a different strategy.
+  # ---------------------------------------------------------------------
+  astral_semis:
+    name: "Astral - Semiconductors"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [NVDA, AMD, AVGO, MU, TSM]
+    bot: bots/astral.py
+
+  astral_megacap:
+    name: "Astral - Mega-cap Tech"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [AAPL, MSFT, GOOGL, AMZN, META]
+    bot: bots/astral.py
+
+  astral_indices:
+    name: "Astral - Index ETFs"
+    asset_class: "ETF"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [SPY, QQQ, IWM, DIA, RSP]
+    bot: bots/astral.py
+
+  astral_banks:
+    name: "Astral - Big Banks"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [JPM, BAC, C, WFC, GS]
+    bot: bots/astral.py
+
+  astral_energy:
+    name: "Astral - Oil Majors"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [XOM, CVX, COP, OXY, SLB]
+    bot: bots/astral.py
+
+  astral_metals:
+    name: "Astral - Gold & Silver"
+    asset_class: "Commodities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [GLD, SLV, GDX, GDXJ, NEM]
+    bot: bots/astral.py
+
+  astral_btc_proxies:
+    name: "Astral - Bitcoin Proxies"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [MSTR, COIN, MARA, RIOT, CLSK]
+    bot: bots/astral.py
+
+  astral_airlines:
+    name: "Astral - Airlines"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [DAL, UAL, AAL, LUV, ALK]
+    bot: bots/astral.py
+
+  astral_homebuilders:
+    name: "Astral - Homebuilders"
+    asset_class: "Equities"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    universe: [DHI, LEN, PHM, TOL, KBH]
+    bot: bots/astral.py
+
+  astral_crypto:
+    name: "Astral - Crypto Majors"
+    asset_class: "Cryptocurrency"
+    risk_limit: 0.03
+    capital_allocation: 25000
+    # The same Alpaca crypto costs as firm_c_crypto. 25 bps a side is a 50+
+    # bps round trip, which is a lot for a 15m rotation to clear. This is the
+    # Astral firm most likely to lose on costs alone, so count its trades
+    # before blaming the idea.
+    costs:
+      fee_bps: 25
+      slippage_bps: 5.3
+    universe: [BTC-USD, ETH-USD, SOL-USD, AVAX-USD, LINK-USD]
+    bot: bots/astral.py
+
 # =========================================================================
 # The scanners — bots that spot things instead of trading them.
 #

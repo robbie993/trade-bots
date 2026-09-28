@@ -111,6 +111,8 @@ class Context:
     _highs: dict = field(default_factory=dict, repr=False)
     _lows: dict = field(default_factory=dict, repr=False)
     _opens: dict = field(default_factory=dict, repr=False)
+    _volumes: dict = field(default_factory=dict, repr=False)
+    _times: dict = field(default_factory=dict, repr=False)
 
     # -- prices -----------------------------------------------------------
     def price(self, symbol: str) -> Optional[Decimal]:
@@ -152,6 +154,31 @@ class Context:
         results that way.
         """
         series = self._opens.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def volumes(self, symbol: str, lookback: int = 0) -> list:
+        """Bar volumes, oldest first, aligned with ``closes``.
+
+        A strategy that sizes on participation needs the tape, not a price
+        proxy for it. Unlike a high, a volume of zero can be true — a thin
+        fifteen-minute bar really can print nothing — so single zeros are kept.
+        A feed that carries no volume at all is served as ``[]``, for the same
+        reason ``highs`` is: a series of zeros reads as "nobody traded", which
+        is a claim, not an absence.
+        """
+        series = self._volumes.get(str(symbol).upper(), [])
+        return list(series[-lookback:] if lookback else series)
+
+    def times(self, symbol: str, lookback: int = 0) -> list:
+        """Bar timestamps, oldest first, aligned with ``closes``.
+
+        Bar *index* is not time. An intraday equity feed carries extended
+        hours, and a thin name skips bars nobody traded in, so "the bar 26
+        back" is neither yesterday nor the same bar on another symbol. A
+        strategy comparing a bar with the same slot yesterday, or two symbols
+        bar for bar, has to line them up by timestamp.
+        """
+        series = self._times.get(str(symbol).upper(), [])
         return list(series[-lookback:] if lookback else series)
 
     # -- your book --------------------------------------------------------
@@ -215,10 +242,21 @@ def _ohlc_or_nothing(bars, field_name: str) -> list:
     return series
 
 
+def _volumes_or_nothing(bars) -> list:
+    """Bar volumes, or `[]` if the feed never reported any.
+
+    Not all-or-nothing per bar like the prices: a zero-volume bar is a real
+    observation on a thin name. Only a series with no volume anywhere is
+    treated as a feed that does not carry it.
+    """
+    series = [D(getattr(bar, "volume", 0) or 0) for bar in bars]
+    return series if any(v > 0 for v in series) else []
+
+
 def build_context(record, market, positions: Sequence[Position], equity, lookback: int = 250):
     universe = tuple(record.universe or [])
     closes, marks = {}, {}
-    highs, lows, opens = {}, {}, {}
+    highs, lows, opens, volumes, times = {}, {}, {}, {}, {}
     for symbol in universe:
         try:
             marks[symbol] = D(market.mark(symbol))
@@ -243,6 +281,8 @@ def build_context(record, market, positions: Sequence[Position], equity, lookbac
         highs[symbol] = _ohlc_or_nothing(bars, "high")
         lows[symbol] = _ohlc_or_nothing(bars, "low")
         opens[symbol] = _ohlc_or_nothing(bars, "open")
+        volumes[symbol] = _volumes_or_nothing(bars)
+        times[symbol] = [b.as_of for b in bars]
     held = {
         str(p.symbol).upper(): Holding(
             symbol=str(p.symbol).upper(),
@@ -262,6 +302,8 @@ def build_context(record, market, positions: Sequence[Position], equity, lookbac
         _highs=highs,
         _lows=lows,
         _opens=opens,
+        _volumes=volumes,
+        _times=times,
     )
 
 
