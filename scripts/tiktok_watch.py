@@ -160,20 +160,33 @@ def watch_for(caption: str, duration: float, cfg: dict) -> float:
     return random.uniform(1.0, 2.0)
 
 
-def for_you(page, cfg: dict) -> list:
-    """(author, video id) from the For You page, nothing transcribed yet.
+def for_you(page, cfg: dict) -> tuple:
+    """(author, video id) from the For You page, nothing transcribed yet, and
+    how many of the videos scrolled past had captions on topic.
 
     The page plays one video at a time. Each is brought on screen in turn, read,
-    and watched for as long as `watch_for` says before moving on."""
+    and watched for as long as `watch_for` says before moving on. It keeps
+    scrolling (at most `for_you_scan` videos) until `for_you_videos` are found
+    whose caption is on topic or unreadable; a caption plainly about something
+    else is not worth downloading and transcribing. The on-topic share is the
+    number that says whether the steering is working, run over run."""
     limit = int(cfg.get("for_you_videos", 8))
+    stats = {"scrolled": 0, "on_topic": 0}
     if not limit:
-        return []
+        return [], stats
     page.goto("https://www.tiktok.com/foryou", wait_until="domcontentloaded")
     page.wait_for_timeout(6000)
     _check(page)
     out = []
-    for i in range(limit * 2):             # a video that never loads costs a step, not the run
+    for i in range(int(cfg.get("for_you_scan", 30))):
         item = page.locator(f'article[data-scroll-index="{i}"]')
+        for _ in range(3):                 # the next batch loads once the last one is on screen
+            if item.count():
+                break
+            last = page.locator("article[data-scroll-index]").last
+            if last.count():
+                last.scroll_into_view_if_needed()
+            page.wait_for_timeout(5000)
         if item.count() == 0:
             break
         item.first.scroll_into_view_if_needed()
@@ -182,14 +195,42 @@ def for_you(page, cfg: dict) -> list:
             shown = item.first.evaluate(FOR_YOU_ITEM, timeout=5000) or {}
         except Exception:  # noqa: BLE001 - a video that went away costs a step
             shown = {}
-        for pair in feed_videos([shown.get("link")]):
-            if pair[1] not in [v for _, v in out]:
-                out.append(pair)
-        time.sleep(watch_for(shown.get("caption", ""), shown.get("duration", 0), cfg))
+        caption = shown.get("caption", "")
+        pairs = feed_videos([shown.get("link")])
+        if pairs:
+            stats["scrolled"] += 1
+            stats["on_topic"] += on_topic(caption)
+        if pairs and (on_topic(caption) or not caption.strip()) \
+                and pairs[0][1] not in [v for _, v in out]:
+            out.append(pairs[0])
+        time.sleep(watch_for(caption, shown.get("duration", 0), cfg))
         _check(page)
         if len(out) >= limit:
             break
-    return out[:limit]
+    return out[:limit], stats
+
+
+def search_seed(page, cfg: dict, state: dict) -> list:
+    """One market search a run, rotating through `search_terms`.
+
+    What an account searches for is the other thing TikTok builds its For You
+    page from, after watch time. The top `search_videos` results are heard too."""
+    terms = cfg.get("search_terms") or []
+    n = int(cfg.get("search_videos", 3))
+    if not terms or not n:
+        return []
+    term = terms[state.get("search_cursor", 0) % len(terms)]
+    state["search_cursor"] = state.get("search_cursor", 0) + 1
+    page.goto("https://www.tiktok.com/search/video?q=" + term.replace(" ", "%20"),
+              wait_until="domcontentloaded")
+    page.wait_for_timeout(6000)
+    _check(page)
+    low, high = cfg.get("for_you_dwell_s") or (4, 9)
+    for _ in range(2):
+        page.mouse.wheel(0, 1500)
+        time.sleep(random.uniform(float(low), float(high)))
+    hrefs = page.eval_on_selector_all('a[href*="/video/"]', "els => els.map(e => e.href)")
+    return feed_videos(hrefs)[:n]
 
 
 def heard(handle: str, vid: str, max_s: int) -> dict:
@@ -252,6 +293,7 @@ def main(argv=None) -> int:
 
     fresh, notes, todo_videos, for_you_ids = [], [], [], set()
     skipped = state.setdefault("skipped", [])     # For You videos judged off topic
+    feed = {"scrolled": 0, "on_topic": 0}
     with sync_playwright() as p:
         ctx = browser(p).contexts[0]
         page = ctx.new_page()
@@ -275,9 +317,15 @@ def main(argv=None) -> int:
                     for vid in video_ids(page, h, int(cfg.get("videos_per_profile", 3))):
                         if vid not in seen:
                             todo_videos.append((h, vid))
-            # For You: what TikTok picks unasked, whoever posted it
+            # A market search (it steers the feed too, and its top results
+            # are read), then For You: what TikTok picks unasked
             queued = {v for _, v in todo_videos}
-            for h, vid in for_you(page, cfg):
+            for h, vid in search_seed(page, cfg, state):
+                if vid not in seen and vid not in queued:
+                    todo_videos.append((h, vid))
+                    queued.add(vid)
+            picked, feed = for_you(page, cfg)
+            for h, vid in picked:
                 if vid not in seen and vid not in queued and vid not in skipped:
                     todo_videos.append((h, vid))
                     queued.add(vid)
@@ -329,10 +377,13 @@ def main(argv=None) -> int:
     if db is not None:
         from src.trading import fleet
 
-        fleet.record(db, SNAPSHOT, {"readings": out, "posts_read": len(fresh)},
+        fleet.record(db, SNAPSHOT, {"readings": out, "posts_read": len(fresh),
+                                    "for_you_feed": feed},
                      service="tiktok", remote_path="config/tiktok_sources.yaml")
     for n in notes:
         print(" ", n)
+    if feed["scrolled"]:
+        print(f"  For You: {feed['on_topic']} of {feed['scrolled']} captions on topic")
     print(f"\n{len(fresh)} new video(s), {sum(1 for v in fresh if v['calls'])} with calls, "
           f"{len(out)} reading(s)" + (" (dry run)" if args.dry_run else ""))
     for v in fresh[:12]:

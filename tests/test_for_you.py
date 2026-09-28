@@ -105,3 +105,9 @@ def test_the_browser_cookies_reach_yt_dlp_in_the_netscape_format():
                                     "sessionid", "abc"]
     assert lines[2].split("\t") == ["www.instagram.com", "FALSE", "/", "FALSE", "0", "rur", "x"]
 
+
+
+def test_the_tiktok_feed_is_steered_by_search_as_well_as_watch_time():
+    tt = yaml.safe_load((ROOT / "config" / "tiktok_sources.yaml").read_text(encoding="utf-8"))
+    assert tt["search_terms"] and 0 < tt["search_videos"] <= 5
+    assert tt["for_you_scan"] >= tt["for_you_videos"]
