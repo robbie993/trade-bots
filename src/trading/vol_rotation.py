@@ -54,6 +54,8 @@ from dataclasses import dataclass, fields
 from decimal import Decimal
 from typing import Optional
 
+from . import take_profit
+
 # Bars in a trading year, for annualising a per-bar volatility.
 EQUITY_15M_BARS_PER_YEAR = 26 * 252     # 6.5 hours of 15m bars, 252 sessions
 CRYPTO_15M_BARS_PER_YEAR = 96 * 365     # 24 hours, every day
@@ -76,6 +78,20 @@ class Params:
     max_weight: float = 0.25        # a full position, as a fraction of equity
     target_vol: float = 0.40        # annualised vol a full position is sized to
     bars_per_year: int = EQUITY_15M_BARS_PER_YEAR
+    # Take profit — see take_profit.py. Empty means none, which is the
+    # original behaviour exactly: every exit is a soft exit.
+    take_profit: str = ""
+    atr_window: int = 32            # bars of average true range
+    tp_atr: float = 8.0             # target distance, in ATRs
+    tp_r: float = 6.0               # target, in multiples of the risk
+    tp_stop_atr: float = 1.5        # the risk, 1R, in ATRs
+    tp_sigma: float = 2.0           # target distance, in standard deviations
+    tp_horizon: int = 130           # bars the sigma move is measured over
+    tp_lookback: int = 128          # bars for swing highs, ranges and bands
+    tp_mult: float = 2.0            # multiple of a range or a leg
+    tp_trail_atr: float = 5.0       # trailing distance, in ATRs
+    tp_arm_atr: float = 2.0         # gain before a trail arms, in ATRs
+    tp_climax_rvol: float = 4.0     # relative volume that counts as a climax
 
     @classmethod
     def from_mapping(cls, raw: Optional[dict]) -> "Params":
@@ -91,12 +107,27 @@ class Params:
             raise ValueError(f"unknown vol_rotation parameter(s): {', '.join(unknown)}")
         defaults = cls()
         typed = {k: type(getattr(defaults, k))(v) for k, v in raw.items()}
-        return cls(**typed)
+        made = cls(**typed)
+        if made.take_profit and made.take_profit not in take_profit.MODES:
+            raise ValueError(
+                f"unknown take_profit {made.take_profit!r}; expected one of "
+                + ", ".join(take_profit.MODES)
+            )
+        if made.take_profit and made.history > 250:
+            raise ValueError("take-profit lookbacks need more than the 250 bars a bot is given")
+        return made
 
     @property
     def warmup(self) -> int:
         """Bars a name needs before it can be scored at all."""
         return max(self.long_vol_window, self.mom_window, self.volume_window) + 1
+
+    @property
+    def history(self) -> int:
+        """Bars to ask the context for: the warm-up, and the take-profit's reach."""
+        if not self.take_profit:
+            return self.warmup + 1
+        return max(self.warmup, self.tp_lookback + 1, self.atr_window + 1) + 1
 
 
 # =========================================================================
@@ -200,9 +231,10 @@ def propose(context, params=None) -> list:
     equity = float(context.equity)
     cash = float(context.cash)
 
-    readings = {}
+    readings, history = {}, {}
     for symbol in context.universe:
-        reading = read(symbol, context.bars(symbol, p.warmup + 1), p)
+        history[symbol] = context.bars(symbol, p.history)
+        reading = read(symbol, history[symbol], p)
         if reading is not None:
             readings[symbol] = reading
 
@@ -210,6 +242,7 @@ def propose(context, params=None) -> list:
     ranked = targets(readings, held, p)
     wanted = set(ranked)
     sells, buys = [], []
+    no_adds = set()
 
     # -- out: everything held that is no longer a target, and trims --------
     for symbol in sorted(held):
@@ -220,6 +253,23 @@ def propose(context, params=None) -> list:
         size = full_size(r, equity, p)
         tranche = size / p.tranches if size > 0 else 0.0
         value = quantity * r.price
+
+        if p.take_profit:
+            position = context.position(symbol)
+            entry = float(position.average_price) if position else 0.0
+            decision = take_profit.decide(history[symbol], entry, r, p, value, size)
+            if not decision.allow_adds:
+                no_adds.add(symbol)
+            if decision.sell_fraction > 0:
+                sells.append(_sell(
+                    symbol, min(quantity, quantity * decision.sell_fraction),
+                    f"{decision.why} (entry {entry:.2f}, now {r.price:.2f})",
+                ))
+                continue
+            if r.price > entry > 0:
+                # A winner. Only the take-profit closes it, so none of the
+                # soft exits below get a say. See take_profit.py.
+                continue
 
         if r.score < 0 or r.spiking(p):
             why = ("momentum turned negative" if r.score < 0
@@ -259,8 +309,19 @@ def propose(context, params=None) -> list:
 
     # -- in: add a tranche to a target on a bar that traded ------------------
     spendable = cash + sum(float(o["quantity"]) * readings[o["symbol"]].price for o in sells)
+    # A winner held past its rotation still fills a slot, so a new leader
+    # waits for it rather than doubling the book.
+    selling = {o["symbol"] for o in sells}
+    stale = [s for s in held if s not in wanted and s not in selling]
+    slots = p.hold - len(stale) if p.take_profit else p.hold
     for symbol in ranked:
         r = readings[symbol]
+        if symbol in no_adds:
+            continue
+        if symbol not in held:
+            if slots <= 0:
+                continue
+            slots -= 1
         size = full_size(r, equity, p)
         if size <= 0:
             continue

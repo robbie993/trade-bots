@@ -51,3 +51,4 @@ bots/*
 !bots/example_adapter.py
 !bots/example_scanner.py
 !bots/vol_rotation/
+!bots/vol_rotation_tp/
