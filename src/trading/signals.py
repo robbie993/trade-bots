@@ -518,7 +518,16 @@ class Scanners:
                 + ", ".join(f"{r.symbol} {r.score:+.0f}" for r in readings[:5])
                 + (f" (+{len(readings) - 5} more)" if len(readings) > 5 else "")
             )
-        elif not complaints:
+        elif complaints:
+            # It spoke and every word was refused, most often names outside its
+            # universe (the fleet's Form 4 picks are small caps nobody here
+            # trades). Asked again next tick it says the same and is refused the
+            # same, a line per name per minute until the bar turns. Its silence
+            # for this bar is recorded instead, as the scribe's is. A scanner
+            # that returned nothing is still asked again: its data may land
+            # mid-bar.
+            self.board.mark_silent(spec.name, as_of)
+        else:
             notes.append(f"{spec.name}: nothing caught its eye")
         return notes
 

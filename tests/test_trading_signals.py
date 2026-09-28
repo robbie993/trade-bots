@@ -369,6 +369,46 @@ def test_a_scanner_is_asked_once_per_bar_not_once_per_tick(market, tmp_path):
     assert counter.read_text() == "xx"
 
 
+def test_a_scanner_whose_every_name_is_refused_says_so_once_per_bar(market, tmp_path):
+    """Names outside its universe are refused. Asked again on the next tick it
+    names them again, so the refusal filled the log and the flow once a minute
+    until the bar turned. It is told once, and its silence kept for the bar."""
+    counter = tmp_path / "count.txt"
+    path = _write(
+        tmp_path, "s.py",
+        f"COUNT = {str(counter)!r}\n"
+        "def scan(context):\n"
+        "    open(COUNT, 'a').write('x')\n"
+        "    return {'ZZZZ': 40}\n",
+    )
+    board = _board()
+    desk = Scanners(board, [ScannerSpec("s", path, universe=("SPY",))])
+    assert any("outside the village's universe, dropped: ZZZZ" in n for n in desk.run(market, BAR))
+    assert desk.run(market, BAR) == []
+    assert counter.read_text() == "x"
+    assert board.reading("ZZZZ", BAR) is None
+    desk.run(market, LATER)
+    assert counter.read_text() == "xx"
+
+
+def test_a_scanner_with_nothing_to_say_is_asked_again_next_tick(market, tmp_path):
+    """The fleet scanners read files that land when they land. One that had
+    nothing at the start of a bar may have something before its end."""
+    flag = tmp_path / "ready.txt"
+    path = _write(
+        tmp_path, "s.py",
+        f"import os\nFLAG = {str(flag)!r}\n"
+        "def scan(context):\n"
+        "    return {'SPY': 25} if os.path.exists(FLAG) else {}\n",
+    )
+    board = _board()
+    desk = Scanners(board, [ScannerSpec("s", path)])
+    assert any("nothing caught its eye" in n for n in desk.run(market, BAR))
+    flag.write_text("x")
+    desk.run(market, BAR)
+    assert board.reading("SPY", BAR).score == Decimal("25")
+
+
 def test_a_broken_scanner_config_nags_every_pass(market):
     desk = Scanners(_board(), [], error="scanner config unusable: bad indentation")
     assert "unusable" in desk.run(market, BAR)[0]
