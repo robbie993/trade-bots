@@ -1,4 +1,4 @@
-"""Replay Astral and its ten take-profit iterations on real 15m bars.
+"""Replay Astral and its take-profit iterations on real 15m bars.
 
     python scripts/astral_backtest.py            # fetch (or reuse) and run
     python scripts/astral_backtest.py --refresh  # fetch fresh bars
@@ -42,7 +42,8 @@ LOOKBACK = 250                     # what the village hands a bot
 # Per side, in basis points. The village's defaults for equities, and the
 # measured Alpaca crypto costs `firm_c_crypto` carries.
 COSTS = {"equity": (Decimal("2"), Decimal("5")), "crypto": (Decimal("25"), Decimal("5.3"))}
-STRATEGIES = ["astral"] + sorted(p.stem for p in (REPO / "bots").glob("astral_tp_*.py"))
+STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py")
+                                 for p in (REPO / "bots").glob(pattern))
 
 
 # =========================================================================

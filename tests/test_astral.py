@@ -176,7 +176,8 @@ def test_astral_is_not_in_the_village_yet():
 # =========================================================================
 from pathlib import Path  # noqa: E402
 
-VARIANTS = sorted(str(p).replace("\\", "/") for p in Path("bots").glob("astral_tp_*.py"))
+VARIANTS = sorted(str(p).replace("\\", "/") for pattern in ("astral_tp_*.py", "astral_vs_*.py")
+                  for p in Path("bots").glob(pattern))
 
 
 @pytest.fixture(scope="module")
@@ -186,8 +187,9 @@ def core():
     return astral
 
 
-def test_there_are_ten_iterations():
-    assert len(VARIANTS) == 10, VARIANTS
+def test_there_are_ten_of_each_iteration():
+    assert sum("astral_tp_" in v for v in VARIANTS) == 10, VARIANTS
+    assert sum("astral_vs_" in v for v in VARIANTS) == 10, VARIANTS
 
 
 @pytest.mark.parametrize("path", VARIANTS)

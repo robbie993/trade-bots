@@ -24,15 +24,23 @@ def _median(xs):
     return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
-def targets(context, symbol, read, entry, basket):
+def participation(context, symbol, recent_bars=RECENT_BARS, cap=MAX_PARTICIPATION):
+    """Recent average volume over the median bar, held between 1x and ``cap``.
+    1.0 when the feed has no volume or not enough of it. The astral_vs_*
+    iterations build on this."""
     volumes = [float(v) for v in context.volumes(symbol)]
-    participation = 1.0
-    if len(volumes) > RECENT_BARS:
-        typical = _median(volumes)
-        if typical > 0:
-            recent = sum(volumes[-RECENT_BARS:]) / RECENT_BARS
-            participation = min(MAX_PARTICIPATION, max(1.0, recent / typical))
-    return [(entry * (1 + BASE_ATRS * participation * read["atr_pct"]), 0.0)]
+    if len(volumes) <= recent_bars:
+        return 1.0
+    typical = _median(volumes)
+    if typical <= 0:
+        return 1.0
+    recent = sum(volumes[-recent_bars:]) / recent_bars
+    return min(cap, max(1.0, recent / typical))
+
+
+def targets(context, symbol, read, entry, basket):
+    p = participation(context, symbol)
+    return [(entry * (1 + BASE_ATRS * p * read["atr_pct"]), 0.0)]
 
 
 def propose(context):
