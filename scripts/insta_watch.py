@@ -15,7 +15,12 @@ likes nothing, comments on nothing and messages no one.
 
 **Reading.** Each run opens the followed profiles (a rotating few), takes the
 newest posts' captions from the page's own metadata, and scrolls the home feed
-once for whatever Instagram now recommends. Captions go through the same rule
+once for whatever Instagram now recommends. Then it scrolls what Instagram picks
+for the account rather than who it follows, the For You side: the Reels tab one
+reel at a time, pausing on each like a person watching, and the Explore grid
+(`for_you_reels`, `for_you_explore`, `for_you_dwell_s`; 0 turns either off).
+Those posts are read the same way and marked with where they came from.
+Captions go through the same rule
 as Reddit and YouTube (`crowd.extract_calls`, names turned into tickers first):
 a ticker with a directional word beside it is a call, a bare mention is not.
 One account is one voice.
@@ -30,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -141,6 +147,56 @@ def post_links(page, limit: int) -> list:
     return out
 
 
+def reel_code(url: str) -> str:
+    """The reel a Reels-tab address is showing: /reels/<code>/ or /reel/<code>/."""
+    m = re.search(r"/reels?/([A-Za-z0-9_-]+)", url or "")
+    return m.group(1) if m else ""
+
+
+def dwell(cfg: dict) -> None:
+    """Stay on a post for a while, a different while each time."""
+    low, high = cfg.get("for_you_dwell_s") or (4, 9)
+    time.sleep(random.uniform(float(low), float(high)))
+
+
+def for_you(page, cfg: dict) -> list:
+    """What Instagram picks for the account: (kind, code, where), nothing read yet.
+
+    The Reels tab plays one reel at a time and moves its address along as it
+    goes, so each reel is taken from the address and the next one is a key
+    press away. The Explore grid is ordinary links, scrolled a few times."""
+    out, codes = [], set()
+    reels = int(cfg.get("for_you_reels", 15))
+    if reels:
+        page.goto("https://www.instagram.com/reels/", wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+        _check(page)
+        for _ in range(reels * 2):          # a reel that never loads costs a step, not the run
+            code = reel_code(page.url)
+            if code and code not in codes:
+                codes.add(code)
+                out.append(("reel", code, "reels"))
+            if len(codes) >= reels:
+                break
+            dwell(cfg)
+            page.keyboard.press("ArrowDown")
+            page.wait_for_timeout(1500)
+            _check(page)
+    explore = int(cfg.get("for_you_explore", 12))
+    if explore:
+        page.goto("https://www.instagram.com/explore/", wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+        _check(page)
+        for _ in range(3):
+            page.mouse.wheel(0, 2200)
+            dwell(cfg)
+        for kind, code in post_links(page, explore + len(codes)):
+            if code not in codes and len(out) < reels + explore:
+                codes.add(code)
+                out.append((kind, code, "explore"))
+    return out
+
+
 def read_post(page, kind: str, code: str, author_hint: str = "") -> dict:
     url = f"https://www.instagram.com/{kind}/{code}/"
     page.goto(url, wait_until="domcontentloaded")
@@ -167,6 +223,8 @@ def main(argv=None) -> int:
     ap.add_argument("--database-url", default="")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-follow", action="store_true", help="read only this run")
+    ap.add_argument("--for-you-only", action="store_true",
+                    help="skip follows, profiles and the home feed; scroll Reels and Explore")
     args = ap.parse_args(argv)
 
     from playwright.sync_api import sync_playwright
@@ -194,7 +252,7 @@ def main(argv=None) -> int:
         page = ctx.new_page()
         try:
             # 1. seed the feed, a few follows a run
-            if not args.no_follow and not args.dry_run:
+            if not (args.no_follow or args.dry_run or args.for_you_only):
                 todo = [h for h in handles
                         if h not in state["followed"] and h not in state["missing"]]
                 for h in todo[: int(cfg.get("follows_per_run", 4))]:
@@ -206,7 +264,7 @@ def main(argv=None) -> int:
             # 2. read a rotating few of the followed profiles
             pool = [h for h in handles if h not in state["missing"]]
             start = state.get("cursor", 0) % max(1, len(pool))
-            batch = (pool[start:] + pool[:start])[:PROFILES_PER_RUN]
+            batch = [] if args.for_you_only else (pool[start:] + pool[:start])[:PROFILES_PER_RUN]
             state["cursor"] = start + len(batch)
             for h in batch:
                 if not open_profile(page, h):
@@ -220,13 +278,14 @@ def main(argv=None) -> int:
                     seen.add(post["id"])
                     page.wait_for_timeout(1500)
             # 3. the home feed: what the algorithm now recommends
-            page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
-            page.wait_for_timeout(4000)
-            _check(page)
-            for _ in range(3):
-                page.mouse.wheel(0, 2200)
-                page.wait_for_timeout(2000)
-            for kind, code in post_links(page, 10):
+            if not args.for_you_only:
+                page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
+                page.wait_for_timeout(4000)
+                _check(page)
+                for _ in range(3):
+                    page.mouse.wheel(0, 2200)
+                    page.wait_for_timeout(2000)
+            for kind, code in ([] if args.for_you_only else post_links(page, 10)):
                 if f"{kind}/{code}" in seen:
                     continue
                 post = read_post(page, kind, code)
@@ -234,6 +293,17 @@ def main(argv=None) -> int:
                 post["from_feed"] = True
                 fresh.append(post)
                 seen.add(post["id"])
+            # 4. For You: the Reels tab and Explore, what Instagram picks unasked
+            for kind, code, where in for_you(page, cfg):
+                if f"{kind}/{code}" in seen:
+                    continue
+                post = read_post(page, kind, code)
+                post["calls"] = calls_in(post, symbols)
+                post["from_feed"] = True
+                post["for_you"] = where
+                fresh.append(post)
+                seen.add(post["id"])
+                page.wait_for_timeout(1500)
         except Challenged as exc:
             notes.append(f"STOPPED: {exc}")
         finally:
@@ -248,6 +318,7 @@ def main(argv=None) -> int:
                          score=len(post["calls"]),
                          detail={"author": post["author"], "published": post["published"],
                                  "calls": post["calls"], "from_feed": post.get("from_feed", False),
+                                 "for_you": post.get("for_you", ""),
                                  "topics": tag(post["text"])})
     pool = list(fresh)
     if db is not None:

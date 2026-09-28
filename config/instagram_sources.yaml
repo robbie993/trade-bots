@@ -67,3 +67,12 @@ follow_pause_s: 45
 # Posts read per profile per run, and calls older than this stop voting.
 posts_per_profile: 6
 max_age_hours: 24
+
+# For You: after the home feed, scroll what Instagram picks for the account
+# rather than who it follows. Reels are watched one at a time with a pause of
+# for_you_dwell_s (a random number of seconds in that range) on each; Explore
+# is a grid, scrolled a few times. Read only: nothing there is liked or
+# followed. 0 turns either off.
+for_you_reels: 15
+for_you_explore: 12
+for_you_dwell_s: [4, 9]

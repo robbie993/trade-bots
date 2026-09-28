@@ -24,3 +24,9 @@ videos_per_profile: 3
 profiles_per_run: 4
 max_video_s: 600
 max_age_hours: 24
+
+# For You: videos taken from the For You page each run, whoever posted them,
+# with a pause of for_you_dwell_s (random, in that range) on each. Each one is
+# transcribed like the rest, so keep this modest. 0 turns it off.
+for_you_videos: 8
+for_you_dwell_s: [4, 9]

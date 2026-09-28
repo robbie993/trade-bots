@@ -15,12 +15,18 @@ and skipping anything longer than `max_video_s`. Caption plus transcript go
 through the usual rule, `crowd.extract_calls`, one account one voice. Videos go
 to `intel` (source `tiktok`), the aggregate to the `tiktok_calls` snapshot.
 
+It also scrolls the For You page, one video at a time with a pause on
+each (`for_you_videos`, `for_you_dwell_s`; 0 turns it off), so what TikTok
+recommends to an account that follows markets people is read too, whoever
+posted it. Those videos are marked `for_you` in `intel`.
+
 A verification page stops the run with a message; nothing tries to get past it.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 import tempfile
@@ -93,16 +99,62 @@ def follow(page, handle: str) -> str:
     return "followed"
 
 
+def feed_videos(hrefs) -> list:
+    """(author, video id) for each distinct video link, in page order."""
+    out, ids = [], set()
+    for h in hrefs:
+        m = re.search(r"/@([^/?#]+)/video/(\d+)", h or "")
+        if m and m.group(2) not in ids:
+            ids.add(m.group(2))
+            out.append((m.group(1), m.group(2)))
+    return out
+
+
 def video_ids(page, handle: str, limit: int) -> list:
     hrefs = page.eval_on_selector_all('a[href*="/video/"]', "els => els.map(e => e.href)")
+    return [vid for author, vid in feed_videos(hrefs)
+            if author.lower() == handle.lower()][:limit]
+
+
+# Each For You video is an <article data-scroll-index=N> that only fills in near
+# the screen. It carries no link to itself: the author is the avatar's /@handle
+# link and the video id is in the player's element id, xgwrapper-0-<id>.
+FOR_YOU_ITEMS = """() => [...document.querySelectorAll(
+    'article[data-e2e="recommend-list-item-container"]')].map(a => {
+  const who = a.querySelector('a[href^="/@"]');
+  const player = [...a.querySelectorAll('[id^="xgwrapper-"]')].map(e => e.id)[0] || '';
+  const id = (player.match(/(\\d{15,})$/) || [])[1];
+  return who && id ? 'https://www.tiktok.com' + who.getAttribute('href') + '/video/' + id : '';
+})"""
+
+
+def for_you(page, cfg: dict) -> list:
+    """(author, video id) from the For You page, nothing transcribed yet.
+
+    The page plays one video at a time. Each is brought on screen in turn,
+    watched for a while, and read from the page before moving on."""
+    limit = int(cfg.get("for_you_videos", 8))
+    if not limit:
+        return []
+    low, high = cfg.get("for_you_dwell_s") or (4, 9)
+    page.goto("https://www.tiktok.com/foryou", wait_until="domcontentloaded")
+    page.wait_for_timeout(6000)
+    _check(page)
     out = []
-    for h in hrefs:
-        m = re.search(r"/@([^/]+)/video/(\d+)", h or "")
-        if m and m.group(1).lower() == handle.lower() and m.group(2) not in out:
-            out.append(m.group(2))
+    for i in range(limit * 2):             # a video that never loads costs a step, not the run
+        item = page.locator(f'article[data-scroll-index="{i}"]')
+        if item.count() == 0:
+            break
+        item.first.scroll_into_view_if_needed()
+        page.wait_for_timeout(2000)
+        for pair in feed_videos(page.evaluate(FOR_YOU_ITEMS)):
+            if pair[1] not in [v for _, v in out]:
+                out.append(pair)
         if len(out) >= limit:
             break
-    return out
+        time.sleep(random.uniform(float(low), float(high)))
+        _check(page)
+    return out[:limit]
 
 
 def heard(handle: str, vid: str, max_s: int) -> dict:
@@ -141,6 +193,8 @@ def main(argv=None) -> int:
     ap.add_argument("--database-url", default="")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-follow", action="store_true")
+    ap.add_argument("--for-you-only", action="store_true",
+                    help="skip follows and profiles; scroll the For You page")
     args = ap.parse_args(argv)
 
     from playwright.sync_api import sync_playwright
@@ -161,12 +215,12 @@ def main(argv=None) -> int:
         seen = {r["item_key"] for r in db.query(
             "SELECT item_key FROM intel WHERE source = ?", (SOURCE,))}
 
-    fresh, notes, todo_videos = [], [], []
+    fresh, notes, todo_videos, for_you_ids = [], [], [], set()
     with sync_playwright() as p:
         ctx = browser(p).contexts[0]
         page = ctx.new_page()
         try:
-            if not args.no_follow and not args.dry_run:
+            if not (args.no_follow or args.dry_run or args.for_you_only):
                 todo = [h for h in handles
                         if h not in state["followed"] and h not in state["missing"]]
                 for h in todo[: int(cfg.get("follows_per_run", 3))]:
@@ -177,13 +231,21 @@ def main(argv=None) -> int:
                     time.sleep(int(cfg.get("follow_pause_s", 60)))
             pool = [h for h in handles if h not in state["missing"]]
             start = state.get("cursor", 0) % max(1, len(pool))
-            batch = (pool[start:] + pool[:start])[: int(cfg.get("profiles_per_run", 4))]
+            batch = [] if args.for_you_only else \
+                (pool[start:] + pool[:start])[: int(cfg.get("profiles_per_run", 4))]
             state["cursor"] = start + len(batch)
             for h in batch:
                 if open_profile(page, h):
                     for vid in video_ids(page, h, int(cfg.get("videos_per_profile", 3))):
                         if vid not in seen:
                             todo_videos.append((h, vid))
+            # For You: what TikTok picks unasked, whoever posted it
+            queued = {v for _, v in todo_videos}
+            for h, vid in for_you(page, cfg):
+                if vid not in seen and vid not in queued:
+                    todo_videos.append((h, vid))
+                    queued.add(vid)
+                    for_you_ids.add(vid)
         except Challenged as exc:
             notes.append(f"STOPPED: {exc}")
         finally:
@@ -204,6 +266,7 @@ def main(argv=None) -> int:
                          score=len(v["calls"]),
                          detail={"author": h, "published": v["published"], "calls": v["calls"],
                                  "words": len(v["text"].split()),
+                                 "for_you": vid in for_you_ids,
                                  "topics": tag(f"{v['title']} {v['text']}")})
 
     pool = list(fresh)
