@@ -148,6 +148,9 @@ STOP_ATRS = 3.0
 # -- take profit (the astral_tp_* iterations only) ------------------------------
 #: No target closer than this many stop-distances (R) above entry.
 MIN_TARGET_R = 2.0
+#: The trail the astral_run_* iterations share: 4 ATR off the highest high of
+#: the last session. The same for all ten, so they differ only in the target.
+RUN_TRAIL = (26, 4.0)
 EQUITY_BARS_PER_SESSION = 26
 CRYPTO_BARS_PER_SESSION = 96
 
@@ -362,8 +365,16 @@ def propose(context):
     return run(context)
 
 
-def run(context, take_profit=None):
+def run(context, take_profit=None, trail=None):
     """The strategy. ``take_profit`` is how the astral_tp_* iterations differ.
+
+    ``trail`` is ``(bars, atrs)`` or None, and only matters with a target. With
+    it, a winner short of its target is no longer closed when momentum turns;
+    it stays until the target, or until price falls ``atrs`` ATR below its
+    highest high of the last ``bars`` bars. That is what lets a far target
+    actually be reached: in the replay, the momentum exit ended almost every
+    winner long before one. Losers keep every exit. The astral_run_*
+    iterations use it; the astral_tp_* and astral_vs_* ones do not.
 
     It is called for each held name as ``take_profit(context, symbol, read,
     entry, basket)`` and returns a ladder: ``[(price, keep), ...]`` in rising
@@ -450,11 +461,22 @@ def run(context, take_profit=None):
                              quantity=None if keep <= 0 else excess / price)
                     continue                  # past a target: no adding back
 
-            if read["z"] <= 0:
-                sell(None, "momentum gone")
-                continue
             # A winner short of its target is left to reach it.
             running = bool(ladder) and pnl is not None and pnl > 0
+            if running and trail:
+                # ...and with a trail, momentum no longer ends it either. Only
+                # the target or a fall of `atrs` ATR off the recent high does.
+                bars, atrs = trail
+                recent = context.highs(symbol, bars) or context.closes(symbol, bars)
+                peak = float(max(recent)) if recent else float(price)
+                floor = peak * (1 - atrs * read["atr_pct"])
+                if float(price) < floor:
+                    sell(None, f"trailing stop: {float(price):.2f} fell {atrs:g} ATR "
+                               f"off the {bars}-bar high {peak:.2f}")
+                    continue
+            elif read["z"] <= 0:
+                sell(None, "momentum gone")
+                continue
             if symbol not in leaders and not running:
                 sell(2 if heavy else 1, f"rotating out: ranked {ranked.index(symbol) + 1}")
                 continue

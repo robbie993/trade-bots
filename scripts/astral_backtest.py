@@ -42,7 +42,7 @@ LOOKBACK = 250                     # what the village hands a bot
 # Per side, in basis points. The village's defaults for equities, and the
 # measured Alpaca crypto costs `firm_c_crypto` carries.
 COSTS = {"equity": (Decimal("2"), Decimal("5")), "crypto": (Decimal("25"), Decimal("5.3"))}
-STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py")
+STRATEGIES = ["astral"] + sorted(p.stem for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py")
                                  for p in (REPO / "bots").glob(pattern))
 
 
@@ -158,7 +158,8 @@ class Book:
 
 def _reason(rationale):
     """The exit rule that closed a trade, from the order's rationale."""
-    for name in ("take profit", "stop", "momentum gone", "rotating out", "distribution"):
+    for name in ("take profit", "trailing stop", "stop", "momentum gone", "rotating out",
+                 "distribution"):
         if rationale.startswith(name):
             return name
     return "other"
@@ -312,7 +313,8 @@ def main():
               f"{fmt(s['avg_loss'], ',.0f'):>9}{fmt(s['pf'], '.2f'):>6}"
               f"{s['worst_dd'] * 100:>8.1f}%")
 
-    reasons = ("take profit", "stop", "momentum gone", "rotating out", "distribution")
+    reasons = ("take profit", "trailing stop", "stop", "momentum gone", "rotating out",
+               "distribution")
     print("\nHow trades ended (count / win% / P&L $):")
     print(f"{'strategy':<30}" + "".join(f"{r:>22}" for r in reasons))
     for key in STRATEGIES:

@@ -176,7 +176,7 @@ def test_astral_is_not_in_the_village_yet():
 # =========================================================================
 from pathlib import Path  # noqa: E402
 
-VARIANTS = sorted(str(p).replace("\\", "/") for pattern in ("astral_tp_*.py", "astral_vs_*.py")
+VARIANTS = sorted(str(p).replace("\\", "/") for pattern in ("astral_tp_*.py", "astral_vs_*.py", "astral_run_*.py")
                   for p in Path("bots").glob(pattern))
 
 
@@ -190,6 +190,35 @@ def core():
 def test_there_are_ten_of_each_iteration():
     assert sum("astral_tp_" in v for v in VARIANTS) == 10, VARIANTS
     assert sum("astral_vs_" in v for v in VARIANTS) == 10, VARIANTS
+    assert sum("astral_run_" in v for v in VARIANTS) == 10, VARIANTS
+
+
+def test_with_a_trail_a_winner_survives_a_momentum_turn(core):
+    """Without a trail a profitable trade whose momentum turned is sold; with
+    one it is held while it stays near its recent high."""
+    bars = basket(drifts={"AAA": -0.002})
+    price = bars["AAA"]["closes"][-1]
+    ctx = context(bars, held={"AAA": 100}, entries={"AAA": price / 1.01})
+    assert core._read(ctx, "AAA")["z"] <= 0, "the setup needs momentum to have turned"
+    far = lambda c, s, r, e, b: [(e * 2, 0.0)]  # noqa: E731
+
+    sold = [o for o in core.run(ctx, take_profit=far) if o["symbol"] == "AAA"]
+    assert sold and "momentum gone" in sold[0]["rationale"]
+    held = [o for o in core.run(ctx, take_profit=far, trail=(26, 50.0))
+            if o["symbol"] == "AAA" and o["side"] == "sell"]
+    assert held == []
+
+
+def test_the_trail_sells_a_winner_that_fell_off_its_high(core):
+    bars = basket(drifts={"AAA": -0.002})
+    price = bars["AAA"]["closes"][-1]
+    bars["AAA"]["highs"][-5] = price * 1.5          # a high it has since fallen from
+    ctx = context(bars, held={"AAA": 100}, entries={"AAA": price / 1.01})
+    far = lambda c, s, r, e, b: [(e * 2, 0.0)]  # noqa: E731
+    sells = [o for o in core.run(ctx, take_profit=far, trail=(26, 4.0))
+             if o["symbol"] == "AAA"]
+    assert sells and "trailing stop" in sells[0]["rationale"]
+    assert sells[0]["quantity"] == Decimal(100)
 
 
 @pytest.mark.parametrize("path", VARIANTS)
