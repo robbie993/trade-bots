@@ -9,15 +9,24 @@ Everything else is Astral, unchanged: see bots/astral.py, and
 village: no firm names this file.
 """
 
+from collections import deque
+
 from bots.astral import run
 
 RUN_BARS = 78
 
 
 def _best_run(closes):
-    best = 0.0
+    """Largest close / (lowest close in the prior RUN_BARS) - 1, in one pass:
+    a rolling minimum kept in a deque rather than a fresh min() per bar."""
+    best, lows = 0.0, deque()                 # indices, closes rising
     for i, close in enumerate(closes):
-        low = min(closes[max(0, i - RUN_BARS):i + 1])
+        while lows and closes[lows[-1]] >= close:
+            lows.pop()
+        lows.append(i)
+        if lows[0] < i - RUN_BARS:
+            lows.popleft()
+        low = closes[lows[0]]
         if low > 0:
             best = max(best, close / low - 1)
     return best
