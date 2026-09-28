@@ -9,6 +9,7 @@ build on any of them:
     TRAIL         (bars, atrs) or None
     targets       the take-profit ladder function
     entry_filter  a veto on new positions, or None
+    revert_exit   reversion's catch-up exit as [(z, keep), ...], or None
 
 A child starts from its parent's four and changes what the spec says. The
 spec is JSON: {"round": "x1", "parent": "astral_vt_basket", "note": "...",
@@ -38,6 +39,10 @@ try:
     from bots.{parent} import entry_filter as parent_filter
 except ImportError:
     parent_filter = None
+try:
+    from bots.{parent} import revert_exit as parent_revert_exit
+except ImportError:
+    parent_revert_exit = None
 from bots.{parent} import targets as parent_targets
 """
 
@@ -70,9 +75,14 @@ def render(round_id, parent, index, name, spec, note):
         lines += ["def targets(context, symbol, read, entry, basket):", spec["targets"].rstrip()]
     else:
         lines.append("targets = parent_targets")
+    lines += ["", ""]
+    if spec.get("revert_exit"):
+        lines += ["def revert_exit(context, symbol, read, basket):", spec["revert_exit"].rstrip()]
+    else:
+        lines.append("revert_exit = parent_revert_exit")
     lines += ["", "", "def propose(context):",
               "    return run(context, take_profit=targets, trail=TRAIL, params=PARAMS,",
-              "               entry_filter=entry_filter)", ""]
+              "               entry_filter=entry_filter, revert_exit=revert_exit)", ""]
     return "\n".join(lines)
 
 

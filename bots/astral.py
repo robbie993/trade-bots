@@ -388,7 +388,8 @@ def propose(context):
     return run(context)
 
 
-def run(context, take_profit=None, trail=None, params=None, entry_filter=None):
+def run(context, take_profit=None, trail=None, params=None, entry_filter=None,
+        revert_exit=None):
     """The strategy. ``take_profit`` is how the astral_tp_* iterations differ.
 
     ``trail`` is ``(bars, atrs)`` or None, and only matters with a target. With
@@ -418,7 +419,9 @@ def run(context, take_profit=None, trail=None, params=None, entry_filter=None):
     only: thresholds, sizing, the stop, and three switches for the soft exits
     (``ROTATE``, ``DISTRIBUTION``, ``MOMENTUM_EXIT``). ``entry_filter`` is
     ``entry_filter(context, symbol, read, basket) -> bool`` and can veto a new
-    position; it never touches one already held. Both default to plain
+    position; it never touches one already held.
+    ``revert_exit(context, symbol, read, basket)`` replaces reversion's single
+    catch-up level with ``[(z, keep), ...]``: a level per trade, sold in parts. Both default to plain
     Astral, so nothing that passes neither behaves any differently.
     """
     cfg = dict(SETTINGS, **(params or {}))
@@ -506,7 +509,21 @@ def run(context, take_profit=None, trail=None, params=None, entry_filter=None):
                 # is no longer negative. Rotation, distribution and the
                 # momentum exit all read a dip as a reason to sell, which is
                 # the opposite of this trade, so none of them apply.
-                if read["z"] >= cfg["REVERT_EXIT_Z"]:
+                # `revert_exit` may move the catch-up level per trade and sell
+                # in parts: [(z, keep), ...], `keep` as a fraction of a full
+                # position still held once z reaches that level.
+                steps = (revert_exit(context, symbol, read, live) if revert_exit
+                         else None) or [(cfg["REVERT_EXIT_Z"], 0.0)]
+                reached = [(z, keep) for z, keep in sorted(steps, key=lambda s: (s[0], -s[1]))
+                           if read["z"] >= z]
+                if reached and reached[-1][1] > 0:
+                    z, keep = reached[-1]
+                    excess = held_value - full * Decimal(str(keep))
+                    if excess >= tranche / 4:
+                        sell(None, f"reverted: part at z {z:+.2f}, keeping {keep:.0%}",
+                             quantity=excess / price)
+                    continue
+                if reached:
                     if not (cfg["REVERT_RUN"] and trail):
                         sell(None, "reverted: caught up with its basket")
                         continue
