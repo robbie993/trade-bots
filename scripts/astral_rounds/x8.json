@@ -1,0 +1,14 @@
+{"round": "x8", "parent": "astral_x7_corr07",
+ "note": "the pick of the search rounds: +$2,723 at profit factor 1.69 on 2026-07-06..09-07 and +$1,693 at 2.44 on the held-out 09-08..09-28.",
+ "variants": {
+  "weight_033": {"title": "33% A NAME.", "doc": "Three laggards at 33% each instead of 27%: close to fully invested when all three are held.", "params": {"LEADER_WEIGHT": 0.33}},
+  "weight_045": {"title": "45% A NAME.", "doc": "Three laggards at 45% each. Cash caps the total, so the third is funded only when the first two are not full.", "params": {"LEADER_WEIGHT": 0.45}},
+  "four_025": {"title": "FOUR LAGGARDS AT 25%.", "doc": "Four names at 25% each: more of the basket, fully invested at most.", "params": {"LEADERS": 4, "LEADER_WEIGHT": 0.25}},
+  "two_tranches": {"title": "HALVES, NOT THIRDS.", "doc": "A full position in two tranches, so each volume signal adds half rather than a third.", "params": {"TRANCHES": 2}},
+  "all_in": {"title": "ALL IN AT ONCE.", "doc": "The whole position on the first signal.", "params": {"TRANCHES": 1}},
+  "no_vol_shrink": {"title": "NO VOLATILITY SHRINK.", "doc": "Names more volatile than the basket's median are no longer sized down (the parent can halve them). Every position is full size.", "params": {"MIN_SIZE_SCALE": 1.0}},
+  "corr08": {"title": "CORRELATION 0.8.", "doc": "Each tightening of the correlation gate has raised the profit factor so far.", "params": {"MIN_CORRELATION": 0.8}},
+  "corr065": {"title": "CORRELATION 0.65.", "doc": "A little looser than the parent, for more trades.", "params": {"MIN_CORRELATION": 0.65}},
+  "stop7": {"title": "STOP AT 7 ATR.", "doc": "A wider stop, which helped the parent's own parent.", "params": {"STOP_ATRS": 7.0}},
+  "fewer_doubles": {"title": "FEWER DOUBLE TRANCHES.", "doc": "Two tranches need 3.0x relative volume instead of 2.0x.", "params": {"RVOL_SURGE": 3.0}}
+ }}
