@@ -75,6 +75,7 @@ bots/*
 
 # -- the fleet ports, first-party --------------------------------------------
 !bots/astral.py
+!bots/astral_tp_*.py
 !bots/atlas.py
 !bots/btcc.py
 !bots/coinbase.py

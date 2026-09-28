@@ -7,6 +7,13 @@ The idea only works on names that move together, so each basket is a group the
 market already treats as one trade: semiconductors, money-centre banks, gold,
 the bitcoin proxies.
 
+**Ten take-profit iterations** live beside it as `bots/astral_tp_*.py`. Plain
+Astral has no take-profit: winners end by rotation, volume or momentum. Each
+iteration keeps all of this and adds one far target, with a different idea of
+where it belongs: R-multiple, expected daily move, measured move, range
+projection, the basket's best run, fixed percent, volume-scaled, Fibonacci
+extension, tiered thirds, statistical exhaustion. See `run` for the rules.
+
 **Not in the village yet.** No firm names this file, so nothing runs it. To
 wire one up, add a firm to `config/firm_config.yaml` with `bot: bots/astral.py`
 and one basket as its `universe`. The crypto basket should also carry Alpaca's
@@ -137,6 +144,12 @@ MIN_PARTICIPATION = 0.5
 LEADER_WEIGHT = Decimal("0.40")
 MIN_SIZE_SCALE = 0.5
 STOP_ATRS = 3.0
+
+# -- take profit (the astral_tp_* iterations only) ------------------------------
+#: No target closer than this many stop-distances (R) above entry.
+MIN_TARGET_R = 2.0
+EQUITY_BARS_PER_SESSION = 26
+CRYPTO_BARS_PER_SESSION = 96
 
 
 # =========================================================================
@@ -278,6 +291,36 @@ def _read(context, symbol):
     }
 
 
+def _ladder(context, symbol, read, basket, take_profit):
+    """The take-profit ladder for one held name, cleaned up, or [].
+
+    Every level is held at least ``MIN_TARGET_R`` stop-distances above the
+    entry. Some ideas anchor to the chart rather than the entry, such as a
+    range projection or a Fibonacci extension, and on a trade entered high in
+    its range those can land at or under the entry. That is a target that
+    fires on the next bar and banks nothing, so the floor lifts it.
+    """
+    if take_profit is None:
+        return []
+    entry = context.entry(symbol)
+    if entry is None or entry <= 0 or not read["atr_pct"]:
+        return []
+    entry = float(entry)
+    try:
+        raw = take_profit(context, symbol, read, entry, basket) or []
+    except (ValueError, ZeroDivisionError, TypeError):
+        return []                             # an idea with no answer this bar
+    floor = entry * (1 + MIN_TARGET_R * STOP_ATRS * read["atr_pct"])
+    ladder = []
+    for level, keep in raw:
+        if level is None or not math.isfinite(level):
+            continue
+        ladder.append((max(float(level), floor), min(1.0, max(0.0, float(keep)))))
+    # Rising price; where two levels were lifted to the same floor, the one
+    # that keeps less comes last so it is the one that counts.
+    return sorted(ladder, key=lambda step: (step[0], -step[1]))
+
+
 def _basket_correlation(context, symbols):
     """Average pairwise correlation of returns, bar for bar by timestamp.
 
@@ -309,7 +352,34 @@ def _basket_correlation(context, symbols):
 # =========================================================================
 # the strategy
 # =========================================================================
+def bars_per_session(symbol):
+    """Fifteen-minute bars in one regular session: 26 for a US equity, 96 for
+    crypto, which never closes. Crypto is spelled with a quote currency."""
+    return CRYPTO_BARS_PER_SESSION if "-" in str(symbol) else EQUITY_BARS_PER_SESSION
+
+
 def propose(context):
+    return run(context)
+
+
+def run(context, take_profit=None):
+    """The strategy. ``take_profit`` is how the astral_tp_* iterations differ.
+
+    It is called for each held name as ``take_profit(context, symbol, read,
+    entry, basket)`` and returns a ladder: ``[(price, keep), ...]`` in rising
+    price order, where ``keep`` is the fraction of a full position to still
+    hold once price reaches that level. ``[(target, 0)]`` is one target that
+    closes the whole trade. Plain Astral passes nothing and has no target.
+
+    With a target in place, the target is how a winner ends: a position in
+    profit and short of its target is not trimmed for rotation or volume. The
+    stop and the momentum exit still apply, so a winner that rolls over is
+    still sold.
+
+    The bot has no memory, so the ladder is recomputed every bar from the
+    current average entry and the current volatility. Adding a tranche moves
+    the entry, and the target moves with it.
+    """
     reads = {s: _read(context, s) for s in context.universe}
     live = {s: r for s, r in reads.items() if r is not None}
     if not live:
@@ -350,8 +420,10 @@ def propose(context):
         tag = (f"z {read['z']:+.2f}, vol x{read['expansion']:.2f}, "
                + (f"rvol {rvol:.1f}" if rvol is not None else "no volume"))
 
-        def sell(n, why):
-            quantity = held if n is None else min(held, tranche_qty * n)
+        def sell(n, why, quantity=None):
+            if quantity is None:
+                quantity = held if n is None else min(held, tranche_qty * n)
+            quantity = min(held, quantity)
             if held - quantity < tranche_qty / 2:
                 quantity = held               # do not leave a crumb behind
             sells.append({"symbol": symbol, "side": "sell", "quantity": quantity,
@@ -364,13 +436,29 @@ def propose(context):
                     and float(pnl) <= -STOP_ATRS * read["atr_pct"] * 100):
                 sell(None, f"stop: {float(pnl):.2f}% is past {STOP_ATRS:g} ATR")
                 continue
+
+            ladder = _ladder(context, symbol, read, live, take_profit)
+            if ladder:
+                reached = [(level, keep) for level, keep in ladder if float(price) >= level]
+                if reached:
+                    level, keep = reached[-1]
+                    excess = held_value - full * Decimal(str(keep))
+                    if keep <= 0 or excess >= tranche / 4:
+                        sell(None,
+                             f"take profit: {float(price):.2f} reached target "
+                             f"{level:.2f}, keeping {keep:.0%}",
+                             quantity=None if keep <= 0 else excess / price)
+                    continue                  # past a target: no adding back
+
             if read["z"] <= 0:
                 sell(None, "momentum gone")
                 continue
-            if symbol not in leaders:
+            # A winner short of its target is left to reach it.
+            running = bool(ladder) and pnl is not None and pnl > 0
+            if symbol not in leaders and not running:
                 sell(2 if heavy else 1, f"rotating out: ranked {ranked.index(symbol) + 1}")
                 continue
-            if heavy and not read["up_bar"]:
+            if heavy and not read["up_bar"] and not running:
                 sell(1, "distribution: heavy volume on a down bar")
                 continue
 
