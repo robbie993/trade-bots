@@ -122,11 +122,18 @@ class Book:
         self.cash = START_CASH
         self.qty, self.avg = {}, {}
         self.fee, self.slip = fee_bps / Decimal(10000), slip_bps / Decimal(10000)
-        self.open_trades = {}          # symbol -> [cost in, proceeds out]
+        self.open_trades = {}          # symbol -> the trade being built, see _trade
         self.closed = []               # (symbol, pnl, why it closed)
+        self.log = []                  # every closed trade in full, for --trades
         self.fees = Decimal(0)
 
-    def buy(self, symbol, notional, bar_open):
+    @staticmethod
+    def _trade(when):
+        return {"opened": when, "cost": Decimal(0), "back": Decimal(0), "fees": Decimal(0),
+                "qty_in": Decimal(0), "qty_out": Decimal(0), "paid": Decimal(0),
+                "got": Decimal(0), "buys": 0, "sells": 0}
+
+    def buy(self, symbol, notional, bar_open, when=None):
         price = bar_open * (1 + self.slip)
         notional = min(Decimal(notional), self.cash / (1 + self.fee))
         if notional <= 0:
@@ -138,9 +145,14 @@ class Book:
         self.qty[symbol] = held + qty
         self.cash -= notional + fee
         self.fees += fee
-        self.open_trades.setdefault(symbol, [Decimal(0), Decimal(0)])[0] += notional + fee
+        trade = self.open_trades.setdefault(symbol, self._trade(when))
+        trade["cost"] += notional + fee
+        trade["fees"] += fee
+        trade["qty_in"] += qty
+        trade["paid"] += notional
+        trade["buys"] += 1
 
-    def sell(self, symbol, qty, bar_open, why=""):
+    def sell(self, symbol, qty, bar_open, why="", when=None):
         held = self.qty.get(symbol, Decimal(0))
         qty = min(Decimal(qty), held)
         if qty <= 0:
@@ -151,13 +163,24 @@ class Book:
         self.cash += proceeds - fee
         self.fees += fee
         self.qty[symbol] = held - qty
-        trade = self.open_trades.setdefault(symbol, [Decimal(0), Decimal(0)])
-        trade[1] += proceeds - fee
+        trade = self.open_trades.setdefault(symbol, self._trade(when))
+        trade["back"] += proceeds - fee
+        trade["fees"] += fee
+        trade["qty_out"] += qty
+        trade["got"] += proceeds
+        trade["sells"] += 1
         if self.qty[symbol] <= held * Decimal("1e-9"):
             self.qty[symbol] = Decimal(0)
             self.avg.pop(symbol, None)
-            cost, back = self.open_trades.pop(symbol)
-            self.closed.append((symbol, back - cost, why))
+            t = self.open_trades.pop(symbol)
+            self.closed.append((symbol, t["back"] - t["cost"], why))
+            self.log.append({"symbol": symbol, "opened": t["opened"], "closed": when,
+                             "buys": t["buys"], "sells": t["sells"],
+                             "entry": float(t["paid"] / t["qty_in"]) if t["qty_in"] else None,
+                             "exit": float(t["got"] / t["qty_out"]) if t["qty_out"] else None,
+                             "shares": float(t["qty_in"]), "cost": float(t["cost"]),
+                             "proceeds": float(t["back"]), "fees": float(t["fees"]),
+                             "pnl": float(t["back"] - t["cost"]), "exit_reason": why})
 
 
 def _reason(rationale):
@@ -212,10 +235,10 @@ def replay(job):
                     waiting.append(order)
                     continue
                 if order["side"] == "buy":
-                    book.buy(s, order["notional"], series[s].opens[at[s]])
+                    book.buy(s, order["notional"], series[s].opens[at[s]], when=stamp)
                 else:
                     book.sell(s, order["quantity"], series[s].opens[at[s]],
-                              _reason(order.get("rationale", "")))
+                              _reason(order.get("rationale", "")), when=stamp)
             pending[key] = waiting
 
             marks = {s: series[s].closes[at[s]] for s in symbols if at[s] >= 0}
@@ -268,6 +291,16 @@ def replay(job):
             "fees": float(book.fees),
             "max_dd": float(drawdown[key]),
             "exits": exits,
+            "trades": book.log + [
+                {"symbol": s, "opened": t["opened"], "closed": None, "buys": t["buys"],
+                 "sells": t["sells"],
+                 "entry": float(t["paid"] / t["qty_in"]) if t["qty_in"] else None,
+                 "exit": None, "shares": float(book.qty.get(s, 0)), "cost": float(t["cost"]),
+                 "proceeds": float(t["back"] + book.qty.get(s, 0) * last.get(s, 0)),
+                 "fees": float(t["fees"]),
+                 "pnl": float(t["back"] + book.qty.get(s, 0) * last.get(s, 0) - t["cost"]),
+                 "exit_reason": "still open (marked at last close)"}
+                for s, t in book.open_trades.items() if book.qty.get(s, 0) > 0],
         }
     return name, kind, len(clock), out
 
@@ -295,6 +328,8 @@ def main():
     parser.add_argument("--json", type=Path, help="also write the results here")
     parser.add_argument("--start", help="first day traded, YYYY-MM-DD (UTC)")
     parser.add_argument("--end", help="last day traded, YYYY-MM-DD (UTC), inclusive")
+    parser.add_argument("--trades", type=Path,
+                        help="write every trade to this CSV, one row per round trip")
     parser.add_argument("--validation", action="store_true",
                         help="replay on VALIDATION_BASKETS, which nothing was chosen on")
     parser.add_argument("--only", help="comma-separated strategy names or globs, "
@@ -326,6 +361,23 @@ def main():
     for name, kind, bars, out in results:
         for key, r in out.items():
             per.setdefault(key, {})[name] = r
+
+    if args.trades:
+        import csv
+
+        fields = ["strategy", "basket", "symbol", "opened", "closed", "buys", "sells",
+                  "entry", "exit", "shares", "cost", "proceeds", "fees", "pnl", "exit_reason"]
+        stamp = lambda t: (datetime.fromtimestamp(t, tz=timezone.utc).strftime(  # noqa: E731
+            "%Y-%m-%d %H:%M") if t is not None else "")
+        with open(args.trades, "w", newline="", encoding="utf-8") as fh:
+            out = csv.DictWriter(fh, fieldnames=fields)
+            out.writeheader()
+            for key in strategies:
+                for basket, r in per[key].items():
+                    for t in sorted(r["trades"], key=lambda t: t["opened"] or 0):
+                        out.writerow({**t, "strategy": key, "basket": basket,
+                                      "opened": stamp(t["opened"]),
+                                      "closed": stamp(t["closed"])})
 
     fmt = lambda x, f: "-" if x is None else format(x, f)  # noqa: E731
     print(f"\n{'strategy':<30}{'trades':>7}{'win%':>7}{'P&L $':>11}{'return':>8}"
