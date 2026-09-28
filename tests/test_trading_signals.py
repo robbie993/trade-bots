@@ -184,6 +184,16 @@ def test_a_symbol_outside_the_scanners_universe_is_dropped():
     assert "not in this scanner's universe" in complaints[0]
 
 
+def test_many_symbols_outside_the_universe_are_one_line_not_one_each():
+    held = {f"ALT{i}-USD": 40 for i in range(12)}
+    readings, complaints = signals.to_readings({**held, "BTC-USD": 40, "ALT0-USD": 40},
+                                               ["BTC-USD"])
+    assert [r.symbol for r in readings] == ["BTC-USD"]
+    (line,) = complaints
+    assert line.startswith("12 symbols are not in this scanner's universe: ALT0-USD, ALT1-USD")
+    assert line.endswith("(+4 more)")
+
+
 def test_nonsense_scores_are_complaints_not_exceptions():
     readings, complaints = signals.to_readings({"AAPL": "very bullish"}, ["AAPL"])
     assert readings == []

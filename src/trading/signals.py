@@ -65,6 +65,11 @@ IMPLIED_CONFIDENCE_CAP = D("75")
 
 NOTE_LIMIT = 400
 
+# Names a scanner returned from outside its universe are reported as one line,
+# with this many of them spelled out. The fleet mirrors return dozens a bar
+# (altcoins the crypto bots hold, Form 4 microcaps), one line each.
+OUTSIDE_SHOWN = 8
+
 
 class ScannerError(ValueError):
     """The scanner config could not be read. Never raised into a tick."""
@@ -239,7 +244,7 @@ def to_readings(result, universe: Sequence[str] = ()) -> tuple:
     else:
         return [], [f"expected readings, got {type(result).__name__}"]
 
-    readings, complaints = [], []
+    readings, complaints, outside = [], [], []
     for raw in items[:MAX_READINGS]:
         if isinstance(raw, str):
             complaints.append(
@@ -248,11 +253,25 @@ def to_readings(result, universe: Sequence[str] = ()) -> tuple:
             )
             continue
         symbol, score, confidence, note = _fields(raw)
+        name = str(symbol or "").upper().strip()
+        if name and universe and name not in universe:
+            outside.append(name)
+            continue
         reading, why = _reading(symbol, score, confidence, note, universe)
         if reading is None:
             complaints.append(why)
         else:
             readings.append(reading)
+
+    outside = list(dict.fromkeys(outside))
+    if len(outside) == 1:
+        complaints.append(f"{outside[0]} is not in this scanner's universe")
+    elif outside:
+        more = len(outside) - OUTSIDE_SHOWN
+        complaints.append(
+            f"{len(outside)} symbols are not in this scanner's universe: "
+            + ", ".join(outside[:OUTSIDE_SHOWN]) + (f" (+{more} more)" if more > 0 else "")
+        )
 
     if len(items) > MAX_READINGS:
         complaints.append(
