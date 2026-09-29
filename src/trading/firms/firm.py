@@ -54,6 +54,14 @@ class Firm:
         # What the firm's bot got wrong this tick, if it runs one. Set here
         # rather than in `_from_bot` so a pod firm still answers the question.
         self.bot_complaints: list = []
+        # What the exit rules must remember between bars: the best price each
+        # holding has reached and which scale-outs it has already taken. A
+        # backtest keeps one Firm for the whole replay; the live loop builds a
+        # new Firm every tick, so the ecosystem hands each firm the same dict
+        # every time (`Ecosystem.build_firm`). Lost on a worker restart, which
+        # costs a trail its peak (it restarts from the current price, the safe
+        # side) and nothing else.
+        self.exit_memory: dict = {}
 
     # -- construction -----------------------------------------------------
     @classmethod
@@ -149,17 +157,142 @@ class Firm:
         # broke, and is exactly how a village ends up with an average loss
         # eight times its average win.
         stopped = self._stops(market, positions, as_of)
-        raw = list(stopped) + list(
+        stopped_symbols = {p.symbol for p in stopped}
+        taken, riding = self._take_profits(
+            market, [p for p in positions if p.symbol not in stopped_symbols], as_of)
+        exits = list(stopped) + list(taken)
+        opinions = list(
             self._from_bot(market, positions, equity, as_of)
             if adapter.is_bot(self.record.strategy or "")
             else self._from_pod(market, positions, as_of)
         )
-        # A symbol the stop is closing is not also a symbol to trade on
-        # opinion this bar. Closing wins.
-        closing = {p.symbol for p in stopped}
-        raw = list(stopped) + [p for p in raw[len(stopped):] if p.symbol not in closing]
+        # A symbol the stop or a take-profit is closing is not also a symbol to
+        # trade on opinion this bar. Closing wins. And a winner the firm has
+        # chosen to ride is not sold on the analysts' say-so while it rides:
+        # only an exit rule, or the stop, takes it off.
+        closing = {p.symbol for p in exits}
+        raw = exits + [
+            p for p in opinions
+            if p.symbol not in closing
+            and not (p.symbol in riding and p.side == Side.SELL.value)
+        ]
 
         return self._review_all(raw, market, positions, equity)
+
+    # -- taking profit ------------------------------------------------------
+    #: The exit genes. Every one defaults to zero, which is off, so a genome
+    #: that does not name them trades exactly as it did before they existed.
+    #: They are read here and nowhere else. Deliberately not in the evolver's
+    #: GENES table yet: they are hand-set per variant until a held-out test
+    #: says which, if any, are worth letting evolution move.
+    EXIT_GENES = ("tp_pct", "tp_scale_pct", "tp_scale_frac", "tp_scale2_pct",
+                  "trail_arm_pct", "trail_pct", "tp_atr", "atr_window",
+                  "ride_pct", "breakeven_arm_pct")
+
+    def _take_profits(self, market: MarketData, positions: Sequence[Position], as_of) -> tuple:
+        """Exits on a winning position, and which winners to ride.
+
+        Until these existed a firm had one way out of a winner: the analysts
+        changing their minds, often at the first wobble, so the average win
+        stayed small. Each rule below is a different answer to "when is this
+        winner done", all measured from what the position cost:
+
+        * ``tp_pct`` — a fixed target: gain of this many percent, sell it all.
+        * ``tp_scale_pct`` (+ ``tp_scale_frac``, ``tp_scale2_pct``) — sell a
+          fraction at the first target and let the rest run to a second one
+          (or to the trail, or to the analysts).
+        * ``trail_arm_pct`` + ``trail_pct`` — once up ``arm``, sell it all if
+          it gives back ``trail`` percent from the best price since.
+        * ``tp_atr`` — a target that scales with the name: entry plus this many
+          average bar ranges (``atr_window`` bars, 14 by default).
+        * ``breakeven_arm_pct`` — once up this far, never let it become a loss:
+          sell if it comes back to what it cost.
+        * ``ride_pct`` — while up at least this much, the analysts' sell votes
+          are ignored; only the rules above (or the stop) close it.
+
+        Returns ``(proposals, riding)``, where ``riding`` is the set of symbols
+        whose analyst sells are to be suppressed this bar.
+        """
+        g = self.record.genome or {}
+        gene = {name: self._gene_value(g, name, 0) for name in self.EXIT_GENES}
+        if not any(gene[n] > 0 for n in self.EXIT_GENES if n not in ("tp_scale_frac", "atr_window")):
+            return [], set()
+        memory = self.exit_memory
+        out, riding = [], set()
+        held_now = set()
+        for held in positions:
+            if not held.is_open or held.quantity <= 0:
+                continue                        # the firm does not short
+            entry = D(held.avg_price)
+            if entry <= 0 or held.symbol in getattr(market, "unpriceable", {}):
+                continue
+            mark = price(market.mark(held.symbol))
+            if mark <= 0 or market.bar(held.symbol) is None:
+                continue
+            held_now.add(held.symbol)
+            state = memory.setdefault(held.symbol, {})
+            if state.get("entry") != str(entry):
+                # A new position, or one averaged into: start its memory over.
+                state.clear()
+                state["entry"] = str(entry)
+            peak = max(D(state.get("peak", mark)), mark)
+            state["peak"] = str(peak)
+            gain = (mark - entry) / entry * D(100)
+            best = (peak - entry) / entry * D(100)
+
+            why, fraction = self._exit_reason(market, held.symbol, gene, state,
+                                              entry, mark, peak, gain, best)
+            if why:
+                quantity = qty(held.quantity * fraction)
+                if quantity <= 0:
+                    continue
+                out.append(TradeProposal(
+                    firm_id=self.record.id,
+                    symbol=held.symbol,
+                    side=Side.SELL.value,
+                    quantity=quantity,
+                    confidence=D(100),
+                    reference_price=mark,
+                    rationale=f"TAKE PROFIT: {held.symbol} {why} (in at {entry}, now {mark}).",
+                    as_of=as_of,
+                ))
+            elif gene["ride_pct"] > 0 and gain >= gene["ride_pct"]:
+                riding.add(held.symbol)
+        for symbol in list(memory):
+            if symbol not in held_now:
+                del memory[symbol]              # flat: nothing left to remember
+        return out, riding
+
+    def _exit_reason(self, market, symbol, gene, state, entry, mark, peak, gain, best) -> tuple:
+        """(why, fraction to sell) for one winning position, or ("", 0)."""
+        one = D(1)
+        if gene["tp_pct"] > 0 and gain >= gene["tp_pct"]:
+            return f"is up {percent(gain)}%, past its {gene['tp_pct']}% target", one
+        if gene["tp_atr"] > 0:
+            window = int(gene["atr_window"]) or 14
+            bars = market.history(symbol, window)
+            rng = None
+            if len(bars) >= window:
+                from ..indicators import average_range
+                rng = average_range([b.high for b in bars], [b.low for b in bars], window)
+            if rng and mark >= entry + gene["tp_atr"] * rng:
+                return f"reached entry + {gene['tp_atr']} average ranges", one
+        if gene["trail_arm_pct"] > 0 and gene["trail_pct"] > 0 and best >= gene["trail_arm_pct"]:
+            floor = peak * (one - gene["trail_pct"] / D(100))
+            if mark <= floor:
+                return (f"gave back {gene['trail_pct']}% from its best ({peak}) after "
+                        f"running {percent(best)}%"), one
+        if gene["breakeven_arm_pct"] > 0 and best >= gene["breakeven_arm_pct"] and gain <= 0:
+            return f"came back to cost after running {percent(best)}%", one
+        if gene["tp_scale_pct"] > 0:
+            frac = gene["tp_scale_frac"] if gene["tp_scale_frac"] > 0 else D("0.5")
+            if not state.get("scaled") and gain >= gene["tp_scale_pct"]:
+                state["scaled"] = True
+                return f"is up {percent(gain)}%: first target, selling {frac * 100}%", min(frac, one)
+            if (state.get("scaled") and gene["tp_scale2_pct"] > 0
+                    and gain >= gene["tp_scale2_pct"]):
+                return f"is up {percent(gain)}%, past its second target", one
+        return "", ZERO
 
     def _review_all(self, raw, market, positions, equity) -> list[TradeProposal]:
         """Put every proposal past the risk manager, keeping what survives."""

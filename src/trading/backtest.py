@@ -314,6 +314,9 @@ class Backtester:
         benchmark_pct, hurdle_note = self._hold_pct(entry_marks, exit_marks,
                                                     record.universe)
         final_equity = curve[-1] if curve else start_capital
+        # The closed trades' P&L, one per round trip, for anyone who wants
+        # more than the win rate (the size of the average win, for one).
+        self.last_realized = list(realized)
         return BacktestResult(
             firm_key=firm_key,
             genome=dict(genome or {}),

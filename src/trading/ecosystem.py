@@ -638,6 +638,16 @@ class Ecosystem:
         """
         from .firms.analysts import build_analysts
 
+        firm = self._build_firm(record, build_analysts)
+        # The exit rules' memory (a trail's peak, a scale-out already taken)
+        # outlives the tick: the firm is rebuilt every bar, the dict is not.
+        memory = getattr(self, "_exit_memory", None)
+        if memory is None:
+            memory = self._exit_memory = {}
+        firm.exit_memory = memory.setdefault(record.firm_key, {})
+        return firm
+
+    def _build_firm(self, record: FirmRecord, build_analysts) -> Firm:
         spec = self.specs().get(record.firm_key)
         if spec is not None:
             return Firm.from_spec(spec, record, self.config, board=self.signals)
