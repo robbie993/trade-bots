@@ -146,6 +146,7 @@ class Ecosystem:
         self._paper_scout = None
         self._crypto_pulse = None
         self._shadow = None
+        self._idea_lab = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
         self._reported_bar = ""
@@ -242,6 +243,44 @@ class Ecosystem:
             self._shadow = ShadowDesk(self.store, self.signals,
                                       genome=dict(BASE_GENOME))
         return self._shadow
+
+    @property
+    def idea_lab(self):
+        """The sandbox's idea lab, or None when its switch is off.
+
+        Every call a scanner makes, traded on paper and scored — see
+        sandbox/ideas.py. It is built from the sandbox's handles, so it reads
+        the ledger and writes only `sandbox_ideas`. On unless the wall switch
+        or `TRADE_IDEA_LAB` says otherwise, because for the village's own
+        symbols it makes no request of its own: it prices off the bars the
+        tick already fetched. Names outside the universe are priced from
+        Alpaca's latest bars, and only when the village runs on Alpaca.
+        """
+        from .sandbox import ideas
+
+        if not self.settings.get("idea_lab", default=ideas.on_by_default()):
+            return None
+        if self._idea_lab is None:
+            from datetime import timedelta
+
+            from .sandbox import sandbox_handles
+
+            _, writer = sandbox_handles(self.store)
+            outside = None
+            if ideas.outside_on() and "alpaca" in str(self.config.data.source or "").lower():
+                outside = ideas.LatestPrices()
+            bar = self.config.data.resolution
+            self._idea_lab = ideas.IdeaLab(
+                writer,
+                costs=ideas.CostBook(self.specs().values(), fee_bps=self.config.data.fee_bps,
+                                     session_aware=bar.is_intraday),
+                outside=outside,
+                session_aware=bar.is_intraday,
+                # A price is fresh for an hour, or for one bar where a bar is
+                # longer than that: a daily bar is a day old by the next one.
+                fresh=max(ideas.FRESH, timedelta(seconds=bar.seconds)),
+            )
+        return self._idea_lab
 
     @property
     def meme_radar(self):
@@ -743,6 +782,21 @@ class Ecosystem:
                     or shadow.refused or shadow.notes):
                 report.bot_notes.append(
                     "shadow — no reading cleared confidence on any underlying")
+        # The idea lab: every call made this bar, tested on paper in the
+        # sandbox, including the names the scanners called outside the
+        # village's universe. It writes only `sandbox_ideas` and runs after
+        # every publisher has spoken, so it sees the whole bar.
+        outside = self.scanners.take_outside()
+        try:
+            lab = self.idea_lab
+            if lab is not None:
+                from .sandbox.ideas import calls_from
+
+                calls = [call for name, readings in outside
+                         for call in calls_from(name, readings, outside=True)]
+                report.bot_notes.extend(lab.run(market, calls).lines())
+        except Exception as exc:  # noqa: BLE001 - research, never a precondition
+            report.bot_notes.append(f"idea lab failed: {str(exc)[:160]}")
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 

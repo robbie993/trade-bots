@@ -17,9 +17,11 @@ So the sandbox is handed two objects and nothing else:
                     ``TradingStore`` raises ``SandboxViolation``, and so does
                     any attribute not on the allow-list — including ``db``,
                     so nobody can reach around it to raw SQL.
-``SandboxWriter``   inserts and updates restricted to ``alliances`` and
-                    ``sandbox_events``. Any other table raises. Its ``query``
-                    pair takes SQL, so the statement itself is checked too.
+``SandboxWriter``   inserts and updates restricted to the sandbox's own
+                    tables: ``alliances``, ``sandbox_events`` and the idea
+                    lab's ``sandbox_ideas``. Any other table raises. Its
+                    ``query`` pair takes SQL, so the statement itself is
+                    checked too.
 
 Both are enforced by ``__getattr__``, not by convention, so a future edit that
 tries to write through the sandbox fails loudly at the first call rather than
@@ -75,8 +77,10 @@ READABLE = frozenset(
     }
 )
 
-# The only tables the sandbox may write.
-WRITABLE_TABLES = frozenset({"alliances", "sandbox_events"})
+# The only tables the sandbox may write. `sandbox_ideas` is the idea lab's
+# paper book (ideas.py): what each scanner call would have made, which is a
+# research record and never a fill.
+WRITABLE_TABLES = frozenset({"alliances", "sandbox_events", "sandbox_ideas"})
 
 # Statements that can only read. `values` is here for the dialect that allows
 # a bare VALUES list as a query; `explain` reports a plan without running it.
@@ -166,7 +170,7 @@ class ReadOnlyStore:
 
 
 class SandboxWriter:
-    """Inserts and updates, restricted to the sandbox's own two tables."""
+    """Inserts and updates, restricted to the sandbox's own tables."""
 
     def __init__(self, db: Database):
         self._db = db

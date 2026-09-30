@@ -15,7 +15,7 @@ few seconds is noise rather than life.
 is reproducible from stored numbers, so:
 
 * the tavern cannot reach the money at all — it is handed a read-only store and
-  a writer restricted to two tables, enforced in ``sandbox/guard.py``, and this
+  a writer restricted to the sandbox's own tables, enforced in ``sandbox/guard.py``, and this
   module gains no exception to that;
 * the bazaar here trades only in **tokens**. Capital listings still exist and
   still work, and they still stop and ask a human before a dollar moves. This

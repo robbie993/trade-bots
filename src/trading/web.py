@@ -393,6 +393,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _research_panel(eco),
         _arena_panel(eco),
         _market_panel(eco),
+        _idea_lab_panel(eco),
         _sandbox_panel(eco),
         MISSION_FOOTER,
     ])
@@ -642,6 +643,12 @@ def _switches_panel(eco) -> str:
         + switch("tavern", "Tavern", "alliances form, and rivals scheme",
                  eco.settings.get("tavern", default),
                  ("open", "closed"), ("Close", "Open"))
+        # Its own default rather than `living`'s: the lab is on unless someone
+        # turns it off, and it changes nothing any firm does.
+        + switch("idea_lab", "Idea lab",
+                 "the sandbox tests every scanner call on paper",
+                 eco.settings.get("idea_lab", default=_idea_lab_default()),
+                 ("testing", "stopped"), ("Stop", "Start testing"))
         # Deliberately last and deliberately not defaulted from `living`: this
         # is the only switch on the wall that changes what the firms *do*.
         + switch("evolution", "Evolution",
@@ -1155,6 +1162,94 @@ def _market_panel(eco) -> str:
     )
 
 
+def _idea_lab_default() -> bool:
+    from .sandbox.ideas import on_by_default
+
+    return on_by_default()
+
+
+def _idea_lab_panel(eco) -> str:
+    """Every call a scanner made, traded on paper in the sandbox, and scored.
+
+    One table per horizon rather than one wide table, because the question is
+    asked per horizon ("do its calls pay over a day?") and a phone cannot show
+    twenty columns. `ideas` sits beside the money on purpose, as it does on
+    the options desk: a young record wins or loses by luck.
+    """
+    from .sandbox import ideas
+
+    try:
+        records = ideas.scoreboard(eco.db)
+        still_open = ideas.open_count(eco.db)
+        latest = ideas.recent(eco.db, 10)
+    except Exception:  # noqa: BLE001 - a panel never takes the page down
+        return ""
+    on = eco.settings.get("idea_lab", default=_idea_lab_default())
+
+    def made(value) -> str:
+        v = money(value)
+        css = "good" if v > 0 else "bad" if v < 0 else "muted"
+        sign = "+" if v > 0 else ""
+        return f"<span class={css}>{sign}{e(fmt_money(v))}</span>"
+
+    def verdict(text: str) -> str:
+        css = {"beats SPY": "good", "trails SPY": "bad"}.get(text, "muted")
+        return f"<span class={css} style='white-space:normal'>{e(text)}</span>"
+
+    def under(text: str) -> str:
+        return f"<br><span class=muted style='white-space:normal'>{e(text)}</span>"
+
+    # Three columns, each with its detail underneath rather than beside it: on
+    # a phone a seven-column table shows the names and cuts off the money.
+    blocks = []
+    for name, _ in ideas.HORIZONS:
+        mine = [r for r in records if r.horizon == name]
+        if not mine:
+            continue
+        rows = [{
+            "scanner": e(r.publisher) + (under("outside the village") if r.outside else ""),
+            "made": made(r.pnl) + "<br><span class=muted>SPY&nbsp;"
+                    + e(("+" if r.spy_pnl > 0 else "") + fmt_money(r.spy_pnl)) + "</span>",
+            "verdict": verdict(r.verdict) + under(
+                (f"{r.closed} of {ideas.MIN_CLOSED} ideas" if r.closed < ideas.MIN_CLOSED
+                 else f"{r.closed} ideas") + f", {r.won_pct:.0f}% won"),
+        } for r in mine]
+        blocks.append(
+            f"<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>Held for "
+            f"{e(ideas.HELD_FOR.get(name, name))}</h3>" + _table(rows))
+    if latest:
+        blocks.append(
+            "<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>Latest to close</h3>"
+            + _table([{
+                "closed": e(str(r.get("closed_bar") or "")[5:16])
+                          + under("held " + ideas.HELD_FOR.get(str(r.get("horizon")),
+                                                               str(r.get("horizon")))),
+                "call": e(f"{r.get('side')} {r.get('symbol')}")
+                        + under(str(r.get("publisher") or "")),
+                "made": made(r.get("pnl") or 0),
+            } for r in latest]))
+
+    if blocks:
+        head = (f"<p>{still_open} idea(s) open now. Each scanner is scored on the ideas "
+                "that have closed.</p>")
+    elif on:
+        head = (f"<p class=muted>Nothing has closed yet ({still_open} open). The first "
+                "hour-long ideas close an hour after the lab opens them.</p>")
+    else:
+        head = "<p class=muted>The idea lab is stopped. Start it from the switches.</p>"
+    note = (
+        f"<p class=muted>Every buy or sell call a scanner makes is traded here on paper: "
+        f"${ideas.NOTIONAL:,.0f} a call, entered at the price a firm would have "
+        "got on that bar in an open market, charged the real spread and fee both ways, "
+        "and held for an hour, a day and a week. Calls on names the village does not "
+        "trade are tested too and marked as outside. SPY over the same windows is the "
+        f"yardstick. No verdict before {ideas.MIN_CLOSED} closed ideas, and the bar for "
+        "one rises with every scanner and horizon on this page, so a lucky streak does "
+        "not read as an edge. Nothing here touches the ledger: the lab writes only its "
+        "own table.</p>")
+    return _panel("Sandbox — the scanners' ideas, tested", head + "".join(blocks) + note)
+
+
 def _sandbox_panel(eco) -> str:
     rows = [{
         "firm": e(r["firm"]),
@@ -1441,9 +1536,14 @@ def action_switch(name: str = Form(...)) -> RedirectResponse:
     eco = ecosystem()
     try:
         default = eco.config.living.enabled if name != "paused" else False
+        if name == "idea_lab":
+            default = _idea_lab_default()
         now_on = eco.settings.toggle(name, default=default, by="web")
         if name == "paused":
             said = "the village is paused" if now_on else "the village is running again"
+        elif name == "idea_lab":
+            said = ("the idea lab is testing the scanners' calls again" if now_on
+                    else "the idea lab is stopped; open ideas wait until it starts again")
         else:
             said = f"the {name} is {'open' if now_on else 'closed'}"
     except UnknownSetting:

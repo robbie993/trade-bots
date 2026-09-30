@@ -342,7 +342,7 @@ Two limits, both deliberate:
   requests on its own, because a gate that fills up while you sleep becomes an
   inbox to clear rather than a decision to make.
 - **The tavern cannot reach the money.** It is handed a read-only store and a
-  writer restricted to two tables, enforced in `sandbox/guard.py`. Espionage
+  writer restricted to the sandbox's own tables, enforced in `sandbox/guard.py`. Espionage
   copies a genome into a record; using it still means submitting it to the
   strategy court like anything else.
 

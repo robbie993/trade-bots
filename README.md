@@ -126,7 +126,7 @@ src/
 │   ├── court/              strategy trials: evidence, jury, advocates, judge
 │   ├── competition/        tokens, titles, bouts
 │   ├── black_market/       genome licences; capital only via an approval
-│   ├── sandbox/            alliances, betrayal — read-only over the ledger
+│   ├── sandbox/            alliances, betrayal, the idea lab — read-only over the ledger
 │   ├── data/ execution/ gateway/ audit/
 │   ├── web.py              Mission Control, mounted at /village
 │   ├── api.py              the same numbers as read-only JSON
