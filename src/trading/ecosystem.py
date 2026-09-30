@@ -1102,13 +1102,32 @@ class Ecosystem:
         property of the venue it trades, which is configuration, not ledger.
         Firms with nothing declared get the village default and the same object
         back, so the common case allocates nothing.
+
+        **An heir trades on its ancestor's venue.** A bankruptcy heir is not in
+        the YAML, so it has no spec of its own, and it used to fall through to
+        the village default: 2 bps a side on the meme coins its parent desk
+        pays 25 plus 19.7 to cross. It now takes the costs of the nearest firm
+        up its `inherited_from` line that has a spec.
         """
-        spec = self._specs.get(record.firm_key)
+        spec = self._spec_or_ancestors(record)
         if spec is None or not getattr(spec, "costs_overridden", False):
             return self.config
         import dataclasses
 
         return dataclasses.replace(self.config, data=spec.costed(self.config.data))
+
+    def _spec_or_ancestors(self, record: FirmRecord):
+        """This firm's spec, or the nearest one up its line of heirs."""
+        key, genome, seen = record.firm_key, record.genome or {}, set()
+        while key and key not in seen and len(seen) < 12:
+            seen.add(key)
+            spec = self._specs.get(key)
+            if spec is not None:
+                return spec
+            key = str(genome.get("inherited_from") or "")
+            parent = self.store.get_firm(key) if key else None
+            genome = (parent.genome if parent is not None else None) or {}
+        return None
 
     def _already_deliberated(self, record: FirmRecord, bar: str, resolution) -> bool:
         """Has this firm already had its say on this bar?

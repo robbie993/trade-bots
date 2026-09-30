@@ -185,6 +185,38 @@ def test_the_costs_reach_the_venue_the_firm_actually_trades_on(ecosystem):
     assert ecosystem._costed_for(record).data.fee_bps == Decimal(60)
 
 
+def test_an_heir_pays_what_its_ancestors_venue_charges(ecosystem):
+    """A bankruptcy heir is not in the YAML, so it has no spec of its own. It
+    fell through to the village default, which billed the meme desk's heirs 2
+    bps a side on coins their parent pays 25 plus 19.7 to cross."""
+    from src.trading.models import FirmRecord
+
+    parent = ecosystem.store.firms()[0]
+    ecosystem._specs[parent.firm_key] = FirmSpec.from_mapping(
+        parent.firm_key, {"universe": ["DOGE-USD"],
+                          "costs": {"fee_bps": 25, "slippage_bps": 19.7}})
+    heir = ecosystem.store.upsert_firm(FirmRecord(
+        firm_key=f"{parent.firm_key}_ii", genome={"inherited_from": parent.firm_key}))
+    grandheir = ecosystem.store.upsert_firm(FirmRecord(
+        firm_key=f"{parent.firm_key}_ii_ii", genome={"inherited_from": heir.firm_key}))
+
+    for record in (heir, grandheir):
+        costed = ecosystem._costed_for(record).data
+        assert costed.fee_bps == Decimal(25), record.firm_key
+        assert costed.slippage_bps == Decimal("19.7"), record.firm_key
+
+
+def test_a_line_of_heirs_that_loops_ends_at_the_village_default(ecosystem):
+    """A corrupted genome must cost a firm the default, not hang the tick."""
+    from src.trading.models import FirmRecord
+
+    a = ecosystem.store.upsert_firm(FirmRecord(firm_key="loop_a",
+                                               genome={"inherited_from": "loop_b"}))
+    ecosystem.store.upsert_firm(FirmRecord(firm_key="loop_b",
+                                           genome={"inherited_from": "loop_a"}))
+    assert ecosystem._costed_for(a) is ecosystem.config
+
+
 def test_higher_costs_really_do_take_more_money(ecosystem):
     """The point of all of it. Same trade, two cost models, different bill."""
     from src.trading.execution import build_venue

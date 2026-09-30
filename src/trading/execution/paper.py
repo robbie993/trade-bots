@@ -85,8 +85,16 @@ class PaperVenue:
         range that a single number erases. Erasing it is not neutral: it makes
         a thin overnight market cost exactly what a deep midday one costs, so
         no firm in the village ever had a reason to prefer the liquid hour.
+
+        **Crypto pays the configured number at every hour.** Those three are
+        equity spreads, measured on equity quotes, and a coin has no sessions
+        for them to vary by. The crypto desks measured their own books instead
+        (BTC 1.51 bps a side, SOL 5.32, DOGE 19.64: `config/firm_config.yaml`)
+        and declare the widest. Until 2026-09-30 every intraday crypto fill was
+        charged the equity table's 0.82, which made a DOGE round trip look 38
+        bps cheaper than the book it trades on.
         """
-        if as_of is None:
+        if as_of is None or market_session.is_crypto(symbol):
             return D(self.config.slippage_bps)
         if not self.session_aware:
             return market_session.HALF_SPREAD_BPS[market_session.REGULAR]

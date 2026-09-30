@@ -90,6 +90,28 @@ def test_a_sell_is_hurt_in_the_other_direction():
     assert evening.price < midday.price
 
 
+def test_crypto_pays_its_measured_spread_at_every_hour():
+    """The session table holds equity spreads, measured on equity quotes. A
+    coin's desk measured its own book, and that is what crossing it costs at
+    midday, at 2am and on a daily bar alike."""
+    for bar in ("15m", "1d"):
+        venue = PaperVenue(DataConfig(bar=bar, slippage_bps=Decimal("19.7")))
+        for hour in (7, 15, 22):
+            when = datetime(2026, 9, 15, hour, tzinfo=timezone.utc)
+            assert venue.slippage_bps_for("DOGE-USD", when) == Decimal("19.7")
+        midday = datetime(2026, 9, 15, 15, tzinfo=timezone.utc)
+        assert venue.slippage_bps_for("AMZN", midday) < Decimal("1"), (
+            "an equity on the same venue still pays its session's spread")
+
+
+def test_a_meme_coin_fill_crosses_the_book_it_trades_on():
+    """Before this, the fill below was 0.82 bps over the reference: a DOGE
+    round trip booked 38 bps cheaper than the book it trades on."""
+    venue = PaperVenue(DataConfig(bar="15m", slippage_bps=Decimal("19.7")))
+    fill = venue.execute(_proposal(symbol="DOGE-USD", as_of="2026-09-15T15:00:00Z"))
+    assert fill.price == Decimal("100.197")
+
+
 def test_the_session_cost_replaces_the_flat_constant_not_the_fee():
     venue = _venue()
     when = datetime(2026, 9, 15, 15, tzinfo=timezone.utc)
