@@ -819,7 +819,7 @@ def cmd_benchmark(args) -> int:
 
     comparisons = []
     for firm in firms:
-        spec = eco._specs.get(firm.firm_key)
+        spec = eco._spec_or_ancestors(firm)     # an heir pays its ancestor's venue
         costs = spec.costed(eco.config.data) if spec else eco.config.data
         bars = args.bars or benchmark.bars_lived(eco.store, firm.id)
         comparisons.append(benchmark.compare(
