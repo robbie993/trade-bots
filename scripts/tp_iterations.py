@@ -68,6 +68,44 @@ VARIANTS: dict = {
                           "trail_arm_pct": 1.5, "trail_pct": 1.5},
 }
 
+#: Round two: ten children of round one's survivors, per firm. Round one's
+#: held-out window chose these parents, so it is no longer held out; round two
+#: is judged on the *fresh* window (bars before 30 June) that neither round
+#: looked at. `TP_ROUND=2` selects these.
+ATR12_BE = {"ride_pct": 0.3, "tp_atr": 12, "atr_window": 26, "breakeven_arm_pct": 0.8}
+RUN_ALL = {"ride_pct": 0.1, "breakeven_arm_pct": 1, "trail_arm_pct": 1.5, "trail_pct": 1.5}
+THIRDS = {"ride_pct": 0.3, "tp_scale_pct": 1, "tp_scale_frac": 0.34, "tp_scale2_pct": 3}
+ROUND_2: dict = {
+    "firm_e_momentum_ii_v": {
+        "r1_atr12_be": ATR12_BE,
+        "r1_run_all": RUN_ALL,
+        "atr9_be": dict(ATR12_BE, tp_atr=9),
+        "atr16_be": dict(ATR12_BE, tp_atr=16),
+        "atr20_be": dict(ATR12_BE, tp_atr=20),
+        "atr12_be0.5": dict(ATR12_BE, breakeven_arm_pct=0.5),
+        "atr12_be1.2": dict(ATR12_BE, breakeven_arm_pct=1.2),
+        "atr12_be_ride0.6": dict(ATR12_BE, ride_pct=0.6),
+        "atr12_be_trail2": dict(ATR12_BE, trail_arm_pct=2, trail_pct=1.5),
+        "run_all_trail1": dict(RUN_ALL, trail_pct=1, trail_arm_pct=1),
+        "run_all_trail2": dict(RUN_ALL, trail_pct=2, trail_arm_pct=2),
+        "run_all_atr16": dict(RUN_ALL, tp_atr=16, atr_window=26),
+    },
+    "firm_d_value_iii": {
+        "r1_thirds_1_3": THIRDS,
+        "thirds_0.8_2.5": dict(THIRDS, tp_scale_pct=0.8, tp_scale2_pct=2.5),
+        "thirds_1_4": dict(THIRDS, tp_scale2_pct=4),
+        "thirds_1.2_3": dict(THIRDS, tp_scale_pct=1.2),
+        "half_1_rest_3": dict(THIRDS, tp_scale_frac=0.5),
+        "quarter_1_rest_3": dict(THIRDS, tp_scale_frac=0.25),
+        "thirds_1_3_be": dict(THIRDS, breakeven_arm_pct=0.8),
+        "thirds_1_3_ride0.5": dict(THIRDS, ride_pct=0.5),
+        "thirds_1_trail": {k: v for k, v in dict(THIRDS, trail_arm_pct=1.5,
+                                                   trail_pct=1).items() if k != "tp_scale2_pct"},
+        "thirds_1_3_atr_cap": dict(THIRDS, tp_atr=12, atr_window=26),
+        "thirds_1_3_ride0.1": dict(THIRDS, ride_pct=0.1),
+    },
+}
+
 
 def stats(result, realized) -> dict:
     wins = [p for p in realized if p > 0]
@@ -119,14 +157,34 @@ def main(argv=None) -> int:
             continue
         total = market.length()
         tester = Backtester(config)
-        split = tester.warmup + (total - tester.warmup) * 2 // 3
-        windows = {"search": (None, split - tester.warmup), "held_out": (split, None)}
+        first = tester.warmup
+        windows = {}
+        fresh_before = os.environ.get("TP_FRESH_BEFORE", "")
+        if fresh_before:
+            # Bars before this date were seen by no earlier round: the window
+            # that judges this one. Search and held-out keep their old meaning
+            # on the bars after it, so rounds stay comparable.
+            bars = market.history(firm["universe"][0])
+            cut = next((i for i, b in enumerate(bars)
+                        if b.as_of.isoformat() >= fresh_before), total)
+            if cut > first + 100:
+                windows["fresh"] = (first, cut - first)
+                first = cut
+        split = first + (total - first) * 2 // 3
+        windows["search"] = (first, split - first)
+        windows["held_out"] = (split, None)
         # A bankruptcy heir's initial_allocation is stored as 0.00; its
         # allocation is what it actually trades with.
         capital = D(firm["initial"] or 0) or D(firm["allocation"] or 0) or D(20000)
-        print(f"\n{firm['key']}  {firm['universe']}  {total} bars, split at {split}", flush=True)
+        print(f"\n{firm['key']}  {firm['universe']}  {total} bars, windows "
+              + ", ".join(f"{k}={v[0]}+{v[1] if v[1] is not None else total - v[0]}"
+                          for k, v in windows.items()), flush=True)
         rows = {}
-        for name, extra in [("parent", {})] + list(VARIANTS.items()):
+        variants = (ROUND_2.get(firm["key"], {}) if os.environ.get("TP_ROUND") == "2"
+                    else VARIANTS)
+        if not variants:
+            continue
+        for name, extra in [("parent", {})] + list(variants.items()):
             g = dict(genome, **extra)
             row = {}
             t0 = time.time()
@@ -138,6 +196,10 @@ def main(argv=None) -> int:
                 row[window] = stats(res, tester.last_realized)
             rows[name] = row
             s, h = row["search"], row["held_out"]
+            if "fresh" in row:
+                f = row["fresh"]
+                print(f"  {name:22s} FRESH  {f['pnl']:+9.0f} ({f['trades']:3d} tr, win {f['win']:4.0f}%, "
+                      f"avg win {f['avg_win']:+7.0f} / loss {f['avg_loss']:+7.0f})", flush=True)
             print(f"  {name:22s} search {s['pnl']:+9.0f} ({s['trades']:3d} tr, win {s['win']:4.0f}%, "
                   f"avg win {s['avg_win']:+7.0f} / loss {s['avg_loss']:+7.0f})   held-out "
                   f"{h['pnl']:+9.0f} ({h['trades']:3d} tr, avg win {h['avg_win']:+7.0f} / "
