@@ -1290,8 +1290,8 @@ concerned. It is handed two objects and nothing else:
 * `ReadOnlyStore` — the ledger, reads only. Every write method raises
   `SandboxViolation`, and so does any attribute not on the allow-list,
   including `db`, so nobody can reach around it to raw SQL.
-* `SandboxWriter` — inserts and updates restricted to `alliances` and
-  `sandbox_events`.
+* `SandboxWriter` — inserts and updates restricted to the sandbox's own
+  tables: `alliances`, `sandbox_events` and the idea lab's `sandbox_ideas`.
 
 Both are enforced by `__getattr__`, not by convention, so a future edit that
 tries to write through the sandbox fails at the first call.
@@ -1311,6 +1311,43 @@ reproducible from stored metrics. If one firm could move another's equity,
 the allocator would start punishing victims, and every kill reason would
 become a guess. A saboteur can win the tournament; a saboteur cannot cost the
 operator a cent.
+
+### The idea lab: every scanner call, tested on paper
+
+```bash
+python -m src.main trade sandbox-ideas
+```
+
+A scanner's reading is a vote at one seat of one firm's debate, so nothing
+could say whether simply following a scanner would pay. The idea lab
+(`src/trading/sandbox/ideas.py`) tests every call on its own, every tick,
+after all the publishers have spoken:
+
+* **A call is a direction**: a score above zero is a buy, below zero a sell.
+  Zero, or zero confidence, is silence.
+* **Entered where a firm could have entered it**: the bar's price, in an open
+  market, from a price no more than an hour old. A stock called at 2am waits
+  for the scanner to call it again once the market opens.
+* **Real costs both ways**: the session's measured half-spread plus the fee;
+  on crypto, Alpaca's 25 bps fee and the widest spread any desk trading the
+  coin has measured (19.7 bps for a coin no desk trades).
+* **Held for an hour, a day and a week**, each its own idea. A call repeated
+  every bar is one idea per horizon until it closes; a scanner that flips
+  closes its ideas at once and opens the other side.
+* **SPY over the same window** is the yardstick, with no costs.
+* **Calls outside the universe are tested too.** The fleet's Form 4 small caps
+  and altcoins never reach the board or a firm, but `Scanners.take_outside()`
+  hands them to the lab, which prices them from Alpaca's latest-bar endpoints:
+  one batched request per asset class per bar, only on an Alpaca village, and
+  off with `TRADE_IDEA_LAB_OUTSIDE=off`.
+
+Each idea is $1,000 of paper in `sandbox_ideas`, written through the sandbox
+writer, so the lab cannot touch fills, positions or cash. No scanner gets a
+verdict before 20 closed ideas at a horizon, and the t-test on its edge over
+SPY is Bonferroni-corrected across every scanner and horizon on the board.
+Mission Control shows it as "Sandbox — the scanners' ideas, tested", and the
+**Idea lab** switch on the wall stops it (`TRADE_IDEA_LAB=off` sets the
+default).
 
 ---
 
@@ -1488,6 +1525,7 @@ The two Claude Code plugins install from inside Claude Code:
 | `trade market-sell/buy` | list or buy; capital needs an approval |
 | `trade market-settle <id>` | apply an approved capital transfer |
 | `trade sandbox` | alliances, intrigue, shadow scoreboard |
+| `trade sandbox-ideas` | every scanner call tested on paper, scored against SPY |
 | `trade sandbox-form/betray/spy/sabotage` | play the adversarial game |
 | `trade frameworks` | which external frameworks are installed |
 | `trade live-request --venue V` | ask to trade live; sends no order |
@@ -1525,7 +1563,7 @@ src/trading/
 ├── court/               strategy trials: evidence, jury, advocates, judge
 ├── competition/         tokens, titles, bouts, milestones
 ├── black_market/        listings, escrow, licences, capital transfers
-├── sandbox/             alliances, betrayal, espionage — read-only guard
+├── sandbox/             alliances, betrayal, espionage, the idea lab — read-only guard
 ├── gateway/             OmniRoute, with an offline fallback
 ├── execution/           paper (default) and the live venues that refuse
 └── audit/               the Obsidian vault, including brain/ as a graph

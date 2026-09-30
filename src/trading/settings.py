@@ -31,6 +31,7 @@ KNOWN = {
     "bazaar": "the bazaar lists and sells",
     "tavern": "alliances form and rivals scheme",
     "evolution": "firms improve their own strategies between bars",
+    "idea_lab": "the sandbox tests every scanner call on paper",
 }
 
 TRUE = ("1", "true", "yes", "on")

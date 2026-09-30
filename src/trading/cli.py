@@ -30,6 +30,7 @@ human has already made.
     trade market               what firms have for sale
     trade market-buy           buy a listing (capital needs an approval)
     trade sandbox              alliances, intrigue, shadow scoreboard
+    trade sandbox-ideas        every scanner call tested on paper, scored
     trade frameworks           which external frameworks are installed
     trade live-request         ask for permission to trade a live venue
     trade apply-approvals      carry out what a human approved
@@ -739,7 +740,29 @@ def cmd_sandbox(args) -> int:
                   f"{(event['detail'] or '')[:80]}")
     print(
         "\nNothing here touches the ledger: the sandbox holds a read-only view of it "
-        "and can write only its own two tables."
+        "and can write only its own tables."
+    )
+    return 0
+
+
+def cmd_sandbox_ideas(args) -> int:
+    """The idea lab's scoreboard: what following each scanner would have made."""
+    from .sandbox import ideas
+
+    eco = _ecosystem(args)
+    print(ideas.render(eco.db))
+    latest = ideas.recent(eco.db, args.limit)
+    if latest:
+        print("\nlatest to close:")
+        for row in latest:
+            print(f"  {str(row['closed_bar'])[:16]}  {row['publisher']:<16} "
+                  f"{row['side']:<4} {row['symbol']:<9} held "
+                  f"{ideas.HELD_FOR.get(str(row['horizon']), row['horizon']):<7} "
+                  f"{D(str(row['return_pct'])):+.3f}%  ({row['closed_why']})")
+    print(
+        "\nPaper only: the lab writes its own table and nothing else. A verdict needs "
+        f"{ideas.MIN_CLOSED} closed ideas and clears a bar raised for every scanner and "
+        "horizon looked at at once."
     )
     return 0
 
@@ -1469,6 +1492,10 @@ def add_trade_parser(subparsers) -> None:
     # -- the sandbox -------------------------------------------------------
     p = add("sandbox", "alliances, intrigue and the shadow scoreboard", cmd_sandbox)
     p.add_argument("--limit", type=int, default=15)
+
+    p = add("sandbox-ideas", "every scanner call tested on paper, and scored",
+            cmd_sandbox_ideas)
+    p.add_argument("--limit", type=int, default=10)
 
     p = add("sandbox-form", "form an alliance", cmd_sandbox_action)
     p.add_argument("name")

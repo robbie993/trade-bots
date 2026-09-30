@@ -479,10 +479,22 @@ class Scanners:
         # rather than once: a screener nobody can see is not running is the
         # failure this whole module exists to stop happening quietly.
         self.error = error
+        # Readings refused only because the symbol is outside the scanner's
+        # universe, from the latest pass: (scanner, [Reading]). They still
+        # never reach the board or a firm. The sandbox's idea lab takes them
+        # (`take_outside`) and tests them on paper, which is the only place a
+        # call on a name the village does not trade can be heard at all.
+        self.outside: list = []
+
+    def take_outside(self) -> list:
+        """The outside-universe readings from the latest pass, handed over once."""
+        outside, self.outside = self.outside, []
+        return outside
 
     def run(self, market, as_of=None) -> list:
         """Publish this bar's readings. Returns human-readable notes."""
         as_of = as_of if as_of is not None else market.as_of()
+        self.outside = []
         notes: list = [self.error] if self.error else []
         if as_of is None:
             if self.specs:
@@ -510,6 +522,15 @@ class Scanners:
             return [f"{spec.name}: {error}"]
 
         readings, complaints = to_readings(result, universe)
+        if any(c.endswith(OUTSIDE) for c in complaints):
+            # The same validation with no universe: what is left over was
+            # refused for where it is, not for what it says.
+            inside = {str(s).upper() for s in universe}
+            everything, _ = to_readings(result, ())
+            outside = list({r.symbol: r for r in everything
+                            if r.symbol not in inside}.values())
+            if outside:
+                self.outside.append((spec.name, outside))
         notes = [f"{spec.name}: {why}" for why in _outside_in_one_line(complaints)]
         if readings:
             written = self.board.publish(spec.name, readings, as_of)

@@ -214,12 +214,16 @@ def test_the_sandbox_cannot_reach_raw_sql(sandbox):
         sandbox.reader.db
 
 
-def test_the_sandbox_writer_is_limited_to_two_tables(sandbox):
-    for table in ("firms", "fills", "positions", "strategy_genomes", "human_approvals"):
+def test_the_sandbox_writer_is_limited_to_its_own_tables(sandbox):
+    for table in ("firms", "fills", "positions", "strategy_genomes", "human_approvals",
+                  "signals", "shadow_trades"):
         with pytest.raises(SandboxViolation):
             sandbox.writer.insert(table, {"x": 1})
-    # Its own tables are fine.
+    # Its own tables are fine: the intrigue's, and the idea lab's paper book.
     sandbox.writer.insert("sandbox_events", {"event_type": "test", "actor": "alpha"})
+    sandbox.writer.insert("sandbox_ideas", {
+        "publisher": "scan", "symbol": "SPY", "side": "buy", "horizon": "1h",
+        "opened_bar": "b", "due_at": "2026-01-01T00:00:00Z", "entry_price": "1"})
 
 
 def test_the_sandbox_can_read_everything(sandbox):

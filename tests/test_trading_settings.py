@@ -81,7 +81,7 @@ def test_an_unmigrated_database_reads_as_undecided(db):
 
 
 def test_the_registry_covers_what_the_page_offers():
-    assert set(KNOWN) == {"paused", "arena", "bazaar", "tavern", "evolution"}
+    assert set(KNOWN) == {"paused", "arena", "bazaar", "tavern", "evolution", "idea_lab"}
 
 
 # =========================================================================
@@ -154,6 +154,20 @@ def test_the_button_says_what_it_will_do(village):
     page = village.get("/village").text
     assert "Start again" in page
     assert ">paused<" in page
+
+
+def test_the_idea_lab_starts_on_and_the_first_press_stops_it(village, ecosystem, monkeypatch):
+    """Its default is its own rather than the living quarters': the lab changes
+    nothing a firm does, so it runs unless somebody says otherwise."""
+    monkeypatch.delenv("TRADE_IDEA_LAB", raising=False)
+    page = village.get("/village").text
+    assert "Idea lab" in page and "ideas, tested" in page
+    response = village.post("/village/actions/switch", data={"name": "idea_lab"},
+                            follow_redirects=False)
+    assert "idea%20lab%20is%20stopped" in response.headers["location"]
+    assert ecosystem.settings.get("idea_lab", default=True) is False
+    village.post("/village/actions/switch", data={"name": "idea_lab"})
+    assert ecosystem.settings.get("idea_lab", default=False) is True
 
 
 def test_a_bogus_switch_is_refused_on_the_page_not_with_a_500(village):
