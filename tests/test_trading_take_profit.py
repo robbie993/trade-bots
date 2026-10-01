@@ -93,3 +93,69 @@ def test_memory_is_dropped_when_the_position_is(store, firm_record, market_data)
     assert "SPY" in firm.exit_memory
     firm.propose(market_data, [])
     assert "SPY" not in firm.exit_memory
+
+
+# -- a restart (every deploy) must not forget how far a winner ran -----------
+
+def _bought(store, firm_record, symbol, bar, side="buy"):
+    from src.db.connection import to_iso
+
+    store.db.insert("fills", {"firm_id": firm_record.id, "symbol": symbol, "side": side,
+                              "quantity": "10", "price": str(bar.close),
+                              "as_of": to_iso(bar.as_of)})
+
+
+def _a_run_then_back(market_data):
+    """A holding, and the bars since its buy, that ran above today's price and came back."""
+    for cursor in range(150, 40, -1):
+        market_data.seek(cursor)
+        for symbol in ("SPY", "QQQ"):
+            mark = market_data.mark(symbol)
+            for lookback in range(5, 40):
+                bars = market_data.history(symbol, lookback)
+                best = max(b.close for b in bars)
+                if best > mark * Decimal("1.003"):
+                    return symbol, bars, best, mark
+    raise AssertionError("the synthetic feed never ran above a later price")
+
+
+def test_a_restart_remembers_how_far_a_winner_ran(ecosystem, store, firm_record, market_data):
+    symbol, bars, best, mark = _a_run_then_back(market_data)
+    _bought(store, firm_record, symbol, bars[0])
+    positions = _hold(store, firm_record, symbol, mark)                # flat now
+    arm = (best - mark) / mark * Decimal(50)                          # half the run, in %
+
+    forgetful = _firm(firm_record, breakeven_arm_pct=arm)              # the dict a restart leaves
+    assert not _taken(forgetful.propose(market_data, positions)), "it thinks it never ran"
+
+    recalls = _firm(firm_record, breakeven_arm_pct=arm)
+    recalls.recall_exit = lambda s, m: ecosystem._recall_exit(firm_record.id, s, m)
+    (p,) = _taken(recalls.propose(market_data, positions))
+    assert "came back to cost" in p.rationale
+    assert Decimal(recalls.exit_memory[symbol]["peak"]) == best
+
+
+def test_the_recalled_peak_starts_at_the_last_buy_not_the_first(ecosystem, store, firm_record,
+                                                                 market_data):
+    symbol, bars, _, _ = _a_run_then_back(market_data)
+    _bought(store, firm_record, symbol, bars[0])
+    _bought(store, firm_record, symbol, bars[-1])                     # averaged in just now
+    recalled = ecosystem._recall_exit(firm_record.id, symbol, market_data)
+    assert recalled["peak"] == bars[-1].close and not recalled["scaled"]
+
+
+def test_a_sell_since_the_buy_is_a_scale_out_already_taken(ecosystem, store, firm_record,
+                                                           market_data):
+    symbol, bars, _, _ = _a_run_then_back(market_data)
+    _bought(store, firm_record, symbol, bars[0])
+    _bought(store, firm_record, symbol, bars[1], side="sell")
+    assert ecosystem._recall_exit(firm_record.id, symbol, market_data)["scaled"] is True
+
+
+def test_nothing_in_the_ledger_means_nothing_recalled(ecosystem, firm_record, market_data):
+    assert ecosystem._recall_exit(firm_record.id, "SPY", market_data) == {}
+
+
+def test_every_live_firm_can_recall(ecosystem):
+    for record in ecosystem.store.active_firms():
+        assert ecosystem.build_firm(record).recall_exit is not None
