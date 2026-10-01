@@ -89,10 +89,48 @@ def open_questions(db, answered_by: str = "", limit: int = 20) -> list:
     return rows
 
 
+#: How much of a question's context a mind is shown. Not a large number, since
+#: duck.ai is a chat box, so what fits has to be chosen rather than chopped.
+PROMPT_BUDGET = 9000
+
+
+def fit(context, budget: int = PROMPT_BUDGET) -> str:
+    """The context as compact JSON within `budget`, every list item kept.
+
+    This used to be `json.dumps(context, indent=1)[:6000]`. The daily research
+    review's context is a list of forty finds, papers first, each paper with a
+    600-character abstract: twelve papers filled the 6,000 characters and the
+    cut fell inside the twelfth abstract. So the twenty-four GitHub and Hugging
+    Face finds behind them were stored every day and shown to no one, and both
+    minds said so in their answers ("no GitHub repos, Hugging Face items, posts
+    or videos came through").
+
+    Now long strings inside lists are shortened, more each pass, until the
+    whole thing fits; only then is anything cut off the end.
+    """
+    text = json.dumps(context, default=str)
+    for cap in (400, 200, 120, 60):
+        if len(text) <= budget:
+            return text
+        context = _shorten(context, cap)
+        text = json.dumps(context, default=str)
+    return text[:budget]
+
+
+def _shorten(value, cap: int, in_list: bool = False):
+    if isinstance(value, dict):
+        return {k: _shorten(v, cap, in_list) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_shorten(v, cap, True) for v in value]
+    if in_list and isinstance(value, str) and len(value) > cap:
+        return value[:cap] + "…"
+    return value
+
+
 def prompt_for(q: dict) -> str:
     return (f"{GUARDRAILS}\n\nFirm: {q['firm_key']}\nTopic: {q['topic']}\n"
             f"Question: {q['question']}\n\nWhat the village knows (JSON):\n"
-            f"{json.dumps(q['context'], indent=1, default=str)[:6000]}")
+            f"{fit(q['context'])}")
 
 
 def answer(db, question_id: int, answered_by: str, text: str, model: str = "") -> bool:
@@ -259,7 +297,22 @@ def _research_review(eco, now: datetime) -> list:
                 if d.get("said"):
                     find["said"] = d["said"][:600]
                 finds.append(find)
-    finds = finds[:40]
+    # Forty at most, taken in turns from each source rather than papers first:
+    # a plain `finds[:40]` let the social watchers' tagged posts be the ones
+    # that never made it, the same way the prompt's character cut once hid
+    # every repository behind the papers' abstracts.
+    by_source: dict = {}
+    for f in finds:
+        by_source.setdefault(f["source"], []).append(f)
+    turns = [iter(v) for v in by_source.values()]
+    finds = []
+    while turns and len(finds) < 40:
+        for it in list(turns):
+            item = next(it, None)
+            if item is None:
+                turns.remove(it)
+            elif len(finds) < 40:
+                finds.append(item)
     if not finds:
         return []
     q = ask(eco.db, "village", "research",
