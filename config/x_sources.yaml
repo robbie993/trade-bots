@@ -1,8 +1,9 @@
 # X accounts the village account follows and reads (scripts/x_watch.py).
 #
-# The reader reads the Following timeline only, so these are exactly the voices
-# the village hears. Each handle is opened before it is followed; one that does
-# not exist or is suspended is recorded as missing and skipped. Edit freely.
+# The reader reads the Following timeline, so these are the voices the village
+# chose, then a few tweets off the For you tab (for_you_tweets, below). Each
+# handle is opened before it is followed; one that does not exist or is
+# suspended is recorded as missing and skipped. Edit freely.
 accounts:
   # fast market news
   - {handle: DeItaone, group: news}          # Walter Bloomberg: headlines as they cross
@@ -41,3 +42,7 @@ follow_pause_s: 45
 # Tweets read from the Following timeline per run, and how old a call may be.
 tweets_per_run: 60
 max_age_hours: 24
+
+# The For you tab: what X picks for the account, read after Following. A tweet
+# from it is kept only if it is about markets or makes a call. 0 turns it off.
+for_you_tweets: 20
