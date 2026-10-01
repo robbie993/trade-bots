@@ -128,3 +128,18 @@ def test_the_research_review_hears_what_a_tagged_video_says(ecosystem):
     (q,) = [q for q in ask.open_questions(ecosystem.db, limit=50) if q["topic"] == "research"]
     (find,) = [f for f in q["context"]["finds"] if f["name"] == "7401"]
     assert find["said"].startswith("I let an AI agent trade") and len(find["said"]) == 600
+
+
+def test_every_find_reaches_the_minds_not_just_the_first_6000_characters():
+    """Twelve paper abstracts used to fill the prompt; every repo behind them was cut."""
+    from src.trading import ask
+
+    finds = ([{"source": "paper", "name": f"paper {i}", "abstract": "x" * 600} for i in range(12)]
+             + [{"source": "github", "name": f"repo-{i}", "about": "a trading bot"} for i in range(8)]
+             + [{"source": "huggingface_models", "name": f"model-{i}", "about": "rl agent"}
+                for i in range(8)])
+    prompt = ask.prompt_for({"firm_key": "village", "topic": "research", "question": "q",
+                             "context": {"finds": finds}})
+    for name in ("repo-7", "model-7", "paper 11"):
+        assert name in prompt
+    assert len(prompt) < ask.PROMPT_BUDGET + 2000
