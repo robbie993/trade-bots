@@ -249,6 +249,35 @@ firms:
       calm_vol_pct: 85        # nothing about this is calm
 
 # =========================================================================
+# Retired firms — taken out of the village on purpose, by name, with why.
+#
+# Deleting a firm's block above does not delete the firm: `trade init` only
+# creates and refreshes, so the firm keeps its row, its cash and its status,
+# and nothing builds it from config or shuts it down. Each firm named here is
+# shut down on the next deploy and wound up like any dead firm (its book sold
+# on the following ticks, its cash returned), except that no heir is filed
+# and no lesson is written: it was withdrawn, it did not fail. See
+# `Ecosystem.retire_listed` and `bankruptcy.RETIRED`.
+#
+# Retiring is one-way. To bring a strategy back, give it a new firm key.
+# =========================================================================
+retired:
+  # Astral: ten volatility-rotation baskets, $25,000 each, held out of the
+  # village on 2026-09-28 (1c671c1) before any of them traded, and its best
+  # version then failed its validation baskets (ca2790e). Retired 2026-10-01
+  # at Robbie's word.
+  astral_semis: "Astral held out of the village; its strategy failed validation"
+  astral_megacap: "Astral held out of the village; its strategy failed validation"
+  astral_indices: "Astral held out of the village; its strategy failed validation"
+  astral_banks: "Astral held out of the village; its strategy failed validation"
+  astral_energy: "Astral held out of the village; its strategy failed validation"
+  astral_metals: "Astral held out of the village; its strategy failed validation"
+  astral_btc_proxies: "Astral held out of the village; its strategy failed validation"
+  astral_airlines: "Astral held out of the village; its strategy failed validation"
+  astral_homebuilders: "Astral held out of the village; its strategy failed validation"
+  astral_crypto: "Astral held out of the village; its strategy failed validation"
+
+# =========================================================================
 # The scanners — bots that spot things instead of trading them.
 #
 # A screener, a ranker, a whale watcher: anything that reads the market and

@@ -80,6 +80,15 @@ def _successor_key(firm_key: str, existing: set) -> str:
     return ""
 
 
+#: How a retired firm's kill reason begins. Retiring is the operator taking a
+#: firm out on purpose (the `retired:` block of the firm config), not the firm
+#: failing, so its estate is wound up like any other but files no heir and
+#: writes no lesson: an heir is the village's second try at a firm that died
+#: of something, and a firm withdrawn before it ever traded died of nothing.
+#: Without this, shutting down ten idle firms would file ten idle heirs.
+RETIRED = "retired:"
+
+
 #: Every heir gets this seat on top of whatever it inherits. It is how a firm
 #: hears the scanners and the scribe — the only route by which one firm's
 #: failure can reach another firm's debate. An heir without it is deaf to the
@@ -188,7 +197,8 @@ def wind_up(eco, firm: FirmRecord, card=None) -> Optional[dict]:
         # No YAML spec: the parent was itself an heir, so its seats are in its
         # own genome. Inheritance has to survive more than one generation.
         seats = [str(s) for s in (firm.genome or {}).get("analysts", []) or []]
-    heir = file_successor(eco.store, firm, pm, lesson, seats)
+    retired = str(firm.kill_reason or "").startswith(RETIRED)
+    heir = None if retired else file_successor(eco.store, firm, pm, lesson, seats)
 
     # **What outside minds told the dead firm goes to its heir.** Advice a firm
     # asked for (see ask.py) lives in its own memory; without this it would be
@@ -210,31 +220,33 @@ def wind_up(eco, firm: FirmRecord, card=None) -> Optional[dict]:
 
     # The lesson goes where the living firms already look. `firm_id` stays on
     # the dead firm: it is that firm's lesson, and attributing it to the heir
-    # would put a loss on a book that never traded.
-    eco.memory.remember(
-        lesson,
-        firm_id=firm.id,
-        memory_type="bankruptcy",
-        outcome="loss" if pm.realized < 0 else "mixed",
-        reward=pm.realized,
-        payload={
-            "kill_reason": firm.kill_reason or "",
-            "closed_trades": pm.closed,
-            "wins": pm.wins,
-            "losses": pm.losses,
-            "realized": str(pm.realized),
-            "fees": str(pm.fees),
-            "slippage": str(pm.slippage),
-            "costs": str(pm.costs),
-            "capital_returned": str(returned),
-            "diagnosis": [str(n) for n in pm.notes],
-            "worst_symbols": [
-                {"symbol": s.symbol, "net": str(s.net), "closed": s.closed}
-                for s in pm.symbols[:3]
-            ],
-            "successor": heir.firm_key if heir else "",
-        },
-    )
+    # would put a loss on a book that never traded. A retired firm has no
+    # lesson to teach, and the scribe reads every one of these.
+    if not retired:
+        eco.memory.remember(
+            lesson,
+            firm_id=firm.id,
+            memory_type="bankruptcy",
+            outcome="loss" if pm.realized < 0 else "mixed",
+            reward=pm.realized,
+            payload={
+                "kill_reason": firm.kill_reason or "",
+                "closed_trades": pm.closed,
+                "wins": pm.wins,
+                "losses": pm.losses,
+                "realized": str(pm.realized),
+                "fees": str(pm.fees),
+                "slippage": str(pm.slippage),
+                "costs": str(pm.costs),
+                "capital_returned": str(returned),
+                "diagnosis": [str(n) for n in pm.notes],
+                "worst_symbols": [
+                    {"symbol": s.symbol, "net": str(s.net), "closed": s.closed}
+                    for s in pm.symbols[:3]
+                ],
+                "successor": heir.firm_key if heir else "",
+            },
+        )
 
     eco.store.set_firm_status(
         firm.id, FirmStatus.BANKRUPT.value,
@@ -258,4 +270,4 @@ def wind_up(eco, firm: FirmRecord, card=None) -> Optional[dict]:
     }
 
 
-__all__ = ["wind_up", "file_successor"]
+__all__ = ["RETIRED", "wind_up", "file_successor"]
