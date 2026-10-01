@@ -58,10 +58,14 @@ class Firm:
         # holding has reached and which scale-outs it has already taken. A
         # backtest keeps one Firm for the whole replay; the live loop builds a
         # new Firm every tick, so the ecosystem hands each firm the same dict
-        # every time (`Ecosystem.build_firm`). Lost on a worker restart, which
-        # costs a trail its peak (it restarts from the current price, the safe
-        # side) and nothing else.
+        # every time (`Ecosystem.build_firm`). The dict dies with the worker,
+        # and every deploy restarts it, so `recall_exit` rebuilds a holding's
+        # memory from the ledger and the bars when the dict has none for it.
         self.exit_memory: dict = {}
+        #: ``(symbol, market) -> {"peak": Decimal, "scaled": bool}``, or None
+        #: where there is no ledger to ask (a backtest keeps one Firm for the
+        #: whole replay, so it never forgets).
+        self.recall_exit = None
 
     # -- construction -----------------------------------------------------
     @classmethod
@@ -235,6 +239,16 @@ class Firm:
                 # A new position, or one averaged into: start its memory over.
                 state.clear()
                 state["entry"] = str(entry)
+                # Or a worker that restarted and forgot it. Starting the peak
+                # at today's price disarmed every breakeven: a winner that had
+                # run 1% and come back to +0.2% before a deploy was free to
+                # become a loss after it.
+                recalled = self.recall_exit(held.symbol, market) if self.recall_exit else None
+                if recalled:
+                    if recalled.get("peak") is not None:
+                        state["peak"] = str(recalled["peak"])
+                    if recalled.get("scaled"):
+                        state["scaled"] = True
             peak = max(D(state.get("peak", mark)), mark)
             state["peak"] = str(peak)
             gain = (mark - entry) / entry * D(100)

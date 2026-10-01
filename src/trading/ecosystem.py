@@ -645,7 +645,42 @@ class Ecosystem:
         if memory is None:
             memory = self._exit_memory = {}
         firm.exit_memory = memory.setdefault(record.firm_key, {})
+        firm.recall_exit = lambda symbol, market, firm_id=record.id: (
+            self._recall_exit(firm_id, symbol, market))
         return firm
+
+    def _recall_exit(self, firm_id, symbol: str, market) -> dict:
+        """A holding's exit memory, rebuilt from the ledger and the bars.
+
+        The memory lives in this process and every deploy restarts it. The
+        fills say when the position was last bought into, the bars since then
+        say the best close it reached (the same marks the live loop keeps its
+        peak from), and a sell since that buy means a scale-out was already
+        taken, so it is not taken twice. Empty when the ledger has nothing to
+        say: the caller then starts from the current price, as it always did.
+        """
+        from ..db.connection import to_datetime
+
+        try:
+            rows = self.db.query(
+                "SELECT side, as_of FROM fills WHERE firm_id = ? AND symbol = ? "
+                "ORDER BY id DESC LIMIT 50", (firm_id, symbol)) or []
+        except Exception:  # noqa: BLE001 - recalling is never a precondition
+            return {}
+        since, scaled = None, False
+        for row in rows:                                  # newest first
+            if str(row.get("side") or "").lower() == "buy":
+                since = to_datetime(row.get("as_of"))
+                break
+            scaled = True
+        if since is None:
+            return {}
+        closes = [b.close for b in market.history(symbol)
+                  if b.as_of is not None and to_datetime(b.as_of) >= since]
+        out: dict = {"scaled": scaled}
+        if closes:
+            out["peak"] = max(closes)
+        return out
 
     def _build_firm(self, record: FirmRecord, build_analysts) -> Firm:
         spec = self.specs().get(record.firm_key)
