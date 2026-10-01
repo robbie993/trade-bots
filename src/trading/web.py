@@ -394,6 +394,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         _arena_panel(eco),
         _market_panel(eco),
         _idea_lab_panel(eco),
+        _meme_lab_panel(eco),
         _sandbox_panel(eco),
         MISSION_FOOTER,
     ])
@@ -1248,6 +1249,81 @@ def _idea_lab_panel(eco) -> str:
         "not read as an edge. Nothing here touches the ledger: the lab writes only its "
         "own table.</p>")
     return _panel("Sandbox — the scanners' ideas, tested", head + "".join(blocks) + note)
+
+
+def _meme_lab_panel(eco) -> str:
+    """Every trending meme launch the radar logged, bought on paper. See sandbox/memes.py.
+
+    Muted on purpose. No firm can buy any of these tokens, and a basket of
+    meme coins is one hundredfold token away from a flattering average, so the
+    median and the share that lost half come first and the mean comes second.
+    Hidden while the lab is off and has nothing to show.
+    """
+    from .sandbox import memes
+
+    try:
+        records = memes.scoreboard(eco.db)
+        looked = memes.looks(eco.db)
+        still_open = memes.open_count(eco.db)
+    except Exception:  # noqa: BLE001 - a panel never takes the page down
+        return ""
+    if not (records or looked) and not memes.enabled():
+        return ""
+
+    def pct(value) -> str:
+        v = D(value)
+        css = "good" if v > 0 else "bad" if v < 0 else "muted"
+        return f"<span class={css}>{v:+.1f}%</span>"
+
+    def under(text: str) -> str:
+        return f"<br><span class=muted style='white-space:normal'>{e(text)}</span>"
+
+    blocks = []
+    if looked:
+        blocks.append(
+            "<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>What showed up</h3>"
+            + _table([{
+                "list": e(memes.LISTED_AS.get(source, source)),
+                "bought": f"{seen['bought']} of {seen['looked']}",
+                "skipped": e(f"{seen['thin']} too thin, {seen['unlisted']} with no pool"),
+            } for source, seen in looked.items()]))
+    # Three columns with the detail underneath, as in the idea lab: on a phone
+    # a seven-column table shows the names and cuts off the numbers.
+    for name, _ in memes.HORIZONS:
+        mine = [r for r in records if r.horizon == name]
+        if not mine:
+            continue
+        blocks.append(
+            f"<h3 style='margin:1rem 0 .25rem;font-size:.95rem'>Held for "
+            f"{e(memes.HELD_FOR.get(name, name))}</h3>" + _table([{
+                "list": e(r.label) + under(f"{r.closed} closed"),
+                "median": pct(r.median_pct) + under(
+                    f"mean {r.mean_pct:+.1f}%, {r.after_costs_pct:+.1f}% after costs"),
+                "went up": e(f"{r.share(r.up):.0f}%") + under(
+                    f"{r.share(r.halved):.0f}% lost over half, "
+                    f"{r.share(r.vanished):.0f}% vanished"),
+            } for r in mine]))
+
+    if records:
+        head = f"<p>{still_open} idea(s) open now.</p>"
+    elif looked:
+        head = (f"<p class=muted>Nothing has closed yet ({still_open} open). The first "
+                "hour-long ideas close an hour after the lab buys them.</p>")
+    else:
+        head = ("<p class=muted>Nothing yet: the lab buys the next token the meme radar "
+                "logs.</p>")
+    note = (
+        "<p class=muted>Every token the meme radar logs from Pump.fun's top and live "
+        "lists and DexScreener's boosted list is bought here on paper the first time "
+        "it shows up, at DexScreener's price for its deepest pool, and held an hour, a "
+        f"day and a week. Only pools holding ${memes.MIN_LIQUIDITY_USD:,.0f} or more are "
+        "bought, and a token skipped once is never bought later. A pool that is gone a "
+        "day after its idea fell due counts as a total loss. After costs assumes a "
+        f"{memes.ASSUMED_ROUND_TRIP_PCT}% round trip (Pump.fun takes about 1% a side, "
+        "DEX pools about 0.25% plus slippage), which is a guess, not a measurement. No "
+        "firm can buy any of these tokens, and the lab writes only its own table.</p>")
+    return _panel("Pump.fun lab: what buying every trending launch would have done",
+                  head + "".join(blocks) + note)
 
 
 def _sandbox_panel(eco) -> str:

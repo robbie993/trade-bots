@@ -4,12 +4,13 @@
     alliances.py  pacts, membership, standing
     intrigue.py   betrayal, espionage, sabotage, and the shadow scoreboard
     ideas.py      every scanner call traded on paper, and scored
+    memes.py      every trending meme launch bought on paper, and scored
 
 Everything here is a game played *over* the ledger and never *on* it. The
 sandbox is constructed from ``sandbox_handles(store)``, which hands it a
 ``ReadOnlyStore`` and a ``SandboxWriter`` restricted to ``alliances``,
-``sandbox_events`` and ``sandbox_ideas``. Both raise ``SandboxViolation`` on
-anything else.
+``sandbox_events``, ``sandbox_ideas`` and ``meme_lab``. Both raise
+``SandboxViolation`` on anything else.
 """
 
 from __future__ import annotations

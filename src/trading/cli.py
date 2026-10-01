@@ -32,6 +32,7 @@ human has already made.
     trade market-buy           buy a listing (capital needs an approval)
     trade sandbox              alliances, intrigue, shadow scoreboard
     trade sandbox-ideas        every scanner call tested on paper, scored
+    trade meme-lab             what buying every trending meme launch would have done
     trade frameworks           which external frameworks are installed
     trade live-request         ask for permission to trade a live venue
     trade apply-approvals      carry out what a human approved
@@ -743,6 +744,16 @@ def cmd_sandbox(args) -> int:
         "\nNothing here touches the ledger: the sandbox holds a read-only view of it "
         "and can write only its own tables."
     )
+    return 0
+
+
+def cmd_meme_lab(args) -> int:
+    """The Pump.fun lab's scoreboard: what buying every trending meme launch would
+    have done. See sandbox/memes.py."""
+    from .sandbox import memes
+
+    eco = _ecosystem(args)
+    print(memes.render(eco.db))
     return 0
 
 
@@ -1509,6 +1520,8 @@ def add_trade_parser(subparsers) -> None:
     p = add("sandbox-ideas", "every scanner call tested on paper, and scored",
             cmd_sandbox_ideas)
     p.add_argument("--limit", type=int, default=10)
+
+    add("meme-lab", "what buying every trending meme launch would have done", cmd_meme_lab)
 
     p = add("sandbox-form", "form an alliance", cmd_sandbox_action)
     p.add_argument("name")
