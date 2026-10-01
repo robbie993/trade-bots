@@ -247,6 +247,7 @@ class Jury:
             return _abstain("kill_criteria", "not backtested")
         metrics = FirmMetrics(
             trades=result.closed_trades,
+            decided_trades=getattr(result, "decided_trades", None),
             drawdown_pct=result.max_drawdown_pct,
             win_rate_pct=result.win_rate_pct,
             sharpe=result.sharpe,

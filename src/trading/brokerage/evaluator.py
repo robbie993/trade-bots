@@ -46,7 +46,9 @@ from ..data.market_data import MarketData
 from ..firms.kill_switch import FirmMetrics
 from ..resolution import nearest as resolution_nearest
 from ...db.connection import to_datetime
-from ..indicators import drawdown_pct, sharpe as sharpe_ratio, win_rate_pct
+from ..indicators import (
+    drawdown_pct, is_scratch, round_trip_cost, sharpe as sharpe_ratio, win_rate_pct,
+)
 from ..models import FirmRecord
 from ..store import TradingStore
 
@@ -68,6 +70,11 @@ class Scorecard:
     sharpe: Optional[Decimal] = None
     trades: int = 0
     closed_trades: int = 0
+    #: Closed trades that were a win or a loss, which is every one but the
+    #: scratches (`indicators.is_scratch`). The win rate is a share of these
+    #: and is judged only once there are enough of them. `None` means not
+    #: counted apart, and defers to `closed_trades`.
+    decided_trades: Optional[int] = None
     consecutive_losses: int = 0
     worst_trade_pct: Decimal = ZERO
     score: Decimal = ZERO
@@ -93,6 +100,7 @@ class Scorecard:
     def to_metrics(self) -> FirmMetrics:
         return FirmMetrics(
             trades=self.closed_trades,
+            decided_trades=self.decided_trades,
             drawdown_pct=self.drawdown_pct,
             win_rate_pct=self.win_rate_pct,
             sharpe=self.sharpe,
@@ -223,6 +231,11 @@ def _consecutive_losing_bars(fills, resolution) -> int:
     So a bar is the unit. Everything closed within one bar nets to one result,
     and only bars that closed something count: a bar the firm sat out is not a
     win, and must not reset the run.
+
+    **A bar that netted out within its own costs was sat out too.** That is a
+    scratch (`indicators.is_scratch`), neither a win nor a loss: it does not
+    add to the run and does not end it. The take-profit firm's breakeven stop
+    books one every time it does its job.
     """
     by_bar: dict = {}
     order: list = []
@@ -235,12 +248,16 @@ def _consecutive_losing_bars(fills, resolution) -> int:
         )
         if key not in by_bar:
             order.append(key)
-            by_bar[key] = ZERO
-        by_bar[key] += realized
+            by_bar[key] = [ZERO, ZERO]
+        by_bar[key][0] += realized
+        by_bar[key][1] += round_trip_cost(getattr(fill, "fee", 0), getattr(fill, "slippage", 0))
 
     run = 0
     for key in reversed(order):
-        if by_bar[key] < 0:
+        result, cost = by_bar[key]
+        if is_scratch(result, cost):
+            continue            # flat: neither a loss to count nor a win to stop at
+        if result < 0:
             run += 1
         else:
             break               # the first bar that did not lose ends the run
@@ -298,6 +315,13 @@ class Evaluator:
         fills = self.store.fills(firm.id)
         realized_list = [D(f.realized_pnl) for f in fills]
         closed = [p for p in realized_list if p != 0]
+        # A close within its own costs of breakeven was neither a win nor a
+        # loss, so the win rate is a share of the rest. See `is_scratch`.
+        decided = [
+            D(f.realized_pnl) for f in fills
+            if D(f.realized_pnl) != 0
+            and not is_scratch(f.realized_pnl, round_trip_cost(f.fee, f.slippage))
+        ]
         realized = sum(realized_list, ZERO)
         fees = sum((D(f.fee) for f in fills), ZERO)
 
@@ -418,10 +442,11 @@ class Evaluator:
             capital_base=capital_base,
             return_pct=return_pct,
             drawdown_pct=drawdown,
-            win_rate_pct=win_rate_pct(closed),
+            win_rate_pct=win_rate_pct(decided),
             sharpe=sharpe,
             trades=len(fills),
             closed_trades=len(closed),
+            decided_trades=len(decided),
             consecutive_losses=_consecutive_losing_bars(fills, resolution),
             worst_trade_pct=worst_pct,
             as_of=market.as_of(),
@@ -506,7 +531,11 @@ class Evaluator:
             "drawdown": -_cap(card.drawdown_pct, ZERO, D(50)),
         }
         if card.sufficient_data:
-            if card.win_rate_pct is not None:
+            # The win rate waits for its own sample: wins and losses, not
+            # scratches, the same gate the kill switch applies to it.
+            decided_enough = (card.decided_trades is None
+                              or card.decided_trades >= self.config.kill.minimum_trades)
+            if card.win_rate_pct is not None and decided_enough:
                 components["win_rate"] = _cap((card.win_rate_pct - D(50)) / D(2), D(-15), D(15))
             if card.sharpe is not None:
                 components["sharpe"] = _cap(card.sharpe * D(5), D(-15), D(15))

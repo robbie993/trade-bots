@@ -577,13 +577,21 @@ the reason attached to a kill is reproducible from the stored metrics:
 | Drawdown | > 20% | **no** |
 | Single-trade loss | > 10% of capital | **no** |
 | Consecutive losses | > 5 | **no** |
-| Win rate | < 30% | yes |
+| Win rate | < 30% | yes, 20 won or lost |
 | Sharpe | < 0.5 | yes |
 
 The first three are the account emptying, not a statistical judgement about a
 strategy's edge — waiting twenty trades to notice a 40% drawdown would be the
 system failing to stop the bleeding. The last two are claims about skill, and
 below the sample gate the answer is "insufficient data", never "kill".
+
+**A scratch is neither a win nor a loss.** A trade that closed within its own
+fees and spread of breakeven, either way, is left out of the losing streak
+(where it neither adds to the run nor ends it), out of the win rate, and out
+of the twenty trades the win rate waits for. Decided 2026-10-01: the
+take-profit firm's breakeven stop books one every time it works, and counted
+as losses they walked it toward the six-in-a-row kill while it stood still.
+See `indicators.is_scratch`.
 
 A trip **pauses** the firm — no new positions, exits still allowed — and asks
 a human. Pausing is autonomous because it stops the bleeding. Killing is not,
