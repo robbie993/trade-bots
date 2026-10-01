@@ -158,3 +158,14 @@ def test_postgres_migrations_match_the_sqlite_ones():
         assert set(pg) == set(lite), f"{name} defines different tables"
         for table in pg:
             assert pg[table] == lite[table], f"{name}: {table} columns differ"
+
+
+def test_a_literal_percent_survives_postgres_placeholders(db):
+    """`LIKE 'retry:%'` raised on psycopg and stopped every proposal test."""
+    db.dialect = "postgres"
+    try:
+        assert db._sql("SELECT 1 WHERE k LIKE 'retry:%' AND a LIKE ?") == \
+            "SELECT 1 WHERE k LIKE 'retry:%%' AND a LIKE %s"
+        assert db._sql("SELECT ?, ?") == "SELECT %s, %s"
+    finally:
+        db.dialect = "sqlite"

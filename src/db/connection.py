@@ -129,7 +129,14 @@ class Database:
     # -- statements -------------------------------------------------------
     def _sql(self, sql: str) -> str:
         if self.dialect == "postgres":
-            return _PLACEHOLDER_RE.sub("%s", sql)
+            # psycopg reads every `%` as the start of a placeholder, so a
+            # literal one (`LIKE 'retry:%'`) raised "only '%s', '%b', '%t' are
+            # allowed as placeholders" — on Postgres only, never in the SQLite
+            # tests. It took down the firms' asking step on every bar, and the
+            # proposal tester that runs after it, so 116 proposals waited for a
+            # test that never came. Literal percents are doubled first; the
+            # `?` placeholders become `%s` after.
+            return _PLACEHOLDER_RE.sub("%s", sql.replace("%", "%%"))
         return sql
 
     def _params(self, params: Sequence[Any]) -> tuple:
