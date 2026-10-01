@@ -402,12 +402,16 @@ class SignalBoard:
             unwanted = {str(p) for p in exclude}
             rows = [r for r in rows if str(r["publisher"]) not in unwanted]
         heard = []
+        trust = self.evidence_trust()
         for row in rows:
             try:
                 score = D(row["score"])
                 confidence = D(row["confidence"])
             except (InvalidOperation, TypeError, ValueError, KeyError):
                 continue
+            # What the idea lab has measured about this scanner's calls scales
+            # how loudly it is heard: see `evidence_trust`.
+            confidence = min(D(100), confidence * trust.get(str(row["publisher"]), D(1)))
             if confidence > 0:
                 heard.append((str(row["publisher"]), score, confidence))
         if not heard:
@@ -429,6 +433,64 @@ class SignalBoard:
             confidence=confidence,
             note=f"{len(heard)} scanner(s): {who}{more}",
         )
+
+    #: How a scanner's measured record scales its confidence when firms hear it.
+    TRUST_TRAILS = D("0.25")
+    #: Trailing at the hour alone is half the penalty: an hour's idea pays a
+    #: whole round trip of costs on an hour's move, and the firms hold longer.
+    TRUST_TRAILS_HOUR = D("0.5")
+    TRUST_BEATS = D("1.5")
+    #: Seconds the idea lab's scoreboard is reused before it is read again.
+    TRUST_TTL_S = 3600.0
+
+    def evidence_trust(self) -> dict:
+        """publisher -> confidence multiplier, from the idea lab's verdicts.
+
+        Every scanner used to be heard at the confidence it claimed, and the
+        idea lab (sandbox/ideas.py) has since shown that most of them trail
+        SPY after costs: on 2026-10-01 the fleet book's calls lost 0.45% an
+        hour against SPY over 179 ideas, the meme radar's 0.82% over 97. A firm
+        could only learn to discount them one trust gene per seat, slowly, on
+        its own held-out bars, while the measurement already existed.
+
+        So the verdict scales the voice, judged on the *longest* horizon with
+        a verdict (the lab's Bonferroni-corrected beats / trails / no edge, on
+        ideas inside the village's universe; "too few to tell" is no verdict):
+        trailing SPY over a day or a week, a quarter of its confidence;
+        trailing over an hour only, half; beating SPY, one and a half times
+        (capped at 100); no edge, unchanged. `TRADE_EVIDENCE_TRUST=0` turns it
+        off.
+        """
+        import os
+        import time
+
+        if os.environ.get("TRADE_EVIDENCE_TRUST", "1").strip().lower() in ("0", "false", "no", "off"):
+            return {}
+        cached = getattr(self, "_trust_cache", None)
+        if cached is not None and time.time() - cached[0] < self.TRUST_TTL_S:
+            return cached[1]
+        out: dict = {}
+        try:
+            from .sandbox.ideas import HORIZONS, scoreboard
+
+            rank = {name: i for i, (name, _) in enumerate(HORIZONS)}
+            longest: dict = {}           # publisher -> (rank, horizon, verdict)
+            for r in scoreboard(self.db):
+                if r.outside or r.verdict not in ("beats SPY", "trails SPY", "no edge yet"):
+                    continue
+                here = (rank.get(r.horizon, -1), r.horizon, r.verdict)
+                if here > longest.get(r.publisher, (-2, "", "")):
+                    longest[r.publisher] = here
+            for publisher, (_, horizon, verdict) in longest.items():
+                if verdict == "trails SPY":
+                    out[publisher] = (self.TRUST_TRAILS_HOUR if rank.get(horizon) == 0
+                                      else self.TRUST_TRAILS)
+                elif verdict == "beats SPY":
+                    out[publisher] = self.TRUST_BEATS
+        except Exception:  # noqa: BLE001 - no lab, no scaling
+            out = {}
+        self._trust_cache = (time.time(), out)
+        return out
 
     def publishers(self) -> list:
         """Everything that has ever published, so each can be shown separately.

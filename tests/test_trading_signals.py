@@ -572,3 +572,42 @@ def test_symbols_outside_the_universe_are_named_once_not_once_each():
     assert _outside_in_one_line(["X: no score"]) == ["X: no score"]
     twice = ["A is not in this scanner's universe"] * 2
     assert _outside_in_one_line(twice) == ["1 symbol(s) outside the village's universe, dropped: A"]
+
+
+# =========================================================================
+# evidence: the idea lab's verdict scales how loudly a scanner is heard
+# =========================================================================
+def _ideas(db, publisher, returns, horizon="hour"):
+    for i, r in enumerate(returns):
+        db.insert("sandbox_ideas", {"publisher": publisher, "symbol": "SPY", "side": "buy",
+                                    "horizon": horizon, "outside": 0, "opened_bar": f"b{i}",
+                                    "closed_bar": f"c{i}", "due_at": "2026-10-01T15:00:00Z", "entry_price": "1",
+                                    "return_pct": str(r), "spy_pct": "0",
+                                    "pnl": str(r)})
+
+
+def test_a_scanner_that_trails_spy_is_heard_more_quietly(db, monkeypatch):
+    from src.trading.sandbox.ideas import HORIZONS
+    from src.trading.signals import Reading, SignalBoard
+
+    horizon = HORIZONS[0][0]
+    _ideas(db, "loser", [-1.0 - 0.01 * (i % 5) for i in range(40)], horizon)
+    board = SignalBoard(db)
+    board.publish("loser", [Reading("SPY", Decimal("80"), Decimal("80"))], "2026-10-01T14:00:00Z")
+    board.publish("unknown", [Reading("QQQ", Decimal("80"), Decimal("80"))], "2026-10-01T14:00:00Z")
+    assert board.evidence_trust() == {"loser": Decimal("0.5")}          # trails at the hour only
+    assert board.reading("SPY", "2026-10-01T14:00:00Z").confidence == Decimal("40")
+    assert board.reading("QQQ", "2026-10-01T14:00:00Z").confidence == Decimal("80")
+
+    monkeypatch.setenv("TRADE_EVIDENCE_TRUST", "0")
+    board._trust_cache = None
+    assert board.reading("SPY", "2026-10-01T14:00:00Z").confidence == Decimal("80")
+
+
+def test_trailing_over_a_day_costs_more_than_over_an_hour(db):
+    from src.trading.signals import SignalBoard
+
+    _ideas(db, "slow_loser", [-1.0 - 0.01 * (i % 5) for i in range(40)], "1d")
+    _ideas(db, "winner", [1.0 + 0.01 * (i % 5) for i in range(40)], "1h")
+    trust = SignalBoard(db).evidence_trust()
+    assert trust == {"slow_loser": Decimal("0.25"), "winner": Decimal("1.5")}
