@@ -147,6 +147,7 @@ class Ecosystem:
         self._crypto_pulse = None
         self._shadow = None
         self._idea_lab = None
+        self._meme_lab = None
         #: Which unpriceable symbols have already been reported on this bar.
         #: Presentation state, deliberately in memory — see the tick.
         self._reported_bar = ""
@@ -281,6 +282,26 @@ class Ecosystem:
                 fresh=max(ideas.FRESH, timedelta(seconds=bar.seconds)),
             )
         return self._idea_lab
+
+    @property
+    def meme_lab(self):
+        """The Pump.fun lab, or None unless the meme radar is on.
+
+        Every trending launch the radar logs, bought on paper at DexScreener's
+        price and held an hour, a day and a week — see sandbox/memes.py. Built
+        from the sandbox's handles, so it reads `intel` and writes only
+        `meme_lab`. `TRADE_MEME_LAB=off` stops it on its own.
+        """
+        from .sandbox import memes
+
+        if not memes.enabled():
+            return None
+        if self._meme_lab is None:
+            from .sandbox import sandbox_handles
+
+            _, writer = sandbox_handles(self.store)
+            self._meme_lab = memes.MemeLab(writer)
+        return self._meme_lab
 
     @property
     def meme_radar(self):
@@ -871,6 +892,16 @@ class Ecosystem:
                 report.bot_notes.extend(lab.run(market, calls).lines())
         except Exception as exc:  # noqa: BLE001 - research, never a precondition
             report.bot_notes.append(f"idea lab failed: {str(exc)[:160]}")
+        # The Pump.fun lab: the launches the meme radar just logged, bought on
+        # paper at DexScreener's price. It decides for itself whether this
+        # tick is a new bar (`MemeLab.tick`), so a failing site is asked once
+        # a bar, not once a minute. It writes only `meme_lab`.
+        try:
+            memes = self.meme_lab
+            if memes is not None:
+                report.bot_notes.extend(memes.tick(bar_now).lines())
+        except Exception as exc:  # noqa: BLE001 - research, never a precondition
+            report.bot_notes.append(f"Pump.fun lab failed: {str(exc)[:160]}")
         for note in report.signals:
             flow.emit("market", f"scanner: {note[:70]}", detail=note[:300])
 
