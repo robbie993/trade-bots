@@ -24,7 +24,10 @@ or two. Those videos are transcribed like the rest, and one is kept only if its
 caption or what is said is about markets (`topics.on_topic`) or makes a call;
 the rest are remembered as skipped. Kept ones are marked `for_you` in `intel`,
 and every kept video carries the start of what was said (`said`), which the
-daily research review reads.
+daily research review reads. Watch time alone did not move the feed, so a real
+run (not a dry run) also marks a few videos plainly about something else "Not
+interested" (`not_interested_per_run`), the strongest signal TikTok takes after
+watch time.
 
 A verification page stops the run with a message; nothing tries to get past it.
 """
@@ -160,7 +163,85 @@ def watch_for(caption: str, duration: float, cfg: dict) -> float:
     return random.uniform(1.0, 2.0)
 
 
-def for_you(page, cfg: dict) -> tuple:
+def wants_not_interested(caption: str, done: int, cfg: dict) -> bool:
+    """Whether to tell TikTok a For You video is not for the account.
+
+    Only a caption that was read and is plainly about something else: one that
+    could not be read may be about markets. At most `not_interested_per_run` a
+    run (0 turns it off), so the account prunes its feed like a person would
+    rather than turning down everything it is shown."""
+    text = (caption or "").strip()
+    return bool(text) and done < int(cfg.get("not_interested_per_run", 0)) \
+        and not on_topic(text)
+
+
+# The video's own "more" control: a TikTok test id or an accessible name that
+# says so, never a link (an ad's "Learn more" goes somewhere) and never the
+# caption's "more". Marked so Playwright can click exactly that element.
+FIND_MORE = """a => {
+  a.querySelectorAll('[data-village-more]').forEach(e => e.removeAttribute('data-village-more'));
+  const shown = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const more = [...a.querySelectorAll('[data-e2e], [aria-label]')].find(e => {
+    const id = (e.getAttribute('data-e2e') || '').toLowerCase();
+    const label = (e.getAttribute('aria-label') || '').trim().toLowerCase();
+    const named = (id.includes('more') && !/desc|caption|comment/.test(id))
+      || label === 'more' || label === 'more options';
+    return named && !e.closest('a[href]') && shown(e);
+  });
+  if (more) more.setAttribute('data-village-more', '1');
+  return !!more;
+}"""
+
+# What a video offered when no "Not interested" was found: its test ids and
+# accessible names, so the fix names the right control.
+CONTROLS = """a => [...new Set([...a.querySelectorAll('[data-e2e], [aria-label]')].map(
+  e => e.getAttribute('data-e2e') || 'aria:' + e.getAttribute('aria-label')))].slice(0, 40)"""
+
+NOT_INTERESTED_LOG = REPO / "logs" / "tiktok_not_interested.log"
+
+
+def not_interested(page, item) -> bool:
+    """Tell TikTok this For You video is not for the account: after watch time,
+    the strongest thing it learns a feed from. Hover the player, open the
+    video's "more" menu, and click "Not interested".
+
+    True when the option was found and clicked. Never raises, and never
+    right-clicks (a native context menu can hang a Windows browser). When the
+    option is not found, what the video did offer goes to
+    `logs/tiktok_not_interested.log`."""
+    why = "no 'more' control"
+    try:
+        player = item.locator('[id^="xgwrapper-"]')
+        (player.first if player.count() else item).hover(timeout=3000)
+        page.wait_for_timeout(700)
+        if item.evaluate(FIND_MORE, timeout=3000):
+            item.locator('[data-village-more="1"]').first.click(timeout=3000)
+            page.wait_for_timeout(900)
+            option = page.get_by_text("Not interested", exact=True)
+            for n in range(min(option.count(), 5)):
+                if option.nth(n).is_visible():
+                    option.nth(n).click(timeout=3000)
+                    page.wait_for_timeout(1200)
+                    return True
+            page.keyboard.press("Escape")
+            why = "menu had no 'Not interested'"
+    except Exception as exc:  # noqa: BLE001 - steering is a nicety, never the run
+        why = str(exc).splitlines()[0][:160] if str(exc) else type(exc).__name__
+    try:
+        seen = item.evaluate(CONTROLS, timeout=3000)
+    except Exception:  # noqa: BLE001
+        seen = []
+    try:
+        NOT_INTERESTED_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with NOT_INTERESTED_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now(timezone.utc):%Y-%m-%dT%H:%M:%SZ} {why}; "
+                     f"controls: {seen}\n")
+    except OSError:
+        pass
+    return False
+
+
+def for_you(page, cfg: dict, interact: bool = True) -> tuple:
     """(author, video id) from the For You page, nothing transcribed yet, and
     how many of the videos scrolled past had captions on topic.
 
@@ -169,9 +250,12 @@ def for_you(page, cfg: dict) -> tuple:
     scrolling (at most `for_you_scan` videos) until `for_you_videos` are found
     whose caption is on topic or unreadable; a caption plainly about something
     else is not worth downloading and transcribing. The on-topic share is the
-    number that says whether the steering is working, run over run."""
+    number that says whether the steering is working, run over run.
+
+    Unless `interact` is off (a dry run), a few of the videos plainly about
+    something else are also marked "Not interested" (`wants_not_interested`)."""
     limit = int(cfg.get("for_you_videos", 8))
-    stats = {"scrolled": 0, "on_topic": 0}
+    stats = {"scrolled": 0, "on_topic": 0, "not_interested": 0, "not_interested_missed": 0}
     if not limit:
         return [], stats
     page.goto("https://www.tiktok.com/foryou", wait_until="domcontentloaded")
@@ -204,6 +288,10 @@ def for_you(page, cfg: dict) -> tuple:
                 and pairs[0][1] not in [v for _, v in out]:
             out.append(pairs[0])
         time.sleep(watch_for(caption, shown.get("duration", 0), cfg))
+        if interact and pairs and wants_not_interested(
+                caption, stats["not_interested"] + stats["not_interested_missed"], cfg):
+            key = "not_interested" if not_interested(page, item.first) else "not_interested_missed"
+            stats[key] += 1
         _check(page)
         if len(out) >= limit:
             break
@@ -324,7 +412,7 @@ def main(argv=None) -> int:
                 if vid not in seen and vid not in queued:
                     todo_videos.append((h, vid))
                     queued.add(vid)
-            picked, feed = for_you(page, cfg)
+            picked, feed = for_you(page, cfg, interact=not args.dry_run)
             for h, vid in picked:
                 if vid not in seen and vid not in queued and vid not in skipped:
                     todo_videos.append((h, vid))
@@ -384,6 +472,10 @@ def main(argv=None) -> int:
         print(" ", n)
     if feed["scrolled"]:
         print(f"  For You: {feed['on_topic']} of {feed['scrolled']} captions on topic")
+    if feed.get("not_interested") or feed.get("not_interested_missed"):
+        print(f"  For You: marked {feed['not_interested']} off-topic video(s) Not interested"
+              + (f", {feed['not_interested_missed']} not found (see {NOT_INTERESTED_LOG.name})"
+                 if feed["not_interested_missed"] else ""))
     print(f"\n{len(fresh)} new video(s), {sum(1 for v in fresh if v['calls'])} with calls, "
           f"{len(out)} reading(s)" + (" (dry run)" if args.dry_run else ""))
     for v in fresh[:12]:

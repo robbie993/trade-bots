@@ -92,6 +92,97 @@ def test_instagram_keeps_what_it_follows_and_only_markets_from_for_you():
                               "calls": [{"symbol": "DOGE-USD", "direction": 1, "phrase": "x"}]})
 
 
+def test_only_a_caption_plainly_off_topic_is_marked_not_interested():
+    cfg = {"not_interested_per_run": 2}
+    assert tiktok_watch.wants_not_interested("landlord prank gone wrong", 0, cfg)
+    assert not tiktok_watch.wants_not_interested("$TSLA calls printing", 0, cfg)
+    assert not tiktok_watch.wants_not_interested("", 0, cfg)          # unread: may be markets
+    assert not tiktok_watch.wants_not_interested("landlord prank gone wrong", 2, cfg)
+    assert not tiktok_watch.wants_not_interested("landlord prank gone wrong", 0, {})
+
+
+class _Page:
+    """Just enough of a Playwright page for `not_interested`."""
+
+    def __init__(self, has_more=True, has_option=True, fails=False):
+        self.did, self.has_more, self.has_option, self.fails = [], has_more, has_option, fails
+        self.keyboard = self
+
+    def press(self, key):
+        self.did.append(("press", key))
+
+    def wait_for_timeout(self, *_):
+        pass
+
+    def get_by_text(self, text, exact=False):
+        return _Locator(self, text, 1 if self.has_option else 0)
+
+    def item(self):
+        page = self
+
+        class Item(_Locator):
+            def locator(self, selector):
+                if page.fails:
+                    raise RuntimeError("Target closed")
+                return _Locator(page, selector)
+
+            def evaluate(self, script, timeout=None):
+                if script == tiktok_watch.FIND_MORE:
+                    return page.has_more
+                return ["like-icon", "share-icon", "aria:Watch on app"]
+
+        return Item(self, "article")
+
+
+class _Locator:
+    def __init__(self, page, name, n=1):
+        self.page, self.name, self.n = page, name, n
+        self.first = self
+
+    def count(self):
+        return self.n
+
+    def nth(self, _):
+        return self
+
+    def is_visible(self):
+        return True
+
+    def hover(self, timeout=None):
+        self.page.did.append(("hover", self.name))
+
+    def click(self, timeout=None):
+        self.page.did.append(("click", self.name))
+
+
+def test_not_interested_opens_the_videos_own_menu_and_picks_the_option():
+    page = _Page()
+    assert tiktok_watch.not_interested(page, page.item())
+    assert page.did == [("hover", '[id^="xgwrapper-"]'),
+                        ("click", '[data-village-more="1"]'),
+                        ("click", "Not interested")]
+
+
+def test_a_not_interested_that_cannot_be_found_is_logged_and_never_raises(tmp_path, monkeypatch):
+    log = tmp_path / "ni.log"
+    monkeypatch.setattr(tiktok_watch, "NOT_INTERESTED_LOG", log)
+    no_menu, no_option, broken = _Page(has_more=False), _Page(has_option=False), _Page(fails=True)
+    assert not tiktok_watch.not_interested(no_menu, no_menu.item())
+    assert not tiktok_watch.not_interested(no_option, no_option.item())
+    assert ("press", "Escape") in no_option.did      # the menu it opened is closed again
+    assert not tiktok_watch.not_interested(broken, broken.item())
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3
+    assert "no 'more' control" in lines[0] and "share-icon" in lines[0]
+    assert "menu had no 'Not interested'" in lines[1]
+    assert "Target closed" in lines[2]
+
+
+def test_the_not_interested_taps_are_few_a_run():
+    tt = yaml.safe_load((ROOT / "config" / "tiktok_sources.yaml").read_text(encoding="utf-8"))
+    assert 0 < tt["not_interested_per_run"] <= 10 < tt["for_you_scan"]
+
+
 def test_x_keeps_what_it_follows_and_only_markets_from_for_you():
     tweet = {"text": "landlord prank gone wrong", "calls": []}
     assert x_watch.keeps(tweet)

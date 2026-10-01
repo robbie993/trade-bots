@@ -45,6 +45,11 @@ for_you_watch_max_s: 90
 # for_you_videos on-topic ones; a caption plainly about something else is
 # watched for a second and not transcribed.
 for_you_scan: 30
+# Watch time alone left the feed at 0 market videos a run, so a real run also
+# marks up to this many For You videos "Not interested" when their caption was
+# read and is plainly about something else. Kept low so the account prunes its
+# feed like a person. 0 turns it off.
+not_interested_per_run: 5
 
 # One search a run, rotating through these: after watch time, what an account
 # searches for is what TikTok builds its For You page from. The top
