@@ -611,7 +611,36 @@ class Ecosystem:
                     payload={"universe": list(spec.universe), "genome": spec.genome},
                 )
             records.append(saved)
+        self.retire_listed()
         return records
+
+    def retire_listed(self) -> list:
+        """Shut down every firm the config's `retired:` block names. Idempotent.
+
+        Runs with `trade init`, so on every deploy, and does nothing to a firm
+        that is already dead or was never created. The kill goes through the
+        brokerage like any approved kill: the firm sells what it holds on the
+        next ticks and its cash comes home, and `bankruptcy.wind_up` then files
+        no heir for it, because the reason starts with `RETIRED`.
+        """
+        from .firms.bankruptcy import RETIRED
+        from .firms.spec import load_retired
+
+        try:
+            listed = load_retired(config=self.config)
+        except Exception as exc:  # noqa: BLE001 - a bad block retires nothing
+            self.store.record_event("retire_failed", f"retired: block unreadable: {exc}")
+            return []
+        done = []
+        for key, why in listed.items():
+            firm = self.store.get_firm(key)
+            if firm is None or firm.is_killed:
+                continue
+            self.brokerage.kill_firm(key, f"{RETIRED} {why or 'taken out of the village'}")
+            self.store.record_event("firm_retired", f"{key} retired: {why}", firm_id=firm.id,
+                                    payload={"reason": why})
+            done.append(key)
+        return done
 
     def specs(self) -> dict:
         if not self._specs:

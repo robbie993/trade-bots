@@ -105,6 +105,25 @@ def firms() -> JSONResponse:
     return JSONResponse(payload)
 
 
+@router.get("/api/research/shortlist")
+def research_shortlist() -> JSONResponse:
+    """The last seven days' research finds two outside minds would test.
+
+    Read-only, like every route here, and needs no prices: it is the answers
+    the minds wrote, counted (see shortlist.py). Nothing on it has been run.
+    """
+    from . import shortlist
+
+    eco = ecosystem()
+    try:
+        entries = shortlist.shortlist(eco.db)
+    finally:
+        eco.db.close()
+    return JSONResponse({"window_days": shortlist.WINDOW.days, "min_minds": shortlist.MIN_MINDS,
+                         "finds": [{k: e[k] for k in ("name", "source", "url", "about", "test")}
+                                   for e in entries]})
+
+
 @router.get("/api/status")
 def status() -> JSONResponse:
     """The one-screen health check, as JSON.

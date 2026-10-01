@@ -159,3 +159,21 @@ def test_nothing_in_the_ledger_means_nothing_recalled(ecosystem, firm_record, ma
 def test_every_live_firm_can_recall(ecosystem):
     for record in ecosystem.store.active_firms():
         assert ecosystem.build_firm(record).recall_exit is not None
+
+
+def test_the_take_profit_firm_and_its_control_differ_only_in_the_exits():
+    """The twin is the comparison: anything else that differs muddies it."""
+    from pathlib import Path
+
+    from src.trading.firms.spec import load_firm_specs
+
+    specs = {s.firm_key: s for s in load_firm_specs(
+        path=Path(__file__).resolve().parent.parent / "config" / "firm_config.yaml")}
+    tp, ctl = specs["firm_e_momentum_tp"], specs["firm_e_momentum_ctl"]
+    for field in ("asset_class", "strategy", "risk_limit", "allocation", "universe", "analysts",
+                  "venue"):
+        assert getattr(tp, field) == getattr(ctl, field), field
+    exits = set(Firm.EXIT_GENES)
+    assert {k: v for k, v in tp.genome.items() if k not in exits} == ctl.genome
+    assert not exits & set(ctl.genome), "the control takes no profit"
+    assert exits & set(tp.genome), "and the take-profit firm does"

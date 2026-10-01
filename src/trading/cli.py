@@ -25,6 +25,7 @@ human has already made.
     trade court-submit <file>  put a strategy file on trial
     trade court-docket         recent strategy cases
     trade court-case <id>      one case in full, juror by juror
+    trade shortlist            research finds two outside minds would test
     trade tokens               the token standings (points, not capital)
     trade season               run every bout, award milestones
     trade market               what firms have for sale
@@ -1194,6 +1195,16 @@ def cmd_import(args) -> int:
     return 0
 
 
+def cmd_shortlist(args) -> int:
+    """The research finds two outside minds agree are worth testing. See shortlist.py."""
+    from . import shortlist
+
+    eco = _ecosystem(args)
+    for line in shortlist.lines(shortlist.shortlist(eco.db)):
+        print(line)
+    return 0
+
+
 def cmd_frameworks(args) -> int:
     print(render_survey(TradingConfig()))
     return 0
@@ -1458,6 +1469,8 @@ def add_trade_parser(subparsers) -> None:
 
     p = add("court-watch", "try every strategy file in a directory", cmd_court_watch)
     p.add_argument("--dir")
+
+    add("shortlist", "research finds two outside minds would test", cmd_shortlist)
 
     # -- competition -------------------------------------------------------
     p = add("tokens", "the token standings (points, not capital)", cmd_tokens)

@@ -270,7 +270,7 @@ def _research_review(eco, now: datetime) -> list:
     the strategy court still judges any strategy before it trades, and nothing
     found is ever run.
     """
-    from . import intel
+    from . import intel, shortlist
 
     finds = []
     for r in intel.recent(eco.db, "papers", limit=12):
@@ -325,7 +325,7 @@ def _research_review(eco, now: datetime) -> list:
             "biased backtesting. For papers, also say whether it is peer-reviewed or "
             "a preprint, whether it shows real out-of-sample results, whether trading "
             "costs would erase it, and whether its market conditions still hold. Be "
-            "brief per item; most will be 'skip'.",
+            "brief per item; most will be 'skip'." + shortlist.ASK,
             {"village": "paper-trading firms on Alpaca: US equities/ETFs and crypto "
                         "majors plus DOGE/SHIB/PEPE/WIF, 15-minute bars; strategies are "
                         "small genomes judged by a strategy court; no code from these "
@@ -340,6 +340,12 @@ def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
     now = now or datetime.now(timezone.utc)
     week = now.strftime("%G-W%V")
     notes = _estates_ask(eco) + _research_review(eco, now)
+    try:
+        from . import shortlist
+
+        notes += shortlist.weekly(eco, now)
+    except Exception as exc:  # noqa: BLE001 - the shortlist never stops a firm asking
+        notes.append(f"research shortlist failed: {str(exc)[:120]}")
     for firm in eco.store.active_firms():
         # Cash, not allocation: a wound-up estate brought back to "active" can
         # carry a few hundred dollars of allocation on paper and nothing in the

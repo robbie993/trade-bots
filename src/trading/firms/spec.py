@@ -168,10 +168,31 @@ def load_firm_specs(
         # which was fine until the file grew a second top-level block. A
         # scanner is not a firm and must not be read as one — see
         # src/trading/signals.py.
-        firms = {k: v for k, v in raw.items() if k not in ("scanners",)}
+        firms = {k: v for k, v in raw.items() if k not in ("scanners", "retired")}
     if not isinstance(firms, dict) or not firms:
         raise FirmSpecError(f"{target} defines no firms")
     return [FirmSpec.from_mapping(key, value, cfg.firm) for key, value in firms.items()]
+
+
+def load_retired(
+    path: Optional[Path] = None, config: Optional[TradingConfig] = None
+) -> dict:
+    """The firms the config retires, as ``{firm_key: why}``. Empty if none.
+
+    A firm taken out of ``firms:`` keeps its row, its cash and its status: the
+    YAML only ever creates and refreshes, so deleting a block leaves a firm
+    that nothing builds from config and nothing shuts down. The ten Astral
+    firms sat that way from 2026-09-28, $25,000 each and never a trade. This
+    is the block that says, by name and with a reason, that one is gone.
+    """
+    cfg = config or TradingConfig()
+    target = Path(path or cfg.firms_config)
+    if not target.exists():
+        return {}
+    retired = parse_config(target).get("retired") or {}
+    if not isinstance(retired, dict):
+        raise FirmSpecError(f"{target}: `retired:` must map firm keys to a reason")
+    return {str(k): str(v or "").strip() for k, v in retired.items()}
 
 
 def parse_config(path: Path) -> dict:
