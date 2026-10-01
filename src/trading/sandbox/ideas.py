@@ -295,6 +295,12 @@ class LatestPrices:
     #: anybody can drop in, and one malformed name fails the whole batch.
     STOCK_SYMBOL = re.compile(r"^[A-Z][A-Z0-9.]{0,9}$")
     CRYPTO_SYMBOL = re.compile(r"^[A-Z0-9]{1,15}-USD$")
+    #: The feed to fall back to when Alpaca refuses the configured one.
+    #: `TRADE_ALPACA_FEED=sip` on a free plan still gets the village its bar
+    #: history (Alpaca ends it 15 minutes ago), but a latest bar is "recent SIP
+    #: data" and is refused with a 403. The free plan's latest bar is the same
+    #: tape 15 minutes late, the delay the village's own bars already carry.
+    DELAYED = {"sip": "delayed_sip"}
 
     def __init__(self, timeout_s: int = 10, stock_feed: str = "",
                  getter: Optional[Callable] = None):
@@ -324,21 +330,29 @@ class LatestPrices:
             self._ask(self.CRYPTO, {"symbols": ",".join(s.replace("-", "/") for s in crypto)},
                       crypto, pairs=True)
         if stocks:
-            self._ask(self.STOCKS, {"symbols": ",".join(stocks), "feed": self.stock_feed},
-                      stocks, pairs=False)
+            params = {"symbols": ",".join(stocks), "feed": self.stock_feed}
+            before = self.last_error
+            refused = self._ask(self.STOCKS, params, stocks, pairs=False)
+            delayed = self.DELAYED.get(self.stock_feed)
+            if delayed and getattr(refused, "status", None) == 403:
+                # Remembered: the plan does not change mid-run, so the refusal
+                # costs one request a run rather than every stock idea.
+                self.stock_feed, self.last_error = delayed, before
+                self._ask(self.STOCKS, dict(params, feed=delayed), stocks, pairs=False)
         return {s: v for s, v in self._cache.items() if v}
 
-    def _ask(self, url: str, params: dict, symbols: list, pairs: bool) -> None:
+    def _ask(self, url: str, params: dict, symbols: list, pairs: bool):
+        """Price `symbols` from one request. Returns the refusal, if any."""
         for symbol in symbols:
             self._cache[symbol] = None
         try:
             payload = self._get(url, params, self.timeout_s) or {}
         except Exception as exc:  # noqa: BLE001 - a price source, never a precondition
             self.last_error = str(exc)[:160]
-            return
+            return exc
         bars = payload.get("bars") or {}
         if not isinstance(bars, dict):
-            return
+            return None
         from ..data.feeds import _parse_stamp
 
         for symbol in symbols:
@@ -351,6 +365,7 @@ class LatestPrices:
                 continue
             if price > 0:
                 self._cache[symbol] = (price, _parse_stamp(row.get("t")))
+        return None
 
 
 def _alpaca_get(url: str, params: dict, timeout_s: int):

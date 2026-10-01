@@ -463,6 +463,42 @@ def test_an_outside_price_that_fails_is_a_note_not_an_exception():
     assert "alpaca is down" in source.last_error
 
 
+def test_a_free_plan_refused_recent_sip_gets_the_delayed_tape_instead():
+    """Railway runs `TRADE_ALPACA_FEED=sip` on a free plan: the village's bars
+    arrive 15 minutes late, and a latest bar on `sip` is refused outright."""
+    from src.trading.data.feeds import FeedHTTPError
+
+    feeds = []
+
+    def getter(url, params, timeout):
+        feeds.append(params["feed"])
+        if params["feed"] == "sip":
+            raise FeedHTTPError(
+                403, '{"message":"subscription does not permit querying recent SIP data"}')
+        return {"bars": {"ZZZZ": {"c": 3.1, "t": "2026-09-30T14:14:00Z"}}}
+
+    source = LatestPrices(getter=getter, stock_feed="sip")
+    assert source.fetch(["ZZZZ"], "bar-1")["ZZZZ"][0] == Decimal("3.1")
+    assert feeds == ["sip", "delayed_sip"] and source.last_error == ""
+    # Remembered: the next bar goes straight to the feed that answers.
+    source.fetch(["ZZZZ"], "bar-2")
+    assert feeds == ["sip", "delayed_sip", "delayed_sip"]
+
+
+def test_a_refusal_with_no_delayed_tape_to_fall_back_on_stays_a_note():
+    from src.trading.data.feeds import FeedHTTPError
+
+    feeds = []
+
+    def getter(url, params, timeout):
+        feeds.append(params["feed"])
+        raise FeedHTTPError(403, "forbidden")
+
+    source = LatestPrices(getter=getter, stock_feed="iex")
+    assert source.fetch(["ZZZZ"], "bar-1") == {}
+    assert feeds == ["iex"] and "403" in source.last_error
+
+
 # =========================================================================
 # in the village
 # =========================================================================
