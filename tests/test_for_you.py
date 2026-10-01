@@ -1,4 +1,4 @@
-"""The For You scroll: what Instagram and TikTok pick for the village account.
+"""The For You scroll: what Instagram, TikTok and X pick for the village account.
 The browser half needs a signed-in Edge; these pin the parsing it relies on."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts import insta_watch, tiktok_watch
+from scripts import insta_watch, tiktok_watch, x_watch
 from src.trading import topics
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +90,58 @@ def test_instagram_keeps_what_it_follows_and_only_markets_from_for_you():
                               "heard": "and that is why I bought more bitcoin"})
     assert insta_watch.keeps({**post, "for_you": "explore",
                               "calls": [{"symbol": "DOGE-USD", "direction": 1, "phrase": "x"}]})
+
+
+def test_x_keeps_what_it_follows_and_only_markets_from_for_you():
+    tweet = {"text": "landlord prank gone wrong", "calls": []}
+    assert x_watch.keeps(tweet)
+    assert not x_watch.keeps({**tweet, "for_you": "for_you"})
+    assert x_watch.keeps({**tweet, "for_you": "for_you",
+                          "text": "Fed decision today, what it means for the stock market"})
+    assert x_watch.keeps({**tweet, "for_you": "for_you",
+                          "calls": [{"symbol": "DOGE-USD", "direction": 1, "phrase": "x"}]})
+
+
+def test_x_reads_the_tab_it_is_asked_for():
+    clicked = []
+
+    class Tab:
+        def __init__(self, name):
+            self.name, self.first = name, self
+
+        def count(self):
+            return 1
+
+        def click(self):
+            clicked.append(self.name)
+
+    class Page:
+        url = "https://x.com/home"
+        mouse = type("Mouse", (), {"wheel": lambda self, *_: None})()
+
+        def goto(self, *_, **__):
+            pass
+
+        def wait_for_timeout(self, *_):
+            pass
+
+        def get_by_role(self, role, name):
+            return Tab(name)
+
+        def eval_on_selector_all(self, *_):
+            return [{"text": "SPY to 700", "published": "2026-10-01T03:00:00.000Z",
+                     "href": "/trader/status/1", "author": "trader"}]
+
+    tweets = x_watch.read_timeline(Page(), 1, "For you")
+    assert clicked == ["For you"]
+    assert tweets[0]["id"] == "trader/status/1"
+    x_watch.read_timeline(Page(), 1)
+    assert clicked == ["For you", "Following"]
+
+
+def test_the_x_for_you_read_is_configured_and_modest():
+    x = yaml.safe_load((ROOT / "config" / "x_sources.yaml").read_text(encoding="utf-8"))
+    assert 0 < x["for_you_tweets"] <= 40
 
 
 def test_the_browser_cookies_reach_yt_dlp_in_the_netscape_format():

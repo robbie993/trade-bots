@@ -8,12 +8,15 @@ profile, signed in to X once by the operator. This script never sees a password.
 
 It follows the handles in `config/x_sources.yaml` a few a run (each opened
 first; a missing or suspended account is recorded and skipped), then reads the
-**Following** timeline only — never "For you" — so the village hears exactly the
-voices it chose and not whatever X promotes. It posts, likes, reposts and
-messages nothing. A tweet is kept as a call only by the same rule as every other
-crowd seat (`crowd.extract_calls`, names turned into tickers first), and one
-account is one voice. Posts go to `intel` (source `x`); the aggregate to the
-`x_calls` snapshot, merged onto the board by `bots/social_calls.py`.
+**Following** timeline, the voices the village chose. After that it reads a few
+tweets off the **For you** tab (`for_you_tweets`; 0 turns it off), the way the
+Instagram and TikTok readers scroll theirs, and keeps one only if it is about
+markets (`topics.on_topic`) or makes a call, so whatever else X promotes never
+reaches the village. It posts, likes, reposts and messages nothing. A tweet is
+kept as a call only by the same rule as every other crowd seat
+(`crowd.extract_calls`, names turned into tickers first), and one account is
+one voice. Posts go to `intel` (source `x`); the aggregate to the `x_calls`
+snapshot, merged onto the board by `bots/social_calls.py`.
 
 If X asks the browser to prove it is human, or shows the account locked, the
 run stops and says so.
@@ -41,7 +44,7 @@ from scripts.insta_watch import browser  # noqa: E402
 from scripts.social_watch import calls_in, readings  # noqa: E402
 from scripts.video_watch import universe  # noqa: E402
 from src.trading import intel  # noqa: E402
-from src.trading.topics import tag  # noqa: E402
+from src.trading.topics import on_topic, tag  # noqa: E402
 
 CONFIG = REPO / "config" / "x_sources.yaml"
 STATE = REPO / "data" / "x_state.json"
@@ -88,12 +91,12 @@ def follow(page, handle: str) -> str:
     return "followed"
 
 
-def read_timeline(page, limit: int) -> list:
-    """Tweets on the Following tab, newest first, as the page renders them."""
+def read_timeline(page, limit: int, tab_name: str = "Following") -> list:
+    """Tweets on one Home tab ("Following" or "For you"), as the page renders them."""
     page.goto("https://x.com/home", wait_until="domcontentloaded")
     page.wait_for_timeout(4000)
     _check(page)
-    tab = page.get_by_role("tab", name="Following")
+    tab = page.get_by_role("tab", name=tab_name)
     if tab.count():
         tab.first.click()
         page.wait_for_timeout(3000)
@@ -124,6 +127,14 @@ def read_timeline(page, limit: int) -> list:
     return out
 
 
+def keeps(tweet: dict) -> bool:
+    """Whether a read tweet goes to the village. Everything from Following does;
+    one X picked unasked (For you) only if it is about markets or makes a call."""
+    if not tweet.get("for_you"):
+        return True
+    return bool(tweet.get("calls")) or on_topic(tweet.get("text") or "")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -152,6 +163,7 @@ def main(argv=None) -> int:
             "SELECT item_key FROM intel WHERE source = ?", (SOURCE,))}
 
     fresh, notes = [], []
+    shown = kept = 0                                # the For you tab's share on topic
     with sync_playwright() as p:
         ctx = browser(p).contexts[0]
         page = ctx.new_page()
@@ -170,6 +182,19 @@ def main(argv=None) -> int:
                     continue
                 tweet["calls"] = calls_in(tweet, symbols)
                 fresh.append(tweet)
+            # What X picks unasked, after the voices the village chose
+            taken = {t["id"] for t in fresh}
+            for_you = int(cfg.get("for_you_tweets", 0))
+            for tweet in (read_timeline(page, for_you, "For you") if for_you else []):
+                if tweet["id"] in seen or tweet["id"] in taken or not tweet["published"]:
+                    continue
+                taken.add(tweet["id"])
+                tweet["calls"] = calls_in(tweet, symbols)
+                tweet["for_you"] = "for_you"
+                shown += 1
+                if keeps(tweet):
+                    kept += 1
+                    fresh.append(tweet)
         except Challenged as exc:
             notes.append(f"STOPPED: {exc}")
         finally:
@@ -182,7 +207,8 @@ def main(argv=None) -> int:
                          url=t["url"], symbols=sorted({c["symbol"] for c in t["calls"]}),
                          score=len(t["calls"]),
                          detail={"author": t["author"], "published": t["published"],
-                                 "calls": t["calls"], "topics": tag(t["text"])})
+                                 "calls": t["calls"], "topics": tag(t["text"]),
+                                 "for_you": t.get("for_you", "")})
     pool = list(fresh)
     if db is not None:
         ids = {t["id"] for t in fresh}
@@ -203,6 +229,8 @@ def main(argv=None) -> int:
         print(" ", n)
     print(f"\n{len(fresh)} new tweet(s), {sum(1 for t in fresh if t['calls'])} with calls, "
           f"{len(out)} reading(s)" + (" (dry run)" if args.dry_run else ""))
+    if int(cfg.get("for_you_tweets", 0)):
+        print(f"For You: {kept} of {shown} on topic, {shown - kept} off topic and skipped")
     for t in fresh[:12]:
         called = ", ".join(f"{c['symbol']}{'+' if c['direction'] > 0 else '-'}"
                            for c in t["calls"]) or "no calls"
