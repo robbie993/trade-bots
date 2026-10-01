@@ -14,7 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional, Sequence
 
-from ..money import D, ZERO, percent
+from ..money import D, ZERO, money, percent
 
 TRADING_DAYS = 252
 
@@ -209,12 +209,53 @@ def drawdown_pct(current: Decimal, high_water_mark: Decimal) -> Decimal:
 
 
 def win_rate_pct(pnls: Sequence[Decimal]) -> Optional[Decimal]:
-    """Share of closed trades that made money. None with no closed trades."""
+    """Share of closed trades that made money. None with no closed trades.
+
+    Pass it decided trades only: a scratch (see `is_scratch`) is neither a win
+    nor a loss, and leaving it in would make it one or the other by its sign.
+    """
     closed = [D(p) for p in pnls if D(p) != 0]
     if not closed:
         return None
     wins = sum(1 for p in closed if p > 0)
     return percent(D(wins) / D(len(closed)) * D(100))
+
+
+def round_trip_cost(fee: Decimal, slippage: Decimal) -> Decimal:
+    """What a round trip cost, read off its closing fill: that leg's fee and
+    spread, twice.
+
+    A closing fill records its own costs and not its opening leg's. The opening
+    leg was the same quantity of the same thing, so it cost about the same, and
+    "about" is tightest exactly where this is used: on a trade that went
+    nowhere, where the two prices are closest. A fill that flips a position
+    through zero also carries the new side's costs, so its figure runs wide.
+    """
+    return money((abs(D(fee or 0)) + abs(D(slippage or 0))) * D(2))
+
+
+def is_scratch(pnl: Decimal, cost: Decimal) -> bool:
+    """A trade that closed within its own costs of breakeven: neither a win
+    nor a loss.
+
+    Until 2026-10-01 every close below zero was a loss, however small, and
+    the kill switch acts on losses: six bars in a row, or a win rate under 30%.
+    The take-profit firm's breakeven stop sells a winner that has come back to
+    what it cost, and that sale always books at least the exit's spread below
+    zero. A firm doing exactly what it was built to do, giving nothing back,
+    was walking toward a kill one flat trade at a time.
+
+    So a result no bigger than the round trip's fees and spread, either way,
+    is a scratch. It is left out of the win rate, out of the sample the win
+    rate is judged on, and out of the losing streak, where it neither adds to
+    the run nor ends it. Both sides on purpose: a "win" that did not cover its
+    own costs stops counting as one too.
+
+    ``realized_pnl`` is struck between fill prices, so it already carries the
+    spread on both legs; fees are charged beside it. With no costs recorded
+    the band is zero and nothing changes.
+    """
+    return abs(D(pnl or 0)) <= D(cost or 0)
 
 
 def zscore(values: Sequence[Decimal]) -> Optional[Decimal]:

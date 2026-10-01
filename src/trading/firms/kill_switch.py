@@ -5,7 +5,9 @@ strategy can lose money faster than a store can:
 
 1. No decision is made until the sample gate is met. Below ``minimum_trades``
    the answer is "Insufficient data", never "kill". A firm that lost its
-   first three trades has not been proven bad.
+   first three trades has not been proven bad. The win rate is also held to
+   its own count of trades won or lost, scratches aside
+   (``meets_win_rate_sample``).
 2. Conditions are evaluated in a fixed order, so the reason attached to a
    kill is reproducible from the stored metrics.
 
@@ -47,6 +49,10 @@ class FirmMetrics:
     """
 
     trades: int = 0
+    # Of `trades`, the ones that were a win or a loss: everything but the
+    # scratches, closes within their own costs of breakeven. The win rate is a
+    # share of these, so it is judged on these. `None` defers to `trades`.
+    decided_trades: Optional[int] = None
     drawdown_pct: Decimal = ZERO
     win_rate_pct: Optional[Decimal] = None
     sharpe: Optional[Decimal] = None
@@ -74,6 +80,19 @@ class FirmMetrics:
 def meets_sample_gate(metrics: FirmMetrics, config: Optional[FirmKillConfig] = None) -> bool:
     cfg = config or FirmKillConfig()
     return metrics.trades >= cfg.minimum_trades
+
+
+def meets_win_rate_sample(metrics: FirmMetrics, config: Optional[FirmKillConfig] = None) -> bool:
+    """Whether enough trades were won or lost for the win rate to be a verdict.
+
+    A scratch counts as neither a win nor a loss, so it is not part of the
+    sample either. Twenty closes that were seventeen flat exits and three
+    losses are a 0% win rate measured on three trades, which is "lost its
+    first three trades", the very thing the sample gate exists to refuse.
+    """
+    cfg = config or FirmKillConfig()
+    decided = metrics.trades if metrics.decided_trades is None else metrics.decided_trades
+    return meets_sample_gate(metrics, cfg) and decided >= cfg.minimum_trades
 
 
 def should_kill_firm(
@@ -130,7 +149,8 @@ def should_kill_firm(
     if not meets_sample_gate(metrics, cfg):
         return False, INSUFFICIENT_DATA
 
-    if metrics.win_rate_pct is not None and metrics.win_rate_pct < cfg.min_win_rate_pct:
+    if (metrics.win_rate_pct is not None and metrics.win_rate_pct < cfg.min_win_rate_pct
+            and meets_win_rate_sample(metrics, cfg)):
         return True, f"Win rate {metrics.win_rate_pct}% below {cfg.min_win_rate_pct}%"
     if metrics.sharpe is not None and metrics.sharpe < cfg.min_sharpe:
         return True, f"Sharpe {metrics.sharpe} below {cfg.min_sharpe}"
@@ -168,9 +188,9 @@ def kill_check_table(
         (
             "Win rate",
             metrics.win_rate_pct,
-            f"< {cfg.min_win_rate_pct}%",
+            f"< {cfg.min_win_rate_pct}% (once {cfg.minimum_trades} trades won or lost)",
             metrics.win_rate_pct is not None
-            and meets_sample_gate(metrics, cfg)
+            and meets_win_rate_sample(metrics, cfg)
             and metrics.win_rate_pct < cfg.min_win_rate_pct,
         ),
         (
@@ -216,7 +236,7 @@ class KillSwitch:
         cfg = self.config
         return [
             f"drawdown > {cfg.max_drawdown_pct}%",
-            f"win_rate < {cfg.min_win_rate_pct}% over {cfg.minimum_trades} trades",
+            f"win_rate < {cfg.min_win_rate_pct}% over {cfg.minimum_trades} trades won or lost",
             f"sharpe_ratio < {cfg.min_sharpe}",
             f"max_loss > {cfg.max_single_loss_pct}% in one trade",
             f"consecutive_losses > {cfg.max_consecutive_losses}",
@@ -244,5 +264,6 @@ __all__ = [
     "KillSwitch",
     "kill_check_table",
     "meets_sample_gate",
+    "meets_win_rate_sample",
     "should_kill_firm",
 ]

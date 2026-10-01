@@ -27,7 +27,9 @@ from .data.market_data import MarketData
 from .execution.paper import PaperVenue
 from .firms.analysts import build_analysts
 from .firms.firm import Firm
-from .indicators import max_drawdown_pct, sharpe as sharpe_ratio, win_rate_pct
+from .indicators import (
+    is_scratch, max_drawdown_pct, round_trip_cost, sharpe as sharpe_ratio, win_rate_pct,
+)
 from .models import FirmRecord, Position, Side
 
 
@@ -43,6 +45,11 @@ class BacktestResult:
     sharpe: Optional[Decimal] = None
     trades: int = 0
     closed_trades: int = 0
+    #: Closed trades that were a win or a loss: all but the scratches, closes
+    #: within their own costs of breakeven. The win rate is a share of these,
+    #: exactly as the live evaluator counts it, so the court's "would the kill
+    #: switch have fired" is asked of the same rule.
+    decided_trades: Optional[int] = None
     fees: Decimal = ZERO
     equity_curve: list = field(default_factory=list)
     bars: int = 0
@@ -252,6 +259,7 @@ class Backtester:
         positions: dict = {}
         curve: list = []
         realized: list = []
+        decided: list = []
         fees = ZERO
         fill_count = 0
 
@@ -292,6 +300,8 @@ class Backtester:
                 fill_count += 1
                 if pnl != 0:
                     realized.append(pnl)
+                    if not is_scratch(pnl, round_trip_cost(fill.fee, fill.slippage)):
+                        decided.append(pnl)
 
             equity = money(
                 record.cash
@@ -326,12 +336,13 @@ class Backtester:
             if start_capital
             else ZERO,
             max_drawdown_pct=max_drawdown_pct(curve),
-            win_rate_pct=win_rate_pct(realized),
+            win_rate_pct=win_rate_pct(decided),
             sharpe=sharpe_ratio(
                 [(b - a) / a for a, b in zip(curve, curve[1:]) if a != 0]
             ),
             trades=fill_count,
             closed_trades=len(realized),
+            decided_trades=len(decided),
             fees=fees,
             equity_curve=curve,
             bars=len(curve),

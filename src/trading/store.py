@@ -19,6 +19,7 @@ from typing import Optional
 
 from ..db.connection import Database, sum_decimal, utcnow_iso
 from ..money import D, ZERO, money
+from .indicators import is_scratch, round_trip_cost
 from .models import (
     CashView,
     Fill,
@@ -339,11 +340,15 @@ class TradingStore:
                 f"({firm.cash} + {fill.cash_delta} < 0)"
             )
 
+        # Per fill, which overcounts; the kill switch reads the evaluator's
+        # count by bar instead. A scratch (`indicators.is_scratch`) neither
+        # adds to the run nor resets it, here or there.
         consecutive = firm.consecutive_losses
-        if realized < 0:
-            consecutive += 1
-        elif realized > 0:
-            consecutive = 0
+        if not is_scratch(realized, round_trip_cost(fill.fee, fill.slippage)):
+            if realized < 0:
+                consecutive += 1
+            elif realized > 0:
+                consecutive = 0
 
         with self.db.transaction():
             self._save_position(position)
