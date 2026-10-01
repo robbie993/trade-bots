@@ -134,8 +134,9 @@ firms:
   # +$203 / +$680 against +$2,948 / +$126 / +$429, average win $141 against
   # $30. It rides a winner past the analysts' sell once it is up 0.3%, sells
   # at entry plus 12 average 15-minute ranges, and never lets +0.5% become a
-  # loss. Everything else is the parent's genome as of 2026-09-28, so the two
-  # running side by side measure the exits and nothing else.
+  # loss. Everything else is the parent's genome as of 2026-09-28. The parent
+  # has since been shut down (six losing trades in a row, found 2026-10-01),
+  # so firm_e_momentum_ctl below is what this firm is measured against.
   firm_e_momentum_tp:
     name: "Momentum Desk, take-profit"
     asset_class: "Equities"
@@ -160,6 +161,31 @@ firms:
       tp_atr: 12
       atr_window: 26
       breakeven_arm_pct: 0.5
+
+  # The take-profit firm's control: the same desk, the same genome and the
+  # same $20,000, without the exit genes. Both are reset to these genomes on
+  # every deploy, so any gap between the two is the exit rules and nothing
+  # else. tests/test_trading_take_profit.py keeps them identical apart from
+  # the exits.
+  firm_e_momentum_ctl:
+    name: "Momentum Desk, control"
+    asset_class: "Equities"
+    strategy: "breakout"
+    risk_limit: 0.04
+    capital_allocation: 20000
+    universe: [NVDA, TSLA, AMD, META, AMZN]
+    analysts: [technical, sentiment, signals, news, scribe]
+    genome:
+      fast_window: 5
+      slow_window: 20
+      rsi_window: 5
+      trend_bias: 82.53
+      value_window: 40
+      fair_band_pct: 13.93
+      calm_vol_pct: 83.20
+      signal_trust: 100
+      news_trust: 100
+      scribe_trust: 100
 
   firm_f_bonds:
     name: "Rates Desk"
