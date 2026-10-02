@@ -85,3 +85,24 @@ def test_metrics_on_known_series():
     r = np.array([0.10, -0.50, 0.20])
     assert M.max_drawdown(r) == pytest.approx(-0.5)
     assert M.cagr(np.full(252, (1.1) ** (1 / 252) - 1)) == pytest.approx(0.10, rel=1e-6)
+
+
+def test_r2_no_lookahead_and_gross_cap(market):
+    from atlas_research.r2.engine import MAX_GROSS, backtest as r2bt
+    from atlas_research.r2.families import DEFAULTS, R2Market, TARGETS
+    from atlas_research.r2.search import rand
+    rm = R2Market(market)
+    p = market.prices
+    rng = random.Random(4)
+    for fam in TARGETS:
+        for g in [DEFAULTS[fam]] + [rand(fam, rng) for _ in range(3)]:
+            for t in (900, 1800):
+                future = p.copy()
+                future.iloc[t + 1:] *= 1.3
+                a, sa = TARGETS[fam](rm, g, t)
+                b, sb = TARGETS[fam](R2Market(Market(future)), g, t)
+                assert np.allclose(a, b) and sa == sb
+            run = r2bt(rm, fam, g, "2005-01-03", "2011-12-30")
+            # trades land at <= 120%; one day of drift may sit above before the trim
+            assert run.weights.sum(axis=1).max() <= MAX_GROSS * 1.08
+            assert run.weights.min() >= 0
