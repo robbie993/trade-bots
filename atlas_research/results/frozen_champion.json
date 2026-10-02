@@ -1,0 +1,38 @@
+{
+ "frozen_at": "2026-10-02T18:55:37+00:00",
+ "genome": {
+  "mom_w21": 0.1780311981281907,
+  "mom_w63": 0.4,
+  "mom_w126": 0.3120331987189091,
+  "mom_w252": 0.5881049084955492,
+  "skip_recent": 0,
+  "value_w": 0.14384202787846145,
+  "lowvol_w": 0.13059560856820182,
+  "trend_filter": 2,
+  "top_n": 2,
+  "inverse_vol": 0,
+  "position_cap": 0.9278217100413784,
+  "vol_lookback": 21,
+  "target_vol": 0.16703992126979383,
+  "pw_drawdown": 0.17852171833757358,
+  "pw_volatility": 0.8754778118308882,
+  "pw_vol_accel": 0.31374751284809677,
+  "pw_breadth": 0.8691328189042213,
+  "pw_trend": 0.9716572889821583,
+  "warn_threshold": 0.3885434732743068,
+  "panic_threshold": 0.6206763537956371,
+  "warn_exposure": 0.7893594012929787,
+  "panic_exposure": 0.41743959969026456,
+  "rebalance_days": 5,
+  "rebalance_threshold": 0.09931123564171669,
+  "stop_rule": 0.0,
+  "panic_daily": 0
+ },
+ "key": "1afa87c3f1",
+ "sha256": "5f6c74710414793abcfe16a954760da0afe95fa62c04d31091781140bf967be3",
+ "verdict_before_oos": "RESEARCH FAILURE",
+ "oos_period": [
+  "2025-01-01",
+  "2026-12-31"
+ ]
+}
