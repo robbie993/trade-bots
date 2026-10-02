@@ -22,7 +22,7 @@ the design as specified; nothing was tuned after seeing a test or OOS result.
    p = 0.43, Hansen SPA p = 0.46, probability of backtest overfitting 58%.
    The deflated Sharpe is high, but that is Sharpe over *cash*, not over
    SPY: the strategy is a decent cash-plus asset allocator, not a SPY beater.
-4. **The frozen OOS beat SPY (+42.7% vs +17.8%, drawdown -11.4% vs -18.8%),
+4. **The frozen OOS beat SPY (+42.7% a year vs +17.8%, drawdown -11.4% vs -18.8%),
    and it does not change the verdict.** The book returned +74% in total
    (SPY +29%). Summing each holding's daily contribution, silver and gold
    gave about 52 points of the roughly 60 the holdings added; they were 46%
