@@ -63,3 +63,18 @@ exposure, 4 trades a year and a CAGR above SPY before any score counts.
   reachable from the cloud session; see `data/fundamentals.py`.
 * Options overlay: only after the core has a result (Robbie's rule 19).
 * ML second stage (Qlib/FinRL): after the rule-based baseline.
+
+## R2 and R3
+
+* `PREREG_R2.md`, `r2/`, `results/R2_REPORT.md`: four families in the same
+  walk-forward. All three that could run were research failures.
+* `PREREG_R3.md`, `r3/`: three fixed hypotheses, frozen and tested **forward
+  only** as shadow paper books (no orders): R3-A relative-strength stocks +
+  SPY core, R3-B earnings-reaction drift, R3-C trend + SPY calls, beside
+  SPY, QQQ and 12-month ETF momentum. Run daily on a machine with Alpaca and
+  SEC access:
+
+```
+python -m atlas_research.r3.forward init --start <first trading day after merge>
+scripts\atlas_forward.cmd        # Task Scheduler, weekdays after the close
+```
