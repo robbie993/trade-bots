@@ -65,12 +65,18 @@ class LiveFeed:
         """
         closes, dvol = {}, {}
         syms = sorted(set(symbols))
+        # A bare date means the end of that day, and the free data plan
+        # refuses SIP queries that reach into the last 15 minutes. Stop at
+        # the end of the day in New York or 16 minutes ago, whichever is first.
+        stop = min(datetime.combine(end, datetime.max.time(), NY).astimezone(timezone.utc),
+                   datetime.now(timezone.utc) - timedelta(minutes=16))
+        stop_s = stop.strftime("%Y-%m-%dT%H:%M:%SZ")
         for i in range(0, len(syms), 100):
             chunk = syms[i:i + 100]
             token = None
             while True:
                 p = {"symbols": ",".join(chunk), "timeframe": "1Day", "start": start.isoformat(),
-                     "end": end.isoformat(), "limit": 10000, "adjustment": "all", "feed": "sip"}
+                     "end": stop_s, "limit": 10000, "adjustment": "all", "feed": "sip"}
                 if token:
                     p["page_token"] = token
                 j = _get(self.s, f"{DATA}/v2/stocks/bars", p)
