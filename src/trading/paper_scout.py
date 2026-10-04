@@ -1,5 +1,5 @@
-"""The paper scout: new research on trading, markets and AI agents, from arXiv
-and OpenAlex, every few hours.
+"""The paper scout: research on trading, markets and AI agents, from arXiv,
+OpenAlex and Semantic Scholar, every few hours.
 
 What the operator asked for, in their words: "a bot looking for research papers
 like these, or just anything on trading, news, AI". Two free, keyless sources:
@@ -10,6 +10,11 @@ like these, or just anything on trading, news, AI". Two free, keyless sources:
 * **OpenAlex** — an open index of ~250M works including journals and SSRN-type
   working papers, searched within economics and finance for hedge-fund
   strategies, reverse-engineering strategies, microstructure and crypto markets.
+* **The landmarks** — newest is not best. OpenAlex (every field, so computer
+  science counts too) and Semantic Scholar are also asked for the most-cited
+  work of the last five years on AI and machine-learning trading, so the papers
+  everyone builds on are found, not only this week's preprints. Their citation
+  count is kept as the find's score.
 
 Each paper goes to `intel` (source `papers`) with its date, venue, authors,
 abstract head and topic tags. Nothing is downloaded or run. The daily research
@@ -33,7 +38,10 @@ from . import intel
 from .topics import tag
 
 ARXIV = "http://export.arxiv.org/api/query?search_query={q}&sortBy=submittedDate&sortOrder=descending&max_results={n}"
-OPENALEX = "https://api.openalex.org/works?filter={f}&per-page={n}&sort=publication_date:desc"
+OPENALEX = "https://api.openalex.org/works?filter={f}&per-page={n}&sort={sort}"
+S2 = ("https://api.semanticscholar.org/graph/v1/paper/search?query={q}&limit={n}"
+      "&year={years}&fields=title,url,venue,year,publicationDate,abstract,authors,"
+      "citationCount,externalIds")
 HEADERS = {"User-Agent": "village-paper-scout", "Accept": "application/json"}
 
 #: Hours between runs: papers arrive by the day, not the bar.
@@ -46,6 +54,14 @@ ARXIV_QUERIES = (
     ("AI trading agents", 'all:"trading agent" AND (cat:cs.AI OR cat:cs.LG OR cat:q-fin.TR)'),
     ("LLMs on markets", 'abs:"large language model" AND (abs:stock OR abs:crypto OR abs:trading)'),
     ("multi-agent markets", 'abs:"multi-agent" AND abs:trading'),
+    ("computational finance", "cat:q-fin.CP"),
+    ("general finance", "cat:q-fin.GN"),
+    ("reinforcement learning trading", 'abs:"reinforcement learning" AND (abs:trading OR abs:portfolio)'),
+    ("LLM financial agents", 'abs:"large language model" AND abs:agent AND abs:financial'),
+    ("alpha and factor mining", '(abs:"alpha factor" OR abs:"factor mining" OR abs:"formulaic alpha")'),
+    ("return prediction", 'abs:"return prediction" AND (abs:"deep learning" OR abs:"machine learning")'),
+    ("market making", 'abs:"market making" AND (cat:q-fin.TR OR cat:cs.LG)'),
+    ("crypto trading", '(abs:bitcoin OR abs:cryptocurrency) AND abs:trading'),
 )
 
 #: Field 20 is Economics, Econometrics and Finance in OpenAlex's topic tree.
@@ -55,6 +71,18 @@ OPENALEX_SEARCHES = (
     ("momentum and reversal", "momentum reversal returns"),
     ("crypto markets", "cryptocurrency trading"),
     ("market microstructure", "market microstructure liquidity"),
+)
+
+#: The most-cited work of the last five years, every field (AI papers sit in
+#: computer science, not finance). Asked of OpenAlex and Semantic Scholar.
+LANDMARK_SEARCHES = (
+    ("landmark: RL trading", "reinforcement learning trading"),
+    ("landmark: LLM trading agents", "large language model trading agent"),
+    ("landmark: deep learning returns", "deep learning stock return prediction"),
+    ("landmark: multi-agent trading", "multi-agent trading system"),
+    ("landmark: ML factor investing", "machine learning factor investing"),
+    ("landmark: crypto strategies", "cryptocurrency trading strategy"),
+    ("landmark: alpha mining", "alpha factor mining"),
 )
 
 
@@ -96,8 +124,31 @@ def parse_openalex(doc: dict) -> list:
             "authors": [a.get("author", {}).get("display_name")
                         for a in (w.get("authorships") or [])][:6],
             "venue": src.get("display_name") or "unknown venue",
+            "citations": w.get("cited_by_count"),
         })
     return out
+
+
+def parse_s2(doc: dict) -> list:
+    out = []
+    for p in (doc or {}).get("data") or []:
+        ext = p.get("externalIds") or {}
+        key = ("arxiv:" + ext["ArXiv"]) if ext.get("ArXiv") else "s2:" + str(p.get("paperId", ""))
+        out.append({
+            "key": key,
+            "title": p.get("title") or "",
+            "url": p.get("url") or "",
+            "published": p.get("publicationDate") or str(p.get("year") or ""),
+            "abstract": p.get("abstract") or "",
+            "authors": [a.get("name") for a in (p.get("authors") or [])][:6],
+            "venue": p.get("venue") or "unknown venue",
+            "citations": p.get("citationCount"),
+        })
+    return out
+
+
+def _norm(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
 
 
 class PaperScout:
@@ -107,6 +158,7 @@ class PaperScout:
         self.db = db
         self._clock = clock
         self._last = 0.0
+        self._turn = 0             # which share of the queries this run asks
         if get_text is None:
             import urllib.request
 
@@ -126,7 +178,11 @@ class PaperScout:
         self._last = now
         found, failed = 0, []
         batches = []
-        for label, q in ARXIV_QUERIES:
+        # The scout runs inside the tick, and arXiv wants 3 s between calls, so
+        # each run asks half the arXiv questions and one landmark question, in
+        # turn: every arXiv query every 12 hours, every landmark every 42.
+        turn, self._turn = self._turn, self._turn + 1
+        for label, q in ARXIV_QUERIES[turn % 2::2]:
             try:
                 batches.append((label, parse_arxiv(self._get(ARXIV.format(q=quote(q), n=8)))))
             except Exception as exc:  # noqa: BLE001 - one query is not the scout
@@ -137,24 +193,46 @@ class PaperScout:
                  "primary_topic.field.id:20")
             try:
                 batches.append((label, parse_openalex(json.loads(
-                    self._get(OPENALEX.format(f=quote(f, safe=':,.'), n=6))))))
+                    self._get(OPENALEX.format(f=quote(f, safe=':,.'), n=6,
+                                              sort="publication_date:desc"))))))
             except Exception as exc:  # noqa: BLE001
                 failed.append(f"OpenAlex ({label}): {str(exc)[:80]}")
+        five_years = _since(5 * 365)
+        for label, words in (LANDMARK_SEARCHES[turn % len(LANDMARK_SEARCHES)],):
+            f = f"title_and_abstract.search:{words},from_publication_date:{five_years}"
+            try:
+                batches.append((label, parse_openalex(json.loads(
+                    self._get(OPENALEX.format(f=quote(f, safe=':,.'), n=8,
+                                              sort="cited_by_count:desc"))))))
+            except Exception as exc:  # noqa: BLE001
+                failed.append(f"OpenAlex ({label}): {str(exc)[:80]}")
+            try:
+                batches.append((label, parse_s2(json.loads(self._get(S2.format(
+                    q=quote(words), n=20, years=f"{five_years[:4]}-"))))))
+            except Exception as exc:  # noqa: BLE001 - keyless Semantic Scholar rate-limits
+                failed.append(f"Semantic Scholar ({label}): {str(exc)[:80]}")
+        seen = set()
         for label, papers in batches:
+            if label.startswith("landmark"):
+                # Semantic Scholar's search is by relevance, not citations
+                papers = sorted(papers, key=lambda p: -(p.get("citations") or 0))[:8]
             for p in papers:
-                if not p["title"]:
+                if not p["title"] or _norm(p["title"]) in seen:
                     continue
+                seen.add(_norm(p["title"]))
                 intel.upsert(self.db, "papers", p["key"][:255],
                              title=f"{p['title']} ({p['venue']}, {p['published'][:10]})",
-                             url=p["url"],
+                             url=p["url"], score=p.get("citations"),
                              detail={"query": label, "authors": p["authors"],
                                      "venue": p["venue"], "published": p["published"],
                                      "abstract": p["abstract"][:1200],
                                      "topics": tag(f"{p['title']} {p['abstract']}")})
                 found += 1
-        notes = [f"paper scout: {found} paper(s) from arXiv and OpenAlex"] if found else []
+        notes = ([f"paper scout: {found} paper(s) from arXiv, OpenAlex and Semantic Scholar"]
+                 if found else [])
         notes += [f"paper scout source FAILING — {f}" for f in failed[:3]]
         return notes
 
 
-__all__ = ["EVERY_S", "PaperScout", "parse_arxiv", "parse_openalex"]
+__all__ = ["EVERY_S", "LANDMARK_SEARCHES", "PaperScout", "parse_arxiv", "parse_openalex",
+           "parse_s2"]
