@@ -62,6 +62,13 @@ ARXIV_QUERIES = (
     ("return prediction", 'abs:"return prediction" AND (abs:"deep learning" OR abs:"machine learning")'),
     ("market making", 'abs:"market making" AND (cat:q-fin.TR OR cat:cs.LG)'),
     ("crypto trading", '(abs:bitcoin OR abs:cryptocurrency) AND abs:trading'),
+    ("quant trading strategies", '(abs:"quantitative trading" OR abs:"systematic trading" OR abs:"algorithmic trading")'),
+    ("statistical arbitrage", '(abs:"statistical arbitrage" OR abs:"pairs trading" OR abs:"mean reversion")'),
+    ("volatility and risk", '(cat:q-fin.RM OR abs:"volatility forecasting")'),
+    ("options and pricing", "cat:q-fin.PR"),
+    ("mathematical finance", "cat:q-fin.MF"),
+    ("factor investing", '(abs:"factor investing" OR abs:"factor model") AND (cat:q-fin.PM OR cat:q-fin.ST)'),
+    ("high-frequency and execution", '(abs:"high-frequency trading" OR abs:"optimal execution" OR abs:"order flow")'),
 )
 
 #: Field 20 is Economics, Econometrics and Finance in OpenAlex's topic tree.
@@ -83,6 +90,11 @@ LANDMARK_SEARCHES = (
     ("landmark: ML factor investing", "machine learning factor investing"),
     ("landmark: crypto strategies", "cryptocurrency trading strategy"),
     ("landmark: alpha mining", "alpha factor mining"),
+    ("landmark: quant strategies", "quantitative trading strategy backtest"),
+    ("landmark: statistical arbitrage", "statistical arbitrage pairs trading"),
+    ("landmark: anomalies", "cross-section stock return anomalies"),
+    ("landmark: trend following", "time series momentum trend following"),
+    ("landmark: volatility", "volatility forecasting trading"),
 )
 
 
@@ -180,7 +192,7 @@ class PaperScout:
         batches = []
         # The scout runs inside the tick, and arXiv wants 3 s between calls, so
         # each run asks half the arXiv questions and one landmark question, in
-        # turn: every arXiv query every 12 hours, every landmark every 42.
+        # turn: every arXiv query every 12 hours, every landmark every 72.
         turn, self._turn = self._turn, self._turn + 1
         for label, q in ARXIV_QUERIES[turn % 2::2]:
             try:
