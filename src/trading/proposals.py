@@ -153,6 +153,11 @@ def test_one(eco, market) -> Optional[str]:
             "status": "refused", "verdict": "the firm is no longer alive",
             "tested_at": utcnow_iso()})
         return f"proposal #{row['id']} dropped: {row['firm_key']} is no longer alive"
+    if hasattr(eco, "genome_locked") and eco.genome_locked(firm.firm_key):
+        eco.db.update("ai_proposals", row["id"], {
+            "status": "refused", "verdict": "this firm's genome is locked for an A/B test",
+            "tested_at": utcnow_iso()})
+        return f"proposal #{row['id']} dropped: {firm.firm_key} is locked for an A/B test"
 
     changes = json.loads(row["changes"])
     proposed = {**(firm.genome or {}), **changes}
@@ -224,6 +229,12 @@ def adopt(eco, details: dict, approved_by: str) -> str:
     firm = eco.store.get_firm(details["firm"])
     if row is None or firm is None:
         raise ValueError("the proposal or its firm no longer exists")
+    if hasattr(eco, "genome_locked") and eco.genome_locked(firm.firm_key):
+        eco.db.update("ai_proposals", row["id"], {
+            "status": "refused",
+            "verdict": "not adopted: this firm's genome is locked for an A/B test"})
+        return (f"proposal #{row['id']} for {firm.firm_key} not adopted: its genome is "
+                "locked for an A/B test")
     changes = {k: v for k, v in json.loads(row["changes"]).items() if k in GENES}
     # **Only adopt against the genome it was tested against.** Two proposals for
     # one firm were each tested against the same incumbent, both won, both were

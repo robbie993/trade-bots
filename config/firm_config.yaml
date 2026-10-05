@@ -145,6 +145,7 @@ firms:
     capital_allocation: 20000
     universe: [NVDA, TSLA, AMD, META, AMZN]
     analysts: [technical, sentiment, signals, news, scribe]
+    genome_locked: true      # one side of the take-profit A/B test
     genome:
       fast_window: 5
       slow_window: 20
@@ -175,6 +176,7 @@ firms:
     capital_allocation: 20000
     universe: [NVDA, TSLA, AMD, META, AMZN]
     analysts: [technical, sentiment, signals, news, scribe]
+    genome_locked: true      # one side of the take-profit A/B test
     genome:
       fast_window: 5
       slow_window: 20

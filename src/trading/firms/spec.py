@@ -64,6 +64,10 @@ class FirmSpec:
     #: deficit is smaller than its fees that is the entire result.
     fee_bps: Optional[Decimal] = None
     slippage_bps: Optional[Decimal] = None
+    #: The genome is held fixed: neither evolution nor an adviser's proposal
+    #: may change it. For the two sides of an A/B test, where any gene change
+    #: to one side makes the comparison mean nothing.
+    genome_locked: bool = False
 
     @property
     def costs_overridden(self) -> bool:
@@ -148,6 +152,7 @@ class FirmSpec:
             genome={str(k): v for k, v in genome.items()},
             fee_bps=_bps("fee_bps"),
             slippage_bps=_bps("slippage_bps"),
+            genome_locked=bool(raw.get("genome_locked", False)),
         )
 
 
