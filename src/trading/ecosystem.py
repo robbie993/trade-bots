@@ -716,12 +716,37 @@ class Ecosystem:
         firm.recall_exit = lambda symbol, market, firm_id=record.id: (
             self._recall_exit(firm_id, symbol, market))
         firm.day_open_equity = lambda firm_id=record.id: self._day_open_equity(firm_id)
+        firm.opens_today = lambda firm_id=record.id: self._opens_today(firm_id)
         try:
             data = self._costed_for(record).data
             firm.round_trip_cost = D(2) * (D(data.fee_bps) + D(data.slippage_bps)) / D(10_000)
         except Exception:  # noqa: BLE001 - no cost known, no edge rule
             firm.round_trip_cost = None
         return firm
+
+    def _opens_today(self, firm_id) -> int:
+        """Buy fills this firm has had since the UTC day began, for the trade cap."""
+        from datetime import datetime, timezone
+
+        from ..db.connection import to_datetime
+
+        today = datetime.now(timezone.utc)
+        midnight = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+        try:
+            rows = self.db.query(
+                "SELECT as_of FROM fills WHERE firm_id = ? AND side = 'buy' "
+                "ORDER BY id DESC LIMIT 200", (firm_id,)) or []
+        except Exception:  # noqa: BLE001 - no ledger, no cap
+            return 0
+        n = 0
+        for row in rows:
+            at = to_datetime(row.get("as_of"))
+            if at is not None and at.tzinfo is None:
+                at = at.replace(tzinfo=timezone.utc)
+            if at is None or at < midnight:
+                break
+            n += 1
+        return n
 
     def _day_open_equity(self, firm_id):
         """The firm's last recorded equity before this UTC day began, or None.
