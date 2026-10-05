@@ -711,7 +711,42 @@ class Ecosystem:
         firm.exit_memory = memory.setdefault(record.firm_key, {})
         firm.recall_exit = lambda symbol, market, firm_id=record.id: (
             self._recall_exit(firm_id, symbol, market))
+        firm.day_open_equity = lambda firm_id=record.id: self._day_open_equity(firm_id)
         return firm
+
+    def _day_open_equity(self, firm_id):
+        """The firm's last recorded equity before this UTC day began, or None.
+
+        Read from `firm_performance`, the brokerage's own scorecards, and kept
+        for the rest of the day: the open does not move once the day has begun.
+        """
+        from datetime import datetime, timezone
+
+        from ..db.connection import to_datetime
+
+        today = datetime.now(timezone.utc).date()
+        cache = getattr(self, "_day_open", None)
+        if cache is None or cache.get("day") != today:
+            cache = self._day_open = {"day": today}
+        if firm_id in cache:
+            return cache[firm_id]
+        midnight = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+        opened = None
+        try:
+            rows = self.db.query(
+                "SELECT as_of, equity FROM firm_performance WHERE firm_id = ? "
+                "ORDER BY id DESC LIMIT 3000", (firm_id,)) or []
+        except Exception:  # noqa: BLE001 - no history, no halt
+            rows = []
+        for row in rows:
+            at = to_datetime(row.get("as_of"))
+            if at is not None and at.tzinfo is None:
+                at = at.replace(tzinfo=timezone.utc)
+            if at is not None and at < midnight:
+                opened = row.get("equity")
+                break
+        cache[firm_id] = opened
+        return opened
 
     def _recall_exit(self, firm_id, symbol: str, market) -> dict:
         """A holding's exit memory, rebuilt from the ledger and the bars.

@@ -26,7 +26,7 @@ from ..config import FirmDefaults, FirmKillConfig, TradingConfig
 from ..data.market_data import MarketData
 from .. import adapter
 from ..models import (
-    FirmRecord, FirmStatus, Position, Side, Signal, TradeProposal, price, qty,
+    FirmRecord, FirmStatus, Position, RiskVerdict, Side, Signal, TradeProposal, price, qty,
 )
 from .analysts import build_analysts
 from .kill_switch import FirmMetrics, KillSwitch
@@ -66,6 +66,9 @@ class Firm:
         #: where there is no ledger to ask (a backtest keeps one Firm for the
         #: whole replay, so it never forgets).
         self.recall_exit = None
+        #: ``() -> Decimal or None``: the firm's equity when the UTC day began,
+        #: for the daily loss halt. None where there is no ledger to ask.
+        self.day_open_equity = None
 
     # -- construction -----------------------------------------------------
     @classmethod
@@ -464,6 +467,15 @@ class Firm:
         if self.record.status == FirmStatus.PAUSED.value and proposal.side_enum.sign > 0:
             return None
 
+        halted = self._daily_loss_halt(equity) if proposal.side_enum.sign > 0 else ""
+        if halted:
+            proposal.risk_verdict = RiskVerdict.BLOCK.value
+            proposal.risk_reason = halted
+            proposal.quantity = ZERO
+            proposal.notional = ZERO
+            proposal.status = "rejected"
+            return proposal
+
         decision: RiskDecision = self.risk_manager.review(
             self.record,
             proposal.symbol,
@@ -480,6 +492,24 @@ class Firm:
         if decision.blocked:
             proposal.status = "rejected"
         return proposal
+
+    def _daily_loss_halt(self, equity) -> str:
+        """Why the firm may not open risk today, or "" if it may."""
+        limit = D(getattr(self.risk_manager.limits, "max_daily_loss_pct", ZERO) or ZERO)
+        if limit <= 0 or self.day_open_equity is None:
+            return ""
+        try:
+            opened = self.day_open_equity()
+        except Exception:  # noqa: BLE001 - a missing history never blocks a trade
+            return ""
+        if not opened or D(opened) <= 0:
+            return ""
+        down = (D(opened) - D(equity)) / D(opened)
+        if down < limit:
+            return ""
+        return (f"daily loss halt: equity {money(D(equity))} is {percent(down * 100)}% below "
+                f"today's open of {money(D(opened))} (limit {percent(limit * 100)}%); "
+                "exits only until tomorrow")
 
     # -- self-preservation -------------------------------------------------
     def check_kill(self, metrics: FirmMetrics):
