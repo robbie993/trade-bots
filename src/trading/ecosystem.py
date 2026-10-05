@@ -686,6 +686,10 @@ class Ecosystem:
                 pass
         return self._specs
 
+    def genome_locked(self, firm_key: str) -> bool:
+        spec = self.specs().get(firm_key)
+        return bool(getattr(spec, "genome_locked", False))
+
     def build_firm(self, record: FirmRecord) -> Firm:
         """The firm, with the seats it is entitled to.
 
@@ -1885,6 +1889,10 @@ class Ecosystem:
                     "real money, and its genome was what you approved"
                 )
                 continue
+            if self.genome_locked(record.firm_key):
+                out.append(f"{record.firm_key} left alone: its genome is locked "
+                           "for an A/B test")
+                continue
             try:
                 spec = self._specs.get(record.firm_key)
                 analysts = list(getattr(spec, "analysts", None) or
@@ -1975,7 +1983,7 @@ class Ecosystem:
         out = []
         firms = [self.store.get_firm(firm_key)] if firm_key else self.store.firms()
         for record in firms:
-            if record is None or record.is_killed:
+            if record is None or record.is_killed or self.genome_locked(record.firm_key):
                 continue
             spec = self.specs().get(record.firm_key)
             analysts = spec.analysts if spec else ("technical", "sentiment", "macro")
