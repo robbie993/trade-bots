@@ -30,6 +30,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from ..db.connection import to_iso
 from ..money import D, ZERO, money
 from . import planets
 from .web import ecosystem, prices_ready
@@ -189,7 +190,8 @@ def council(limit: int = 20) -> JSONResponse:
                     "reason": r.get("reason"),
                     "for": str(D(r.get("for_weight") or 0)),
                     "against": str(D(r.get("against_weight") or 0)),
-                    "at": r.get("created_at"),
+                    # Postgres hands back a datetime, SQLite a string; JSON takes neither raw
+                    "at": to_iso(r.get("created_at")),
                 }
                 for r in rows
             ],

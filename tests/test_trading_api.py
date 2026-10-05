@@ -121,6 +121,20 @@ def test_the_council_endpoint_says_whether_it_is_sitting(client):
     assert body["rulings"] == []
 
 
+def test_the_council_endpoint_survives_a_datetime_from_postgres(client, monkeypatch):
+    # Postgres returns created_at as a datetime; it 500'd on Railway (2026-10-04)
+    from datetime import datetime, timezone
+
+    from src.trading.council.council import Council
+    monkeypatch.setattr(Council, "recent", lambda self, n=8: [{
+        "id": 1, "action": "kill", "firm_key": "alpha", "verdict": "defer", "reason": "close",
+        "for_weight": 1, "against_weight": 1,
+        "created_at": datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)}])
+    r = client.get("/api/council")
+    assert r.status_code == 200
+    assert r.json()["rulings"][0]["at"] == "2026-10-04T12:00:00Z"
+
+
 def test_tokens_says_they_are_not_capital(client):
     body = client.get("/api/tokens").json()
     assert "capital" in body["note"]

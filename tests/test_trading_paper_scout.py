@@ -91,3 +91,13 @@ def test_most_cited_new_papers_come_first(db):
     top = intel.most_scored(db, "papers", "2000-01-01", limit=5)
     assert [r["item_key"] for r in top] == ["s2:landmark", "s2:minor"]
     assert intel.most_scored(db, "papers", "2999-01-01") == []
+
+
+def test_research_panel_reports_the_live_scouts_when_the_manual_file_is_absent(db, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.trading import web
+    monkeypatch.setattr(web, "Path", lambda *a: __import__("pathlib").Path("/nonexistent/x/y/z"))
+    intel.upsert(db, "papers", "arxiv:1", title="A paper")
+    html = web._research_panel(SimpleNamespace(db=db))
+    assert "never been out" not in html and "papers last seen" in html
