@@ -158,14 +158,29 @@ def test_one(eco, market) -> Optional[str]:
     proposed = {**(firm.genome or {}), **changes}
     # Record what it is being tested against, so adoption can tell if that moved.
     eco.db.update("ai_proposals", row["id"], {"genome_before": json.dumps(firm.genome or {})})
-    analysts = tuple((firm.genome or {}).get("analysts") or ("technical", "sentiment", "macro"))
+    # The seats the firm really has: an heir carries them in its genome, a
+    # configured firm in its spec. The old fallback tested every configured
+    # firm as if it had technical, sentiment and macro seats.
+    spec = eco.specs().get(firm.firm_key) if hasattr(eco, "specs") else None
+    analysts = tuple((firm.genome or {}).get("analysts") or getattr(spec, "analysts", None)
+                     or ("technical", "sentiment", "macro"))
     t = eco.evolver.trial(firm, market, proposed, analysts=analysts)
     values = {k: t[k] for k in ("fitted_before", "fitted_after", "holdout_before",
                                 "holdout_after", "holdout_bars")}
     values["tested_at"] = utcnow_iso()
 
+    unchanged = (str(t["fitted_after"]) == str(t["fitted_before"])
+                 and str(t["holdout_after"]) == str(t["holdout_before"]))
     if not t["enough_holdout"]:
         verdict, status = (f"only {t['holdout_bars']} held-out bar(s): not enough to judge", "refused")
+    elif unchanged:
+        # Live 2026-10-04: six changes in a row to firm_h_global_ii_ii scored
+        # -1.28 -> -1.28, because its seats never read the genes the advisers
+        # kept changing. Saying "lost" taught them nothing.
+        verdict, status = (
+            f"changed nothing: {', '.join(changes)} made no difference to a single trade. "
+            f"This firm's seats are {', '.join(analysts)}; change a gene one of them reads",
+            "refused")
     elif D(t["holdout_after"]) <= D(t["holdout_before"]):
         verdict, status = (f"lost the held-out bars ({t['holdout_before']} -> "
                            f"{t['holdout_after']})", "refused")

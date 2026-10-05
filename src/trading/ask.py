@@ -205,8 +205,14 @@ def _card_summary(card) -> dict:
     if card is None:
         return {}
     keys = ("equity", "cash", "return_pct", "drawdown_pct", "win_rate_pct", "sharpe",
-            "trades", "closed_trades", "consecutive_losses", "score", "sufficient_data")
-    return {k: getattr(card, k, None) for k in keys}
+            "closed_trades", "consecutive_losses", "score", "sufficient_data")
+    out = {k: getattr(card, k, None) for k in keys}
+    # The scorecard's `trades` counts fills: every buy and every partial sell.
+    # Sent as "trades" beside "closed_trades", advisers spent eight reviews in
+    # a row telling firm_f_bonds to reconcile 80 "trades" against 2 closed,
+    # when it had simply built four positions in many small buys.
+    out["fills"] = getattr(card, "trades", None)
+    return out
 
 
 def _profile(firm, card) -> dict:
