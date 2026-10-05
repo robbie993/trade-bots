@@ -91,3 +91,31 @@ def test_most_cited_new_papers_come_first(db):
     top = intel.most_scored(db, "papers", "2000-01-01", limit=5)
     assert [r["item_key"] for r in top] == ["s2:landmark", "s2:minor"]
     assert intel.most_scored(db, "papers", "2999-01-01") == []
+
+
+def test_research_panel_reports_the_live_scouts_when_the_manual_file_is_absent(db, monkeypatch):
+    from types import SimpleNamespace
+
+    from src.trading import web
+    monkeypatch.setattr(web, "Path", lambda *a: __import__("pathlib").Path("/nonexistent/x/y/z"))
+    intel.upsert(db, "papers", "arxiv:1", title="A paper")
+    html = web._research_panel(SimpleNamespace(db=db))
+    assert "never been out" not in html and "papers last seen" in html
+
+
+def test_a_rate_limited_arxiv_is_left_alone_for_the_rest_of_the_run(db, monkeypatch):
+    import json
+
+    import src.trading.paper_scout as ps
+
+    asked = []
+
+    def get(url):
+        if "arxiv" in url:
+            asked.append(url)
+            raise OSError("HTTP Error 429: Too Many Requests")
+        return json.dumps(OPENALEX)
+
+    monkeypatch.setattr(ps.time, "sleep", lambda s: None)
+    ps.PaperScout(db, get_text=get, clock=lambda: 10**6).run()
+    assert len(asked) == 1

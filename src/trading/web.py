@@ -1020,6 +1020,23 @@ def _research_panel(eco) -> str:
             if at and (newest is None or at > newest):
                 newest = at
     except OSError:
+        # The manual scout's file lives on whichever machine ran it, never on
+        # Railway. The scouts in the tick write to `intel` instead, so say how
+        # fresh those are rather than claim the village has read nothing.
+        from . import intel
+
+        live = []
+        for source in ("papers", "github", "huggingface_models", "huggingface_datasets"):
+            seen = intel.recent(eco.db, source, limit=1)
+            if seen:
+                live.append(f"{source} last seen {e(str(seen[0].get('last_seen') or '')[:16])}")
+        if live:
+            return _panel(
+                "Research",
+                "<p class=muted>The paper and repo scouts run inside the tick; their finds "
+                "are in the intel panel above. " + "; ".join(live) + ". The manual "
+                "<code>scripts/research_scout.py</code> has not been run on this machine.</p>",
+            )
         return _panel(
             "Research",
             "<p class=muted>The village has never been out to read anything. "
