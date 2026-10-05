@@ -176,3 +176,42 @@ def test_a_proposal_tested_on_an_older_genome_is_retested_not_adopted(ecosystem,
     assert eco.store.get_firm(firm.firm_key).genome["fast_window"] == 9
     row = eco.db.query_one("SELECT status FROM ai_proposals WHERE id = ?", (second,))
     assert row["status"] == "awaiting_test"
+
+
+def test_a_change_that_moves_nothing_says_so_and_names_the_seats(ecosystem, monkeypatch):
+    """Live 2026-10-04: six changes scored -1.28 -> -1.28 and were each called "lost"."""
+    eco = ecosystem
+    monkeypatch.setattr(eco.evolver, "trial", lambda *a, **k: {
+        "enough_holdout": True, "holdout_bars": 60, "fitted_before": Decimal("-1.28"),
+        "fitted_after": Decimal("-1.28"), "holdout_before": Decimal("-1.28"),
+        "holdout_after": Decimal("-1.28")})
+    pid = _pending(eco, {"ibs_entry": "0.40"})
+    proposals.test_one(eco, eco.market())
+    row = eco.db.query_one("SELECT * FROM ai_proposals WHERE id = ?", (pid,))
+    assert row["status"] == "refused"
+    assert row["verdict"].startswith("changed nothing") and "seats are" in row["verdict"]
+
+
+def test_a_configured_firm_is_tested_with_its_own_seats(ecosystem, monkeypatch):
+    eco = ecosystem
+    firm = _firm(eco)
+    seen = {}
+
+    def trial(firm, market, genome, analysts=()):
+        seen["analysts"] = tuple(analysts)
+        return {"enough_holdout": False, "holdout_bars": 0, "fitted_before": Decimal("1"),
+                "fitted_after": Decimal("1"), "holdout_before": None, "holdout_after": None}
+
+    monkeypatch.setattr(eco.evolver, "trial", trial)
+    _pending(eco, {"fast_window": 5})
+    proposals.test_one(eco, eco.market())
+    assert seen["analysts"] == tuple(eco.specs()[firm.firm_key].analysts)
+
+
+def test_advisers_see_fills_not_a_second_trades_count():
+    from types import SimpleNamespace
+
+    card = SimpleNamespace(trades=80, closed_trades=2, equity=1)
+    summary = ask._card_summary(card)
+    assert summary["fills"] == 80 and summary["closed_trades"] == 2
+    assert "trades" not in summary
