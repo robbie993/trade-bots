@@ -141,6 +141,19 @@ def win_rate(evidence) -> Finding:
     return _abstain("win_rate", f"{evidence.win_rate_pct}% is neither here nor there")
 
 
+def no_bailout(evidence) -> Finding:
+    """A firm that has spent everything is not topped up by the council.
+
+    The 500-agent "Galaxy Empire" village (arXiv 2512.15732) showed 300%+ in
+    validation and lost over 70% live; bailing out bankrupt agents was one of
+    the three causes. A broke firm gets money only from a human.
+    """
+    if evidence.allocation <= 0 or evidence.equity <= 0:
+        return _against("no_bailout", 100,
+                        "the firm is broke; no bailouts from the council", veto=True)
+    return _abstain("no_bailout", "the firm still has capital of its own")
+
+
 def headroom(evidence) -> Finding:
     """The brokerage's cap is not the council's to raise."""
     if evidence.delta > evidence.headroom:
@@ -420,7 +433,7 @@ def firm_alive(evidence) -> Finding:
 ADOPT = (books, firm_exists, firm_alive, proposal_on_file, held_out_sample, held_out_win,
          fit_agrees, change_is_small)
 
-RAISE = (books, firm_exists, sample_gate, headroom, ceiling, compounding,
+RAISE = (books, firm_exists, sample_gate, no_bailout, headroom, ceiling, compounding,
          score, performance, drawdown, win_rate)
 KILL = (books, firm_exists, sample_gate_for_kill, kill_condition, sustained,
         already_paused, open_positions)

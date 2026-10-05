@@ -18,7 +18,9 @@ and stop.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Optional, Sequence
 
 from ...money import D, ZERO, fmt_money, money
@@ -145,6 +147,12 @@ class Brokerage:
                 strikes.clear_breach(self.store, firm)
                 continue
 
+            if firm.is_active and self._worse_on_probation(firm, card):
+                # Served its sentence and came back still in the same slump,
+                # then lost more. That is a new episode, not the old one:
+                # firm_d_value_iii ran its streak from 6 to 14 losses this way
+                # with no further strike (2026-10-04).
+                strikes.clear_breach(self.store, firm)
             outcome = strikes.record_breach(self.store, firm, reason, self.strike_config)
             if outcome is None:
                 continue        # same slump, already answered for
@@ -169,6 +177,43 @@ class Brokerage:
                 if approval is not None:
                     requested.append(approval.id)
         return paused, requested
+
+    #: How much worse a released firm may get, still inside the slump it was
+    #: sentenced for, before that counts as a new strike: one more losing bar,
+    #: or this many more points of drawdown.
+    PROBATION_DRAWDOWN_PTS = Decimal("2")
+
+    def _worse_on_probation(self, firm: FirmRecord, card: Scorecard) -> bool:
+        """True when a firm back from the gulag has lost more since it returned.
+
+        The first check after release records where the firm stood (the
+        `probation` event); later checks compare against that. Nothing is
+        compared until the firm has a strike, has served it, and is still
+        inside the episode it was struck for.
+        """
+        state = self.store.strike_state(firm.id)
+        if not state["breach_open"] or state["strikes"] <= 0 or state["gulag_bars_left"] > 0:
+            return False
+        rows = self.store.db.query(
+            "SELECT event_type, payload FROM brokerage_events WHERE firm_id = ? "
+            "AND event_type IN ('strike', 'probation') ORDER BY id DESC LIMIT 1",
+            (firm.id,))
+        losses = int(getattr(card, "consecutive_losses", 0) or 0)
+        drawdown = D(getattr(card, "drawdown_pct", 0) or 0)
+        if not rows or rows[0]["event_type"] != "probation":
+            self.store.record_event(
+                "probation",
+                f"{firm.firm_key}: back from the gulag at {losses} losses in a row and "
+                f"{drawdown}% drawdown; any worse is a new strike",
+                firm_id=firm.id,
+                payload={"consecutive_losses": losses, "drawdown_pct": str(drawdown)})
+            return False
+        try:
+            mark = json.loads(rows[0]["payload"] or "{}")
+        except ValueError:
+            return False
+        return (losses > int(mark.get("consecutive_losses") or 0)
+                or drawdown >= D(mark.get("drawdown_pct") or 0) + self.PROBATION_DRAWDOWN_PTS)
 
     def request_kill(self, firm: FirmRecord, reason: str, card: Optional[Scorecard] = None):
         if self.gate is None:
