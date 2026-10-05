@@ -1,0 +1,75 @@
+CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+
+CREATE TABLE political_filings (
+  chamber TEXT NOT NULL, doc_id TEXT NOT NULL, filer_first TEXT NOT NULL, filer_last TEXT NOT NULL,
+  filer_suffix TEXT, state_district TEXT, filing_date TEXT NOT NULL, available_at TEXT NOT NULL,
+  availability_source TEXT NOT NULL, source_url TEXT NOT NULL, raw_archive_key TEXT NOT NULL, raw_sha256 TEXT NOT NULL,
+  parse_method TEXT NOT NULL, extraction_status TEXT NOT NULL, failure_reason TEXT, extracted_rows INTEGER NOT NULL,
+  extraction_model TEXT, contract_version TEXT, ocr_archive_key TEXT, amended_report_date TEXT, report_date TEXT,
+  processed_at TEXT NOT NULL, filer_key TEXT NOT NULL, member_id TEXT, display_name TEXT NOT NULL DEFAULT '',
+  identity_source TEXT NOT NULL DEFAULT 'unresolved', PRIMARY KEY (chamber, doc_id)
+);
+
+CREATE TABLE political_trades (
+  chamber TEXT NOT NULL, doc_id TEXT NOT NULL, row_index INTEGER NOT NULL, source_transaction_id TEXT,
+  filer_first TEXT NOT NULL, filer_last TEXT NOT NULL, owner TEXT NOT NULL, owner_code_raw TEXT,
+  action TEXT NOT NULL, partial_sale INTEGER NOT NULL, action_code_raw TEXT, transaction_date TEXT,
+  notification_date TEXT, filing_date TEXT NOT NULL, available_at TEXT NOT NULL, availability_source TEXT NOT NULL,
+  asset_description TEXT NOT NULL, printed_ticker TEXT, resolved_ticker TEXT, resolution_status TEXT NOT NULL,
+  resolution_reason TEXT, asset_type_code TEXT, asset_type_label TEXT, amount_bracket TEXT NOT NULL,
+  amount_low REAL, amount_high REAL, cap_gains_over_200 INTEGER, comment TEXT, filing_status TEXT,
+  source_url TEXT NOT NULL, raw_archive_key TEXT NOT NULL, raw_sha256 TEXT NOT NULL,
+  filer_key TEXT NOT NULL, member_id TEXT, display_name TEXT NOT NULL DEFAULT '',
+  identity_source TEXT NOT NULL DEFAULT 'unresolved',
+  PRIMARY KEY (chamber, doc_id, row_index),
+  FOREIGN KEY (chamber, doc_id) REFERENCES political_filings(chamber, doc_id) ON DELETE CASCADE
+);
+
+CREATE TABLE political_trade_events (
+  event_id TEXT NOT NULL, version INTEGER NOT NULL, chamber TEXT NOT NULL, filer_first TEXT NOT NULL,
+  filer_last TEXT NOT NULL, owner TEXT NOT NULL, action TEXT NOT NULL, partial_sale INTEGER NOT NULL,
+  transaction_date TEXT, ticker TEXT, source_transaction_id TEXT, asset_description TEXT NOT NULL, comment TEXT,
+  asset_type_code TEXT, asset_type_label TEXT, amount_low REAL, amount_high REAL,
+  first_available_at TEXT NOT NULL, available_at TEXT NOT NULL, superseded_at TEXT,
+  source_doc_id TEXT NOT NULL, source_row_index INTEGER NOT NULL, source_url TEXT NOT NULL,
+  contributor_row_ids TEXT NOT NULL, filer_key TEXT NOT NULL, member_id TEXT, display_name TEXT NOT NULL DEFAULT '',
+  identity_source TEXT NOT NULL DEFAULT 'unresolved', PRIMARY KEY (event_id, version)
+);
+
+CREATE TABLE sync_runs (
+  run_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL
+);
+
+CREATE TABLE sync_receipts (
+  chamber TEXT NOT NULL, doc_id TEXT NOT NULL, run_id TEXT NOT NULL, committed_at TEXT NOT NULL,
+  PRIMARY KEY (chamber, doc_id)
+);
+
+CREATE INDEX political_filings_date_idx ON political_filings(filing_date);
+
+CREATE INDEX political_filings_filer_idx ON political_filings(filer_last, filer_first);
+
+CREATE INDEX political_filings_filer_key_idx ON political_filings(filer_key);
+
+CREATE INDEX political_trades_ticker_idx ON political_trades(printed_ticker, resolved_ticker, available_at);
+
+CREATE INDEX political_trades_transaction_date_idx ON political_trades(transaction_date);
+
+CREATE INDEX political_trades_filer_key_idx ON political_trades(filer_key);
+
+CREATE INDEX political_events_ticker_idx ON political_trade_events(ticker, available_at);
+
+CREATE INDEX political_events_filer_key_idx ON political_trade_events(filer_key);
+
+CREATE INDEX political_filings_member_idx ON political_filings(member_id);
+
+CREATE INDEX political_trades_member_idx ON political_trades(member_id);
+
+CREATE INDEX political_events_member_idx ON political_trade_events(member_id);
+
+-- schema_migrations: 3 rows
+-- political_filings: 10825 rows
+-- political_trades: 186340 rows
+-- political_trade_events: 181647 rows
+-- sync_runs: 0 rows
+-- sync_receipts: 0 rows

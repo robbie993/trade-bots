@@ -1,0 +1,809 @@
+{
+  "schemaVersion": 2,
+  "dataset": "austin-starks/congressional-stock-trades",
+  "generatedAt": "2026-10-05T02:13:04.788Z",
+  "lastSourceCheckAt": "2026-10-05T02:13:04.788Z",
+  "sourceFingerprint": "ce1b91be76ec66b6b00fe6a15f561b760633d26c98b23e70ecba202089a6e9e6",
+  "audit": {
+    "passed": true,
+    "findings": [],
+    "failedShareByYear": {
+      "2012": 0,
+      "2013": 0,
+      "2014": 0,
+      "2015": 0,
+      "2016": 0,
+      "2017": 0,
+      "2018": 0,
+      "2019": 0,
+      "2020": 0.0010940919037199124,
+      "2021": 0,
+      "2022": 0,
+      "2023": 0,
+      "2024": 0,
+      "2025": 0,
+      "2026": 0
+    }
+  },
+  "refreshPolicy": {
+    "targetIntervalHours": 20,
+    "publicationTrigger": "after_successful_lake_integrity_audit"
+  },
+  "freshness": {
+    "latestAvailableAt": "2026-10-02T03:59:59.999Z",
+    "latestProcessedAt": "2026-10-03T20:51:09.553Z",
+    "latestTransactionDate": "2026-09-23",
+    "byChamber": {
+      "house": {
+        "docId": "20035555",
+        "filingDate": "2026-10-01",
+        "availableAt": "2026-10-02T03:59:59.999Z",
+        "processedAt": "2026-10-03T20:51:09.553Z",
+        "sourceUrl": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/20035555.pdf"
+      },
+      "senate": {
+        "docId": "6bf3b6f7-9e1b-499a-bd5a-990292ce2e72",
+        "filingDate": "2026-10-01",
+        "availableAt": "2026-10-02T03:59:59.999Z",
+        "processedAt": "2026-10-02T18:47:47.757Z",
+        "sourceUrl": "https://efdsearch.senate.gov/search/view/ptr/6bf3b6f7-9e1b-499a-bd5a-990292ce2e72/"
+      }
+    }
+  },
+  "totals": {
+    "filings": 10825,
+    "trades": 186340,
+    "events": 181647,
+    "failedFilings": 1,
+    "members": 466,
+    "nonMemberFilings": 2,
+    "unresolvedFilings": 0
+  },
+  "identity": {
+    "source": "unitedstates/congress-legislators",
+    "legislatorsCommit": "577ca04282d14688cb14f6559eb27b52bdc50dfc"
+  },
+  "tables": {
+    "political_filings": {
+      "rows": 10825,
+      "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "manifests": [
+        {
+          "year": 2012,
+          "sourceManifestKey": "political_filings/2012.manifest.json",
+          "sourceManifestETag": "\"606f6c4c67c8f3e714b97d1088e0a5b8\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:25.971Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2012-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2012-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"dc9622ed97ffc83ce540b2d3b89a14ea\"",
+              "size": 19847,
+              "sha256": "df08d6c1ef49e3637ac82b3e178f30f8de7bdae9eb9ea841e4cc7cd6ffa74aab"
+            }
+          ]
+        },
+        {
+          "year": 2013,
+          "sourceManifestKey": "political_filings/2013.manifest.json",
+          "sourceManifestETag": "\"8ec581f39919276df185c355321de0dd\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:26.772Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2013-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2013-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"ed175b0236b6bfbfb7ac5773a5de1a7e\"",
+              "size": 43261,
+              "sha256": "ec0ab6d5e80854689178589de1b26620d438e5899dc5531f8c4b84df5592fcd3"
+            }
+          ]
+        },
+        {
+          "year": 2014,
+          "sourceManifestKey": "political_filings/2014.manifest.json",
+          "sourceManifestETag": "\"edbb89f7eb25174d9cfba5d078fc2c29\"",
+          "sourceUpdatedAt": "2026-09-22T03:54:11.034Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2014-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2014-v-failures-retry-2026-09-22-publish-2026-09-22T03-53-51-521Z.parquet",
+              "sourceETag": "\"3025e09fb8b411942f923b24b5ab52d0\"",
+              "size": 113501,
+              "sha256": "e8abce9608f30e9c99e072f8c0ac0abfe966bfbbc1c426d918486220eeebbc42"
+            }
+          ]
+        },
+        {
+          "year": 2015,
+          "sourceManifestKey": "political_filings/2015.manifest.json",
+          "sourceManifestETag": "\"34239d0ebb5ba9e2df4c5f8eff3a9bc3\"",
+          "sourceUpdatedAt": "2026-09-23T19:03:14.669Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2015-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2015-v-senate-ticker-prefix-2026-09-23-publish-2026-09-23T19-02-52-553Z.parquet",
+              "sourceETag": "\"8e593aa627a7a15ba0500c7d2dcb905a\"",
+              "size": 124399,
+              "sha256": "895d9a666707591ecf576c1b16b2162f061febe3253487709324671451fe1bf0"
+            }
+          ]
+        },
+        {
+          "year": 2016,
+          "sourceManifestKey": "political_filings/2016.manifest.json",
+          "sourceManifestETag": "\"89d1c6c6225a83479939d38b7d38fc44\"",
+          "sourceUpdatedAt": "2026-09-23T20:32:17.471Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2016-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2016-v-senate-manual-readings-2026-09-23-publish-2026-09-23T20-31-57-896Z.parquet",
+              "sourceETag": "\"f3071668d4d98890439f59052d058645\"",
+              "size": 129096,
+              "sha256": "c046adf03352803cb4e8e07f0a1b6b621bb6c21d632d52b4d31010e3f07ab880"
+            }
+          ]
+        },
+        {
+          "year": 2017,
+          "sourceManifestKey": "political_filings/2017.manifest.json",
+          "sourceManifestETag": "\"4ef9ca2d9505280822fe17da49d8d3b3\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:47.752Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2017-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2017-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"c36f460263637f7bb87578a9011160ef\"",
+              "size": 131648,
+              "sha256": "b71f09388086dfe20cd4fe874ceb182511db64033d2d3bd666406923c3caa989"
+            }
+          ]
+        },
+        {
+          "year": 2018,
+          "sourceManifestKey": "political_filings/2018.manifest.json",
+          "sourceManifestETag": "\"fc08cd8824be4c7eacbaa4d5050c3f84\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:04.489Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2018-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2018-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"3c1634578d43c2467e2d310e8ecdde60\"",
+              "size": 137498,
+              "sha256": "2735d909452533fe4f8232b796b619be7f3545927b864e0da40b0f4fef3f4df1"
+            }
+          ]
+        },
+        {
+          "year": 2019,
+          "sourceManifestKey": "political_filings/2019.manifest.json",
+          "sourceManifestETag": "\"64b6ddcdd4f3ae5f9bd373a11adc3afd\"",
+          "sourceUpdatedAt": "2026-10-03T20:47:46.765Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2019-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2019-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"86c6558e51a42ac63760ebbb8acf2799\"",
+              "size": 119814,
+              "sha256": "40a8128e4f70823c5e87f04c22fd24a2c6b5ab1cc7a7690d8d07c99557336ff0"
+            }
+          ]
+        },
+        {
+          "year": 2020,
+          "sourceManifestKey": "political_filings/2020.manifest.json",
+          "sourceManifestETag": "\"2a0c3b2f3a79db9c2e476e466386eeda\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:05.677Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2020-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2020-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"2a5b4a75922d6e5eaa390ffeb8ad0886\"",
+              "size": 115367,
+              "sha256": "e584d87c7c2062a239106e3398acd9a2171271148688ed6417e7c903915338df"
+            }
+          ]
+        },
+        {
+          "year": 2021,
+          "sourceManifestKey": "political_filings/2021.manifest.json",
+          "sourceManifestETag": "\"0ebbc291c4a1e1d01bb68664ccf8ead6\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:06.860Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2021-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2021-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"052c81230050f523fad572bad164d03b\"",
+              "size": 104007,
+              "sha256": "adbacd033b5c93f0fdf5fedb0be49ce66d9d7b1a4aadcfe518ef5422ca5f4688"
+            }
+          ]
+        },
+        {
+          "year": 2022,
+          "sourceManifestKey": "political_filings/2022.manifest.json",
+          "sourceManifestETag": "\"2bbfb9842a0eef5e5185cfa0356ebaaf\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:51.532Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2022-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2022-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"e5d0a570fec6416d335927e673be7c4e\"",
+              "size": 94016,
+              "sha256": "271bd9db19a1c2d67132f104c289c94bc3cf198fc283c0fa94a86134be0ffd5d"
+            }
+          ]
+        },
+        {
+          "year": 2023,
+          "sourceManifestKey": "political_filings/2023.manifest.json",
+          "sourceManifestETag": "\"fbf8c3586845122f5988f1b627a108de\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:52.896Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2023-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2023-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"89f804793a9b46414325f7c78da992e6\"",
+              "size": 76599,
+              "sha256": "e17d3f73a1667ce6d9badee88def64ac4b98fbe6df3ed2b558f0e623cee6505c"
+            }
+          ]
+        },
+        {
+          "year": 2024,
+          "sourceManifestKey": "political_filings/2024.manifest.json",
+          "sourceManifestETag": "\"885c13e95b12e52c72c418bdb6cfe86c\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:42.027Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2024-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2024-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"3eb660c6a96a498cb69d6006c6bb2181\"",
+              "size": 73826,
+              "sha256": "6bad96acca862fe43443a25bb96e7ed5c01d8039e4845c951fb6e4624aecc103"
+            }
+          ]
+        },
+        {
+          "year": 2025,
+          "sourceManifestKey": "political_filings/2025.manifest.json",
+          "sourceManifestETag": "\"a51502b0cbe180ed3f9e1ee4ec6eb416\"",
+          "sourceUpdatedAt": "2026-10-03T20:47:49.025Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2025-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2025-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"22719e82a63125838c1c6bf5a1a62c50\"",
+              "size": 89388,
+              "sha256": "ccd8334609dc56e68d95302164677670a41023b3b6c7216f03b02f285a9df547"
+            }
+          ]
+        },
+        {
+          "year": 2026,
+          "sourceManifestKey": "political_filings/2026.manifest.json",
+          "sourceManifestETag": "\"0d6eccfb852d4c62a6fef17d40f23583\"",
+          "sourceUpdatedAt": "2026-10-03T20:52:39.929Z",
+          "files": [
+            {
+              "publicPath": "data/political_filings/2026-00000-of-00001.parquet",
+              "sourceKey": "political_filings/2026-v-2026-10-03T20-51-09-553Z.parquet",
+              "sourceETag": "\"2722d7fb2b701342b460ccf9a7519fe0\"",
+              "size": 72554,
+              "sha256": "c0393b3f447117a46a5166311b7395e3c61b038331c3a7501f685e229b48d012"
+            }
+          ]
+        }
+      ]
+    },
+    "political_trades": {
+      "rows": 186340,
+      "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "manifests": [
+        {
+          "year": 2012,
+          "sourceManifestKey": "political_trades/2012.manifest.json",
+          "sourceManifestETag": "\"987572444f7cd436457d4aa781e3c334\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:26.372Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2012-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2012-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"541364c5abf689350d39abb0092f5ee2\"",
+              "size": 27224,
+              "sha256": "5f6f2213c7be81bc244d12d4cc147caa538dae5f6f3339dbc8f0b9276c3be9bb"
+            }
+          ]
+        },
+        {
+          "year": 2013,
+          "sourceManifestKey": "political_trades/2013.manifest.json",
+          "sourceManifestETag": "\"58695ecfdf27b79859be806366c2e73c\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:27.296Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2013-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2013-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"7211406a4bef22b6efe49b304e354de3\"",
+              "size": 57068,
+              "sha256": "2273388dfbb4f0a0ac9fc9612731417a708c177d5507cac667fbd4db60cd3e16"
+            }
+          ]
+        },
+        {
+          "year": 2014,
+          "sourceManifestKey": "political_trades/2014.manifest.json",
+          "sourceManifestETag": "\"813e5f1663fd0cd198860254a8cb420c\"",
+          "sourceUpdatedAt": "2026-09-22T03:54:11.656Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2014-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2014-v-failures-retry-2026-09-22-publish-2026-09-22T03-53-51-521Z.parquet",
+              "sourceETag": "\"ce129819357a71c8283e14d6b458ae23\"",
+              "size": 275547,
+              "sha256": "9afbc45219c894756c31a1fec728deea418d5b42c0724eda8b6a1b92352240c6"
+            }
+          ]
+        },
+        {
+          "year": 2015,
+          "sourceManifestKey": "political_trades/2015.manifest.json",
+          "sourceManifestETag": "\"f4ebadd3ed86c9534d999a0125f6f2d5\"",
+          "sourceUpdatedAt": "2026-09-23T19:03:15.502Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2015-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2015-v-senate-ticker-prefix-2026-09-23-publish-2026-09-23T19-02-52-553Z.parquet",
+              "sourceETag": "\"08825660ae434d4a542df2dae3419d81\"",
+              "size": 327978,
+              "sha256": "33c65f630767a49e6fd6db15d4b43b60bd50a8989349f0a94a0e8ab88bbeb77c"
+            }
+          ]
+        },
+        {
+          "year": 2016,
+          "sourceManifestKey": "political_trades/2016.manifest.json",
+          "sourceManifestETag": "\"e65d3af6932f73625b189b38d5325327\"",
+          "sourceUpdatedAt": "2026-09-23T20:32:18.972Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2016-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2016-v-senate-manual-readings-2026-09-23-publish-2026-09-23T20-31-57-896Z.parquet",
+              "sourceETag": "\"4d2cd6f1299ad30c1edadf8b6acd36f1\"",
+              "size": 317015,
+              "sha256": "4060a7bfb61005e6d8da25f4972cc5df9366bdd46b9141b96bd236fe71e9fe17"
+            }
+          ]
+        },
+        {
+          "year": 2017,
+          "sourceManifestKey": "political_trades/2017.manifest.json",
+          "sourceManifestETag": "\"b88c86bf050a112fe945fdc52fea29b4\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:48.462Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2017-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2017-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"6fd81e0776859d9d1fa027beff53503a\"",
+              "size": 335472,
+              "sha256": "7cf45cbcd6ff2582d1f6f02107887e91154e1c20f097d2ef7798f774a1ebc6a4"
+            }
+          ]
+        },
+        {
+          "year": 2018,
+          "sourceManifestKey": "political_trades/2018.manifest.json",
+          "sourceManifestETag": "\"87d9062536aaf6787feb3b0fa5f81cc2\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:05.283Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2018-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2018-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"58104d82e6d897f5e93be9fce8f8ceed\"",
+              "size": 384034,
+              "sha256": "0d39857068867483cb260fc704b086ffcd0f967a28902abe969af95aab1e9e09"
+            }
+          ]
+        },
+        {
+          "year": 2019,
+          "sourceManifestKey": "political_trades/2019.manifest.json",
+          "sourceManifestETag": "\"ba1ecf29f8dca54099f83482adcffa1f\"",
+          "sourceUpdatedAt": "2026-10-03T20:47:47.479Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2019-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2019-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"d661d92ff868040df4e4c7f2493a0fe4\"",
+              "size": 343295,
+              "sha256": "5c466d6bd7e21f2767cbf6bbf6dbe40bdee4fbe47167be698fa86d80fb44d7df"
+            }
+          ]
+        },
+        {
+          "year": 2020,
+          "sourceManifestKey": "political_trades/2020.manifest.json",
+          "sourceManifestETag": "\"96e851840853c618f16a945b65c00e47\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:06.523Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2020-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2020-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"226128ed9e29effe17aac4e2e6e95781\"",
+              "size": 373744,
+              "sha256": "efae139bd0f6a98b5b6b530982fe40e3a2b37fbf5d557013792e9e6b71a8a47a"
+            }
+          ]
+        },
+        {
+          "year": 2021,
+          "sourceManifestKey": "political_trades/2021.manifest.json",
+          "sourceManifestETag": "\"d18dcca328a01d1eaee8836f332f2bc8\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:07.496Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2021-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2021-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"45b8d8a793ad7f2e1bbd0258190b8fcc\"",
+              "size": 312294,
+              "sha256": "af01568d0d80807ae06a2683a93c9cc9467396e769b56ccd6b5e939c54408acf"
+            }
+          ]
+        },
+        {
+          "year": 2022,
+          "sourceManifestKey": "political_trades/2022.manifest.json",
+          "sourceManifestETag": "\"e066ffb75ef0686ec172fb65b4d45b36\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:52.402Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2022-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2022-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"58d3afac607447cf6b431e490170d885\"",
+              "size": 300054,
+              "sha256": "697ea570ae05195d28264858505df28e80fa4735017fcb72a63d267a9eff901f"
+            }
+          ]
+        },
+        {
+          "year": 2023,
+          "sourceManifestKey": "political_trades/2023.manifest.json",
+          "sourceManifestETag": "\"ef65b1be0e18467978be02f51b6105ba\"",
+          "sourceUpdatedAt": "2026-10-03T19:34:53.621Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2023-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2023-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"22cdb7165d0d7a39e8e1540e8243eb79\"",
+              "size": 256128,
+              "sha256": "b76391cabc7989814558345ec23ae25fa4f0879f5b64d446ea5cfa08160dbb89"
+            }
+          ]
+        },
+        {
+          "year": 2024,
+          "sourceManifestKey": "political_trades/2024.manifest.json",
+          "sourceManifestETag": "\"fcdfb80ba08ac8478144479b1b8df16b\"",
+          "sourceUpdatedAt": "2026-09-22T02:46:42.822Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2024-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2024-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"0b08b4092a0874dcf0aeabce8b824444\"",
+              "size": 212626,
+              "sha256": "f66a16fe0cac7672cc206ee2d9711fcc59e565cc3647046596d413d9258b09d5"
+            }
+          ]
+        },
+        {
+          "year": 2025,
+          "sourceManifestKey": "political_trades/2025.manifest.json",
+          "sourceManifestETag": "\"112a76c9ccf6bbab9e150f369921c4f4\"",
+          "sourceUpdatedAt": "2026-10-03T20:47:49.810Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2025-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2025-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"a066f950c4b873fe917e63a2be70b460\"",
+              "size": 283481,
+              "sha256": "f8daf87693b3a91bfa366aad0ccde30c15786715f1ed93133e671affd9657542"
+            }
+          ]
+        },
+        {
+          "year": 2026,
+          "sourceManifestKey": "political_trades/2026.manifest.json",
+          "sourceManifestETag": "\"587d45be87e2dccc31a234cc0e93bedb\"",
+          "sourceUpdatedAt": "2026-10-03T20:52:40.482Z",
+          "files": [
+            {
+              "publicPath": "data/political_trades/2026-00000-of-00001.parquet",
+              "sourceKey": "political_trades/2026-v-2026-10-03T20-51-09-553Z.parquet",
+              "sourceETag": "\"bdb74d06cbb09f43d9afde6460187a67\"",
+              "size": 228715,
+              "sha256": "3cb0d03604eab2db7c4e697c13859268bb38dc5adabe75bb72d34caa3b726576"
+            }
+          ]
+        }
+      ]
+    },
+    "political_trade_events": {
+      "rows": 181647,
+      "years": [
+        2012,
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "manifests": [
+        {
+          "year": 2012,
+          "sourceManifestKey": "political_trade_events/2012.manifest.json",
+          "sourceManifestETag": "\"414cfb074674ad331a15d512356fb36e\"",
+          "sourceUpdatedAt": "2026-09-22T02:47:11.983Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2012-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2012-v-identity-migration-20260922-publish-2026-09-22T02-46-02-072Z.parquet",
+              "sourceETag": "\"d106aa45fe3aa509b381d1f7a220bd45\"",
+              "size": 21014,
+              "sha256": "efbafd84279ad60ce53b7bb0d26e56b34606e332d03cfd65a68ccf87f8482866"
+            }
+          ]
+        },
+        {
+          "year": 2013,
+          "sourceManifestKey": "political_trade_events/2013.manifest.json",
+          "sourceManifestETag": "\"a4490b6ff9434c0aaefdc4a003565c8b\"",
+          "sourceUpdatedAt": "2026-09-25T03:28:44.156Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2013-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2013-v-2026-09-25T03-27-49-749Z.parquet",
+              "sourceETag": "\"a8e84b3628b55d0f2d8a612f2fa72e1a\"",
+              "size": 45325,
+              "sha256": "0b0522efe7fd086be218e1fc778d927ffa924d03fe6bb647d7a9f0c00f9096a9"
+            }
+          ]
+        },
+        {
+          "year": 2014,
+          "sourceManifestKey": "political_trade_events/2014.manifest.json",
+          "sourceManifestETag": "\"675dfd6164b930cd6d45f350a7cb21a5\"",
+          "sourceUpdatedAt": "2026-09-25T03:28:45.458Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2014-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2014-v-2026-09-25T03-27-49-749Z.parquet",
+              "sourceETag": "\"ff21df7b35337b13bd3c22e98fa42f58\"",
+              "size": 236016,
+              "sha256": "68695e7c4e3c2d28fd5cb5a520e09701340d9d01c7efd35bbbc39cd3ef5444e4"
+            }
+          ]
+        },
+        {
+          "year": 2015,
+          "sourceManifestKey": "political_trade_events/2015.manifest.json",
+          "sourceManifestETag": "\"72e5054fcd0bfca326a644673798fd67\"",
+          "sourceUpdatedAt": "2026-09-25T03:28:46.703Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2015-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2015-v-2026-09-25T03-27-49-749Z.parquet",
+              "sourceETag": "\"8ece09aea1117b9abc3186fb51e74f6e\"",
+              "size": 278216,
+              "sha256": "101f6b1fdf6bf46cd2f55f470d17428a3c4e648dc4df0b589008ff85fb2dbf68"
+            }
+          ]
+        },
+        {
+          "year": 2016,
+          "sourceManifestKey": "political_trade_events/2016.manifest.json",
+          "sourceManifestETag": "\"2f2da2348057cf1ad1a3e6174797a67e\"",
+          "sourceUpdatedAt": "2026-09-25T03:28:48.007Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2016-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2016-v-2026-09-25T03-27-49-749Z.parquet",
+              "sourceETag": "\"6a6f3c16bb582549a751e95fe05c622e\"",
+              "size": 267204,
+              "sha256": "a838e65f4c5d09858437232c305e776785be0bde347e7468f25f14c662ce4dbf"
+            }
+          ]
+        },
+        {
+          "year": 2017,
+          "sourceManifestKey": "political_trade_events/2017.manifest.json",
+          "sourceManifestETag": "\"9cf36319f1cbf108c719f24885636d6b\"",
+          "sourceUpdatedAt": "2026-10-03T19:35:21.119Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2017-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2017-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"338b295307bc4dc54ea481c8d458b85f\"",
+              "size": 288273,
+              "sha256": "a28cd903859e1f4c5bfa979f2b3c80cc4d99f855e58b2b2607eda85e3d226cb2"
+            }
+          ]
+        },
+        {
+          "year": 2018,
+          "sourceManifestKey": "political_trade_events/2018.manifest.json",
+          "sourceManifestETag": "\"b259db52eadab97ea63ee208524005d3\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:29.335Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2018-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2018-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"c637acd77872fbdc0a9002060c121aca\"",
+              "size": 336284,
+              "sha256": "8b53a29c81c2e37e5d54b9cf27b1abffa5163f85da70c8c3423334744e7f3719"
+            }
+          ]
+        },
+        {
+          "year": 2019,
+          "sourceManifestKey": "political_trade_events/2019.manifest.json",
+          "sourceManifestETag": "\"55ddec54d2276b368246f3c0cf70e1b7\"",
+          "sourceUpdatedAt": "2026-10-03T20:48:14.942Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2019-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2019-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"8b2aa50aab3084cd0661a7ffe45de195\"",
+              "size": 300180,
+              "sha256": "a8251c1fcc67ada065258cf89c5610dc8195b5e3222d62b5b791b6b6b9aa9091"
+            }
+          ]
+        },
+        {
+          "year": 2020,
+          "sourceManifestKey": "political_trade_events/2020.manifest.json",
+          "sourceManifestETag": "\"5e849ededbce2cbd4b67a576a4db0fa6\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:30.086Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2020-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2020-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"0b8a51193b88292527fb29fb7eb33dcc\"",
+              "size": 344905,
+              "sha256": "173aefe7fa521ed029ccc9d46740754dbb7199f55377e566847d8a06dc7b568e"
+            }
+          ]
+        },
+        {
+          "year": 2021,
+          "sourceManifestKey": "political_trade_events/2021.manifest.json",
+          "sourceManifestETag": "\"22f86a9dfd7c3f2eed710be6cd9b9ed4\"",
+          "sourceUpdatedAt": "2026-10-03T21:48:30.966Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2021-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2021-v-identity-source-earlier-label-20261003-publish-2026-10-03T21-47-43-975Z.parquet",
+              "sourceETag": "\"724be99469e7458689ed2074edab6dc2\"",
+              "size": 268937,
+              "sha256": "b685a081b1d682afa0f90aaa8db69d96b7bb0df25eddc15561a42d39eaa91dd7"
+            }
+          ]
+        },
+        {
+          "year": 2022,
+          "sourceManifestKey": "political_trade_events/2022.manifest.json",
+          "sourceManifestETag": "\"cf038fc6c8a9da5dd58ae63957fcaaac\"",
+          "sourceUpdatedAt": "2026-10-03T19:35:23.313Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2022-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2022-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"10dff5e0b9106e684967ddf65a89a859\"",
+              "size": 273828,
+              "sha256": "158de131779c17f331f623b7a162ee57bcf5775b51ed9bf89085aac7785d91c4"
+            }
+          ]
+        },
+        {
+          "year": 2023,
+          "sourceManifestKey": "political_trade_events/2023.manifest.json",
+          "sourceManifestETag": "\"c9fb85c6c2839a6e1118ed22b108f26a\"",
+          "sourceUpdatedAt": "2026-10-03T19:35:23.922Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2023-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2023-v-identity-source-20261003-publish-2026-10-03T19-34-27-554Z.parquet",
+              "sourceETag": "\"6398fbe96bb7febe44606e83f2697679\"",
+              "size": 236442,
+              "sha256": "8914221f4e63d02326e4c26165d97c8909e9a1d8c5e1cea7d57406dc7040924d"
+            }
+          ]
+        },
+        {
+          "year": 2024,
+          "sourceManifestKey": "political_trade_events/2024.manifest.json",
+          "sourceManifestETag": "\"267f58ce5481a3dbe6801cfc5ae05828\"",
+          "sourceUpdatedAt": "2026-09-25T03:28:57.681Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2024-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2024-v-2026-09-25T03-27-49-749Z.parquet",
+              "sourceETag": "\"5b7fce9b17e52bcb703ea17bee2e4c55\"",
+              "size": 192552,
+              "sha256": "9a35411b7b04eadefb95dbc03700711a58d8095638588297c94ec58d8ae4da6e"
+            }
+          ]
+        },
+        {
+          "year": 2025,
+          "sourceManifestKey": "political_trade_events/2025.manifest.json",
+          "sourceManifestETag": "\"338a027ad55f22619e4c801efc2772b8\"",
+          "sourceUpdatedAt": "2026-10-03T20:48:16.543Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2025-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2025-v-identity-source-boundary-20261003-publish-2026-10-03T20-47-28-202Z.parquet",
+              "sourceETag": "\"103aa6b2221b7b8d1de47e27252b538f\"",
+              "size": 270260,
+              "sha256": "32e00744a3b0df6b9b4d9adc94caafd0837e2d04bc9f03be759d9e2666d0c4ea"
+            }
+          ]
+        },
+        {
+          "year": 2026,
+          "sourceManifestKey": "political_trade_events/2026.manifest.json",
+          "sourceManifestETag": "\"88bf4f23bd1a36554e758a87a1a4b756\"",
+          "sourceUpdatedAt": "2026-10-03T20:53:03.807Z",
+          "files": [
+            {
+              "publicPath": "data/political_trade_events/2026-00000-of-00001.parquet",
+              "sourceKey": "political_trade_events/2026-v-2026-10-03T20-51-09-553Z.parquet",
+              "sourceETag": "\"0b172a6a1d326d1d53a028777f490f70\"",
+              "size": 207886,
+              "sha256": "5a0065e01f66910cab5b6a7487fc2b8d3f072cfea0304570aac9bc9ca2636661"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
