@@ -35,6 +35,8 @@ requests>=2.28.0
 # because float64 drift is not auditable. pandas is used for `mvv export`.
 pandas>=2.0.0
 numpy>=1.24.0
+# Parquet, for the congress desk's dataset (src/trading/congress.py).
+pyarrow>=15.0.0
 
 # Tests.
 pytest>=7.4.0

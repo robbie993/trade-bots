@@ -14,7 +14,7 @@ name on it, the same rule `scripts/research_scout.py` keeps for papers — and
 the strategy court is where that step already goes.
 
 No keys. GitHub's unauthenticated search allows ten queries a minute; this
-makes seven an hour.
+makes nine an hour.
 
 Off unless `TRADE_REPO_SCOUT_ENABLED` is set.
 """
@@ -53,6 +53,11 @@ def github_queries() -> list:
         ("ai agents: trading", f"llm trading agent pushed:>{_since(14)} stars:>30"),
         ("multi-agent systems", f"multi-agent trading pushed:>{_since(30)} stars:>30"),
         ("strategies", f"trading strategy backtest pushed:>{_since(14)} stars:>50"),
+        # Quant research proper, which the trading-bot searches mostly miss:
+        # factor and stat-arb work, and the libraries quants actually use.
+        ("quant: research", "factor investing OR statistical arbitrage OR pairs trading "
+                            f"pushed:>{_since(30)} stars:>30"),
+        ("quant: libraries", f"topic:quantitative-finance pushed:>{_since(14)} stars:>100"),
     ]
 
 
@@ -62,6 +67,9 @@ HF_QUERIES = [
     (HF_MODELS, "huggingface_models", "time series forecasting"),
     (HF_DATASETS, "huggingface_datasets", "stock"),
     (HF_DATASETS, "huggingface_datasets", "crypto"),
+    # Not "quant": on Hugging Face that finds compressed ("quantized") models.
+    (HF_MODELS, "huggingface_models", "stock"),
+    (HF_DATASETS, "huggingface_datasets", "finance"),
 ]
 
 
