@@ -69,6 +69,10 @@ class Firm:
         #: ``() -> Decimal or None``: the firm's equity when the UTC day began,
         #: for the daily loss halt. None where there is no ledger to ask.
         self.day_open_equity = None
+        #: Fraction of a position's value one round trip costs here (fees and
+        #: spread, in and out). None where nobody has said, which turns the
+        #: edge-versus-costs rule off.
+        self.round_trip_cost = None
 
     # -- construction -----------------------------------------------------
     @classmethod
@@ -316,6 +320,16 @@ class Firm:
         out: list[TradeProposal] = []
         for proposal in raw:
             reference = proposal.reference_price or price(market.mark(proposal.symbol))
+            if proposal.side_enum.sign > 0 and proposal.quantity > 0:
+                why_not = self._lessons(proposal, market)
+                if why_not:
+                    proposal.risk_verdict = RiskVerdict.BLOCK.value
+                    proposal.risk_reason = why_not
+                    proposal.quantity = ZERO
+                    proposal.notional = ZERO
+                    proposal.status = "rejected"
+                    out.append(proposal)
+                    continue
             reviewed = self._review(proposal, reference, positions, equity)
             if reviewed is not None:
                 out.append(reviewed)
@@ -492,6 +506,75 @@ class Firm:
         if decision.blocked:
             proposal.status = "rejected"
         return proposal
+
+    # -- lessons from other trading villages (2026-10-05) -----------------
+    #: Bars over which a trade's typical move is measured against its costs.
+    EDGE_BARS = 16
+    #: The typical move must be at least this many round trips of cost.
+    EDGE_COST_MULTIPLE = D("1.5")
+
+    def _lessons(self, proposal, market) -> str:
+        """Shrink or refuse a new position. Returns why it is refused, or "".
+
+        Three rules from the trading villages surveyed on 2026-10-05
+        (village-health/other-trading-villages-2026-10-05.md):
+
+        * **The move must pay for the trade.** The 500-agent "Galaxy Empire"
+          village was right 51% of the time and needed about 55% to cover its
+          fees. If the symbol's typical move over the next few bars is smaller
+          than one and a half round trips of this firm's costs, there is
+          nothing to win, so the trade is refused.
+        * **Smaller after losses.** FinMem's agents grow cautious after a bad
+          run; ours bet the same size until the kill switch. Each loss in a
+          row takes 15% off a new position, down to a quarter.
+        * **Smaller when it is swinging.** A real-money fleet of 500 LLM agents
+          held about 5x leverage whatever the market did. A symbol moving more
+          than usual gets a position cut in proportion, down to a quarter.
+
+        Exits are never touched: the way out is always open.
+        """
+        try:
+            closes = [float(c) for c in (market.closes(proposal.symbol) or []) if c]
+        except Exception:  # noqa: BLE001 - no history, judge on losses alone
+            closes = []
+        cost = getattr(self, "round_trip_cost", None)
+        if cost and len(closes) > self.EDGE_BARS + 20:
+            n = self.EDGE_BARS
+            moves = sorted(abs(closes[i + n] / closes[i] - 1)
+                           for i in range(max(0, len(closes) - 200 - n), len(closes) - n))
+            typical = moves[len(moves) // 2]
+            if typical < float(cost) * float(self.EDGE_COST_MULTIPLE):
+                return (f"edge below costs: {proposal.symbol} typically moves "
+                        f"{typical * 100:.2f}% over {n} bars, less than "
+                        f"{float(self.EDGE_COST_MULTIPLE)}x the {float(cost) * 100:.2f}% "
+                        "round trip")
+
+        factor, notes = D("1"), []
+        losses = int(getattr(self.record, "consecutive_losses", 0) or 0)
+        if losses > 0:
+            f = max(D("0.25"), D("1") - D("0.15") * losses)
+            factor *= f
+            notes.append(f"{losses} loss(es) in a row: size x{f}")
+        if len(closes) > 60:
+            rets = [closes[i] / closes[i - 1] - 1 for i in range(1, len(closes))]
+            recent, usual = rets[-20:], rets[-200:]
+
+            def sd(x):
+                m = sum(x) / len(x)
+                return (sum((v - m) ** 2 for v in x) / len(x)) ** 0.5
+            now, normal = sd(recent), sd(usual)
+            if now > 0 and normal > 0 and now > normal:
+                f = max(D("0.25"), D(str(round(normal / now, 4))))
+                factor *= f
+                notes.append(f"swinging {now / normal:.1f}x its usual: size x{f}")
+        if factor < 1:
+            proposal.quantity = qty(D(proposal.quantity) * factor)
+            if D(proposal.reference_price or 0) > 0:
+                proposal.notional = money(proposal.quantity * D(proposal.reference_price))
+            proposal.rationale = ((proposal.rationale or "") + " | " + "; ".join(notes)).strip(" |")
+            if proposal.quantity <= 0:
+                return "sized to nothing: " + "; ".join(notes)
+        return ""
 
     def _daily_loss_halt(self, equity) -> str:
         """Why the firm may not open risk today, or "" if it may."""
