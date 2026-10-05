@@ -687,3 +687,52 @@ def test_a_capital_move_records_how_its_score_was_computed(store, firm_record,
     # And it never raises on a card that has no components at all.
     assert _basis(Scorecard(firm_key="c", firm_id=1)) in (
         "basis unrecorded", "raw return (no benchmark)")
+
+
+def test_a_firm_back_from_the_gulag_that_loses_more_takes_the_next_strike(
+    store, firm_record, market, trading_config, gate
+):
+    """firm_d_value_iii ran from 6 to 14 losses in a row after its sentence with
+    no further strike, because the slump it came back into was "already paid for"."""
+    store.update_firm_fields(firm_record.id, high_water_mark=Decimal("500000.00"))
+    brokerage = Brokerage(store, trading_config, gate)
+    brokerage.oversee(market)
+    assert store.strike_state(firm_record.id)["strikes"] == 1
+
+    # Sentence served, still in the same slump: on probation, not struck again.
+    store.release_from_gulag(firm_record.id)
+    store.set_firm_status(firm_record.id, FirmStatus.ACTIVE.value)
+    brokerage.oversee(market)
+    brokerage.oversee(market)
+    assert store.strike_state(firm_record.id)["strikes"] == 1
+    assert store.events(event_type="probation")
+
+    # Then it gets worse: that is the next strike.
+    store.update_firm_fields(firm_record.id, high_water_mark=Decimal("5000000.00"))
+    brokerage.oversee(market)
+    assert store.strike_state(firm_record.id)["strikes"] == 2
+    assert store.require_firm_by_id(firm_record.id).status == FirmStatus.PAUSED.value
+
+
+def test_a_firm_that_beat_its_universe_but_trailed_spy_is_scored_against_spy(store, trading_config):
+    """The village's goal is beating SPY: the higher of the two bars wins."""
+    evaluator = Evaluator(store, trading_config)
+    card = Scorecard(firm_key="w", firm_id=1, return_pct=D("4"),
+                     benchmark_pct=D("1"), spy_pct=D("10"))
+    score, components = evaluator.score(card)
+    assert "excess over SPY" in components["return_basis"]
+    assert score < D(50)
+    beat = Scorecard(firm_key="w", firm_id=1, return_pct=D("4"),
+                     benchmark_pct=D("1"), spy_pct=D("-3"))
+    assert "own universe" in evaluator.score(beat)[1]["return_basis"]
+
+
+def test_paying_heavy_fees_costs_score_points(store, trading_config):
+    evaluator = Evaluator(store, trading_config)
+    calm = Scorecard(firm_key="q", firm_id=1, return_pct=D("0"), benchmark_pct=D("0"),
+                     capital_base=D("10000"), fees=D("0"))
+    churn = Scorecard(firm_key="q", firm_id=1, return_pct=D("0"), benchmark_pct=D("0"),
+                      capital_base=D("10000"), fees=D("300"))
+    a, _ = evaluator.score(calm)
+    b, parts = evaluator.score(churn)
+    assert b == a - D(3) and D(parts["fees"]) == D(-3)

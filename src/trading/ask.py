@@ -225,8 +225,45 @@ def _profile(firm, card) -> dict:
             "scorecard": _card_summary(card)}
 
 
+def _stakes(db, firm, config=None) -> dict:
+    """What the firm is playing for, stated to the advisers who steer it.
+
+    The score already moved capital, and the strikes already suspended and
+    ended firms, but no adviser was ever told: they were optimising a number
+    without knowing what it bought or cost. Every figure here is the live rule.
+    """
+    from .config import TradingConfig
+    from .firms.strikes import StrikeConfig
+
+    cfg = config or TradingConfig()
+    kill, strikes = cfg.kill, StrikeConfig()
+    try:
+        row = db.query_one("SELECT strikes FROM firm_strikes WHERE firm_id = ?", (firm.id,))
+        struck = int((row or {}).get("strikes") or 0)
+    except Exception:  # noqa: BLE001 - the stakes are still the stakes
+        struck = 0
+    return {
+        "goal": "beat SPY after costs; the score measures your return against the "
+                "higher of SPY and your own universe bought and held",
+        "reward": f"a score of {cfg.brokerage.good_score} or more asks the council for more "
+                  "capital (up to a cap), and earns tokens and titles on the leaderboard",
+        "cut": f"a score of {cfg.brokerage.poor_score} or less has capital taken away "
+               "automatically",
+        "strikes": f"breaking a kill rule (drawdown over {kill.max_drawdown_pct}%, more than "
+                   f"{kill.max_consecutive_losses} losses in a row, win rate under "
+                   f"{kill.min_win_rate_pct}%) is a strike: {strikes.gulag_bars_first} bars "
+                   f"suspended, then {strikes.gulag_bars_second}, and strike "
+                   f"{strikes.max_strikes} ends the firm; losing more after a suspension "
+                   "is a new strike",
+        "strikes_so_far": struck,
+        "costs": "every trade pays fees and the spread; trading often for small edges "
+                 "loses money here",
+    }
+
+
 def _with_advice(db, firm, profile: dict) -> dict:
-    return {**profile, "advice_already_given": advice_for(db, firm.id)}
+    return {**profile, "stakes": _stakes(db, firm),
+            "advice_already_given": advice_for(db, firm.id)}
 
 
 def _estates_ask(eco) -> list:

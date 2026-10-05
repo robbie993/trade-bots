@@ -83,6 +83,10 @@ class Scorecard:
     #: bars, equal-weighted. `None` when it could not be priced, which is a
     #: refusal rather than a zero — see `Evaluator.score`.
     benchmark_pct: Optional[Decimal] = None
+    #: SPY bought and held over the same bars. The village's goal is to beat
+    #: it, so the score's return term is measured against whichever of this and
+    #: the firm's own universe is higher.
+    spy_pct: Optional[Decimal] = None
     components: dict = field(default_factory=dict)
     as_of: Optional[datetime] = None
     # Open positions the feed could not price. Everything above is computed
@@ -455,8 +459,23 @@ class Evaluator:
         )
         card.sufficient_data = card.closed_trades >= self.config.kill.minimum_trades
         card.benchmark_pct = self._benchmark_pct(firm, market)
+        card.spy_pct = self._spy_pct(firm, market)
         card.score, card.components = self.score(card)
         return card
+
+    def _spy_pct(self, firm: FirmRecord, market: MarketData) -> Optional[Decimal]:
+        """SPY bought and held over the bars this firm has lived, or None."""
+        from ..benchmark import bars_lived, buy_and_hold
+
+        bars = bars_lived(self.store, firm.id)
+        if bars <= 0:
+            return None
+        held = buy_and_hold(market, "SPY", D(10_000), bars,
+                            slippage_bps=self.config.data.slippage_bps,
+                            fee_bps=self.config.data.fee_bps)
+        if held is None:
+            return None
+        return percent((held - D(10_000)) / D(10_000) * D(100))
 
     def _benchmark_pct(self, firm: FirmRecord, market: MarketData) -> Optional[Decimal]:
         """Equal-weighted buy-and-hold of this firm's universe, over the bars
@@ -521,6 +540,12 @@ class Evaluator:
         if card.benchmark_pct is not None:
             excess = D(card.return_pct) - D(card.benchmark_pct)
             basis = f"excess over own universe ({card.benchmark_pct}%)"
+        # The village exists to beat SPY. A desk that beat its own universe
+        # and still trailed SPY has not done the job, so the higher bar wins.
+        spy = getattr(card, "spy_pct", None)
+        if spy is not None and (card.benchmark_pct is None or D(spy) > D(card.benchmark_pct)):
+            excess = D(card.return_pct) - D(spy)
+            basis = f"excess over SPY ({spy}%)"
         components = {
             "base": D(50),
             # 1% of excess return is worth 2 points, capped so one lucky month
@@ -530,6 +555,14 @@ class Evaluator:
             # a firm can lose all of its points to risk-taking alone.
             "drawdown": -_cap(card.drawdown_pct, ZERO, D(50)),
         }
+        # **Churn costs points on top of costing money.** Fees are already in
+        # the return, but a desk paying 2% of its capital in fees to stand
+        # still is the failure that sank the 500-agent "Galaxy Empire" village
+        # (51% accuracy against ~55% needed to cover fees). 1% of capital
+        # paid in fees is a point, capped at 10.
+        base = D(card.capital_base or 0)
+        if base > 0 and D(card.fees or 0) > 0:
+            components["fees"] = -_cap(D(card.fees) / base * D(100), ZERO, D(10))
         if card.sufficient_data:
             # The win rate waits for its own sample: wins and losses, not
             # scratches, the same gate the kill switch applies to it.

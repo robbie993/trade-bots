@@ -215,3 +215,11 @@ def test_advisers_see_fills_not_a_second_trades_count():
     summary = ask._card_summary(card)
     assert summary["fills"] == 80 and summary["closed_trades"] == 2
     assert "trades" not in summary
+
+
+def test_advisers_are_told_what_the_firm_plays_for(ecosystem):
+    eco = ecosystem
+    firm = _firm(eco)
+    stakes = ask._with_advice(eco.db, firm, {})["stakes"]
+    assert "SPY" in stakes["goal"] and "strike" in stakes["strikes"]
+    assert stakes["strikes_so_far"] == 0

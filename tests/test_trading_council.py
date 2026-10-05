@@ -68,6 +68,7 @@ def raise_evidence(**overrides) -> CouncilEvidence:
         allocation=D("50000"),
         initial_allocation=D("50000"),
         new_allocation=D("55000"),
+        equity=D("56000"),
         headroom=D("100000"),
         max_allocation=D("150000"),
         good_score=D("60"),
@@ -610,3 +611,10 @@ def _make_a_winner(eco, firm_key: str) -> None:
                  price=D("110") if index % 5 else D("98"), fee=D("0")),
         )
         firm = eco.store.require_firm_by_id(firm.id)
+
+
+def test_a_broke_firm_is_never_bailed_out_by_the_council(council):
+    """Galaxy Empire's 500 agents lost 70% live; bailouts were one of three causes."""
+    for broke in (raise_evidence(allocation=D("0")), raise_evidence(equity=D("0"))):
+        ruling = council.rule(broke)
+        assert ruling.verdict == DEFER and "no_bailout" in ruling.vetoes
