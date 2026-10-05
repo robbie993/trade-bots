@@ -37,7 +37,7 @@ from urllib.parse import quote
 from . import intel
 from .topics import tag
 
-ARXIV = "http://export.arxiv.org/api/query?search_query={q}&sortBy=submittedDate&sortOrder=descending&max_results={n}"
+ARXIV = "https://export.arxiv.org/api/query?search_query={q}&sortBy=submittedDate&sortOrder=descending&max_results={n}"
 OPENALEX = "https://api.openalex.org/works?filter={f}&per-page={n}&sort={sort}"
 S2 = ("https://api.semanticscholar.org/graph/v1/paper/search?query={q}&limit={n}"
       "&year={years}&fields=title,url,venue,year,publicationDate,abstract,authors,"
@@ -178,7 +178,7 @@ class PaperScout:
 
             def get_text(url):
                 req = urllib.request.Request(url, headers=HEADERS)
-                with urllib.request.urlopen(req, timeout=20,  # noqa: S310 - fixed hosts
+                with urllib.request.urlopen(req, timeout=30,  # noqa: S310 - fixed hosts
                                             context=_ssl_context()) as r:
                     return r.read().decode("utf-8", "replace")
         self._get = get_text
@@ -194,12 +194,18 @@ class PaperScout:
         # each run asks half the arXiv questions and one landmark question, in
         # turn: every arXiv query every 12 hours, every landmark every 72.
         turn, self._turn = self._turn, self._turn + 1
+        # Railway shares its outbound address, so arXiv's 3 s is not enough: wait
+        # 5 s, and once arXiv says 429 (too many requests) leave it alone until
+        # the next run rather than hammering it with the rest of the list.
         for label, q in ARXIV_QUERIES[turn % 2::2]:
             try:
                 batches.append((label, parse_arxiv(self._get(ARXIV.format(q=quote(q), n=8)))))
             except Exception as exc:  # noqa: BLE001 - one query is not the scout
                 failed.append(f"arXiv ({label}): {str(exc)[:80]}")
-            time.sleep(3)          # arXiv asks for a pause between API calls
+                if "429" in str(exc) or getattr(exc, "code", None) == 429:
+                    failed.append("arXiv: rate-limited, the rest wait for the next run")
+                    break
+            time.sleep(5)          # arXiv asks for a pause between API calls
         for label, words in OPENALEX_SEARCHES:
             f = (f"title_and_abstract.search:{words},from_publication_date:{_since(120)},"
                  "primary_topic.field.id:20")
