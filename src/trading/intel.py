@@ -54,6 +54,22 @@ def recent(db, source: str = "", limit: int = 20) -> list:
     return out
 
 
+def most_scored(db, source: str, first_seen_after: str, limit: int = 10) -> list:
+    """The highest-scored finds first seen after a time (papers: most cited)."""
+    try:
+        rows = db.query(
+            "SELECT * FROM intel WHERE source = ? AND first_seen > ? AND score IS NOT NULL"
+            " ORDER BY score DESC, id DESC LIMIT ?", (source, first_seen_after, limit))
+    except Exception:  # noqa: BLE001 - an unmigrated ledger has found nothing
+        return []
+    for r in rows:
+        try:
+            r["detail"] = json.loads(r.get("detail") or "{}")
+        except (TypeError, ValueError):
+            r["detail"] = {}
+    return rows
+
+
 def sources(db) -> list:
     try:
         return [r["source"] for r in db.query(
@@ -62,4 +78,4 @@ def sources(db) -> list:
         return []
 
 
-__all__ = ["recent", "sources", "upsert"]
+__all__ = ["most_scored", "recent", "sources", "upsert"]

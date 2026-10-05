@@ -273,11 +273,23 @@ def _research_review(eco, now: datetime) -> list:
     from . import intel, shortlist
 
     finds = []
-    for r in intel.recent(eco.db, "papers", limit=12):
+    # Newest is not best: half the papers are the most-cited ones the scout
+    # met in the last three days (the landmarks), half the newest preprints.
+    since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
+    papers, keys = [], set()
+    for r in (intel.most_scored(eco.db, "papers", since, limit=6)
+              + intel.recent(eco.db, "papers", limit=12)):
+        if r["item_key"] not in keys and len(papers) < 12:
+            keys.add(r["item_key"])
+            papers.append(r)
+    for r in papers:
         d = r.get("detail") or {}
-        finds.append({"source": "paper", "name": r.get("title"), "url": r.get("url"),
-                      "venue": d.get("venue"), "published": d.get("published"),
-                      "abstract": (d.get("abstract") or "")[:600]})
+        find = {"source": "paper", "name": r.get("title"), "url": r.get("url"),
+                "venue": d.get("venue"), "published": d.get("published"),
+                "abstract": (d.get("abstract") or "")[:600]}
+        if r.get("score") is not None:
+            find["citations"] = int(r["score"])
+        finds.append(find)
     for source in ("github", "huggingface_models", "huggingface_datasets"):
         for r in intel.recent(eco.db, source, limit=8):
             finds.append({"source": source, "name": r["item_key"], "url": r.get("url"),
