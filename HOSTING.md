@@ -436,6 +436,7 @@ reaches the open internet on its own. All six are on for the Railway worker:
 | `TRADE_REPO_SCOUT_ENABLED` | hourly GitHub and Hugging Face finds, recorded and never run (`repo_scout.py`) |
 | `TRADE_ASK_ENABLED` | firms file questions for outside minds (`ask.py`); answered from the operator's PC |
 | `TRADE_PAPER_SCOUT_ENABLED` | every six hours, new arXiv and OpenAlex papers on trading, markets and AI agents (`paper_scout.py`) |
+| `TRADE_CONGRESS_ENABLED` | stock trades members of Congress disclosed, called for three days after they became public and scored by the idea lab (`congress.py`); paper only, see the note there on 5 U.S.C. 13107(c) |
 
 `TRADE_HISTORY_DAYS=720` is required on a 15-minute bar. It is a bar count on
 intraday bars, and evolution's split needs a 90-bar warmup and a 150-bar purge

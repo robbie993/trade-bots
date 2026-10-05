@@ -144,6 +144,7 @@ class Ecosystem:
         self._meme_radar = None
         self._repo_scout = None
         self._paper_scout = None
+        self._congress = None
         self._crypto_pulse = None
         self._shadow = None
         self._idea_lab = None
@@ -331,6 +332,19 @@ class Ecosystem:
 
             self._repo_scout = RepoScout(self.db)
         return self._repo_scout
+
+    @property
+    def congress(self):
+        """Congress members' disclosed stock trades, or None unless TRADE_CONGRESS_ENABLED."""
+        if self._congress is None:
+            import os
+
+            if not os.environ.get("TRADE_CONGRESS_ENABLED", "").strip():
+                return None
+            from .congress import CongressDesk
+
+            self._congress = CongressDesk(self.signals)
+        return self._congress
 
     @property
     def crypto_pulse(self):
@@ -848,6 +862,14 @@ class Ecosystem:
                 report.signals.extend(self.crypto_pulse.run(market))
             except Exception as exc:  # noqa: BLE001 - a source, never a precondition
                 report.bot_notes.append(f"crypto pulse failed: {str(exc)[:160]}")
+        # Disclosed congressional trades, called on the day they became
+        # public. Mostly names the village does not trade, so mostly the idea
+        # lab's to test. Off unless TRADE_CONGRESS_ENABLED.
+        if self.congress is not None:
+            try:
+                report.signals.extend(self.congress.run(market))
+            except Exception as exc:  # noqa: BLE001 - a source, never a precondition
+                report.bot_notes.append(f"congress desk failed: {str(exc)[:160]}")
         if self.paper_scout is not None:
             try:
                 report.signals.extend(self.paper_scout.run())
