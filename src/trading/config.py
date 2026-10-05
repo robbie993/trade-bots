@@ -81,6 +81,15 @@ class FirmDefaults:
         default_factory=lambda: _env_decimal("TRADE_MIN_CONFIDENCE", "55.0")
     )
     venue: str = field(default_factory=lambda: os.environ.get("TRADE_VENUE", "paper"))
+    # The daily loss halt: once equity is this fraction below where the day
+    # (UTC) began, the firm opens nothing new until tomorrow; exits still go
+    # through. Borrowed from the open-source intraday bots the repo scout found
+    # (warrenduffer, kairos), which keep the model away from this brake. The
+    # kill switch judges a strategy over weeks; this stops one bad afternoon
+    # from compounding. 0 turns it off.
+    max_daily_loss_pct: Decimal = field(
+        default_factory=lambda: _env_decimal("TRADE_MAX_DAILY_LOSS_PCT", "0.03")
+    )
 
 
 @dataclass(frozen=True)

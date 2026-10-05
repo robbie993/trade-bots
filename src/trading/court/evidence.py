@@ -66,6 +66,8 @@ class Evidence:
     unknown_genes: list = field(default_factory=list)
     out_of_range: list = field(default_factory=list)
     syntax_error: Optional[str] = None
+    #: Lines that read prices from after the bar being decided (see `_peeks_ahead`).
+    lookahead: list = field(default_factory=list)
     notes: list = field(default_factory=list)
 
     @property
@@ -91,6 +93,7 @@ class Evidence:
             "unknown_genes": self.unknown_genes,
             "out_of_range": self.out_of_range,
             "syntax_error": self.syntax_error,
+            "lookahead": self.lookahead,
             "notes": self.notes,
         }
 
@@ -205,6 +208,14 @@ def _read_python(text: str, evidence: Evidence) -> None:
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id in DANGEROUS_CALLS:
                 evidence.dangerous_calls.append(node.func.id)
+        peek = _peeks_ahead(node)
+        if peek:
+            evidence.lookahead.append(f"line {getattr(node, 'lineno', '?')}: {peek}")
+
+    if evidence.lookahead:
+        evidence.notes.append(
+            "reads the future (look-ahead): " + "; ".join(evidence.lookahead[:5])
+            + " — a backtest that sees tomorrow's price is not a result")
 
     for node in tree.body:
         if not isinstance(node, ast.Assign):
@@ -242,6 +253,48 @@ def _read_python(text: str, evidence: Evidence) -> None:
         evidence.notes.append(
             "no module-level GENOME dict found; the court has nothing to backtest"
         )
+
+
+def _positive_int(node) -> bool:
+    return (isinstance(node, ast.Constant) and isinstance(node.value, int)
+            and not isinstance(node.value, bool) and node.value > 0)
+
+
+def _negative_int(node) -> bool:
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return _positive_int(node.operand)
+    return (isinstance(node, ast.Constant) and isinstance(node.value, int)
+            and not isinstance(node.value, bool) and node.value < 0)
+
+
+def _peeks_ahead(node) -> str:
+    """The pandas idioms that hand a backtest a price it could not have had.
+
+    The static half of `peekproof`, a look-ahead linter the repo scout found
+    on GitHub: read, not installed, and these are its commonest catches.
+    """
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        name, args = node.func.attr, node.args
+        kw = {k.arg: k.value for k in node.keywords if k.arg}
+        if name == "shift" and ((args and _negative_int(args[0]))
+                                or _negative_int(kw.get("periods"))):
+            return ".shift() by a negative number pulls later rows back"
+        if name == "rolling" and isinstance(kw.get("center"), ast.Constant) \
+                and kw["center"].value is True:
+            return "rolling(center=True) averages in the bars after each row"
+        if name in ("bfill", "backfill"):
+            return f".{name}() fills a gap with a later value"
+        method = kw.get("method")
+        if name == "fillna" and isinstance(method, ast.Constant) \
+                and method.value in ("bfill", "backfill"):
+            return "fillna(method='bfill') fills a gap with a later value"
+    if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+            and node.value.attr == "iloc":
+        index = node.slice
+        if isinstance(index, ast.BinOp) and isinstance(index.op, ast.Add) \
+                and _positive_int(index.right):
+            return ".iloc[i + n] reads a row after the current one"
+    return ""
 
 
 def _check_genes(evidence: Evidence) -> None:
