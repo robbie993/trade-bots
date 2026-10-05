@@ -125,6 +125,74 @@ def research_shortlist() -> JSONResponse:
                                    for e in entries]})
 
 
+def scoreboard_rows(eco, market) -> dict:
+    """Every funded firm against SPY over its own life, the village total, and
+    the too-good-to-be-true alarms. Shared by the JSON route and the page.
+
+    For people only. The firms and their advisers are never shown this table:
+    a leaderboard in front of the players turns into a target (2026-10-05)."""
+    from . import alarms
+    from .sandbox.ideas import scoreboard as lab_scoreboard
+
+    records = eco.store.firms()
+    cards = eco.brokerage.evaluator.evaluate_all(records, market)
+    rows, equity, capital = [], ZERO, ZERO
+    for card in cards:
+        firm = next((f for f in records if f.id == card.firm_id), None)
+        if firm is None or not firm.is_active or D(firm.allocation) <= 0:
+            continue
+        spy = card.spy_pct
+        excess = (D(card.return_pct) - D(spy)) if spy is not None else None
+        equity += D(card.equity)
+        capital += D(firm.allocation)
+        rows.append({
+            "firm": firm.firm_key,
+            "return_pct": str(card.return_pct),
+            "spy_pct": str(spy) if spy is not None else None,
+            "excess_pct": str(excess.quantize(D("0.01"))) if excess is not None else None,
+            "beats_spy": bool(excess is not None and excess > 0),
+            "own_universe_pct": (str(card.benchmark_pct)
+                                 if card.benchmark_pct is not None else None),
+            "drawdown_pct": str(card.drawdown_pct),
+            "closed_trades": card.closed_trades,
+            "fills": card.trades,
+            "fees": str(money(D(card.fees))),
+            "equity": str(money(D(card.equity))),
+            "sufficient_data": bool(card.sufficient_data),
+        })
+    rows.sort(key=lambda r: D(r["excess_pct"]) if r["excess_pct"] is not None else D(-999),
+              reverse=True)
+    found = alarms.firm_alarms(cards) + alarms.scanner_alarms(lab_scoreboard(eco.db))
+    return {
+        "as_of": str(market.as_of()),
+        "village": {
+            "equity": str(money(equity)),
+            "capital": str(money(capital)),
+            "return_pct": str(((equity / capital - 1) * 100).quantize(D("0.01")))
+            if capital > 0 else None,
+            "firms_beating_spy": sum(1 for r in rows if r["beats_spy"]),
+            "firms": len(rows),
+        },
+        "firms": rows,
+        "alarms": [{"who": a.who, "kind": a.kind, "what": a.what, "check": a.check}
+                   for a in found],
+    }
+
+
+@router.get("/api/scoreboard")
+def scoreboard() -> JSONResponse:
+    """Funded firms against SPY, best first, with the too-good-to-be-true alarms."""
+    eco = ecosystem()
+    try:
+        market = eco.market()
+        if not prices_ready(market):
+            return _warming()
+        payload = scoreboard_rows(eco, market)
+    finally:
+        eco.db.close()
+    return JSONResponse(payload)
+
+
 @router.get("/api/status")
 def status() -> JSONResponse:
     """The one-screen health check, as JSON.

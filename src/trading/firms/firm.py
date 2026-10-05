@@ -69,6 +69,9 @@ class Firm:
         #: ``() -> Decimal or None``: the firm's equity when the UTC day began,
         #: for the daily loss halt. None where there is no ledger to ask.
         self.day_open_equity = None
+        #: ``() -> int``: buy fills since the UTC day began, for the trade cap.
+        #: None where there is no ledger to ask.
+        self.opens_today = None
         #: Fraction of a position's value one round trip costs here (fees and
         #: spread, in and out). None where nobody has said, which turns the
         #: edge-versus-costs rule off.
@@ -481,7 +484,9 @@ class Firm:
         if self.record.status == FirmStatus.PAUSED.value and proposal.side_enum.sign > 0:
             return None
 
-        halted = self._daily_loss_halt(equity) if proposal.side_enum.sign > 0 else ""
+        halted = ""
+        if proposal.side_enum.sign > 0:
+            halted = self._daily_loss_halt(equity) or self._opens_cap()
         if halted:
             proposal.risk_verdict = RiskVerdict.BLOCK.value
             proposal.risk_reason = halted
@@ -575,6 +580,20 @@ class Firm:
             if proposal.quantity <= 0:
                 return "sized to nothing: " + "; ".join(notes)
         return ""
+
+    def _opens_cap(self) -> str:
+        """Why the firm may not open another position today, or "" if it may."""
+        cap = int(getattr(self.risk_manager.limits, "max_opens_per_day", 0) or 0)
+        if cap <= 0 or self.opens_today is None:
+            return ""
+        try:
+            opened = int(self.opens_today() or 0)
+        except Exception:  # noqa: BLE001 - a missing ledger never blocks a trade
+            return ""
+        if opened < cap:
+            return ""
+        return (f"trade cap: {opened} positions opened today (limit {cap}); "
+                "exits only until tomorrow")
 
     def _daily_loss_halt(self, equity) -> str:
         """Why the firm may not open risk today, or "" if it may."""

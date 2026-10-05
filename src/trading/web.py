@@ -367,7 +367,8 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<form method=post action='/village/actions/apply-approvals'>"
         "<button>Carry out approved decisions</button></form>"
         "<a href='/village/flow'><button>Walk the village &rarr;</button></a>"
-        "<a href='/village/solar'><button>Solar system &rarr;</button></a>",
+        "<a href='/village/solar'><button>Solar system &rarr;</button></a>"
+        "<a href='/village/scoreboard'><button>Vs SPY &rarr;</button></a>",
     )
     if not reconciliation.ok:
         header += (
@@ -2395,6 +2396,57 @@ def flow_page() -> HTMLResponse:
     return HTMLResponse(
         html_page.body.decode().replace("<body>", f"<body data-after='{after}'>")
     )
+
+
+@router.get("/village/scoreboard", response_class=HTMLResponse)
+def scoreboard_page() -> HTMLResponse:
+    """Every funded firm against SPY, losses as plain as wins.
+
+    For people, not for the firms: nothing here is fed back to a firm or its
+    advisers. The alarms list the numbers that look too good, which in this
+    village means "check it", never "copy it"."""
+    from ..agents.web import page
+    from .api import scoreboard_rows
+
+    eco = ecosystem()
+    try:
+        market = eco.market()
+        if not prices_ready(market):
+            return page("The Village — warming up", _warming_panel("Vs SPY"))
+        s = scoreboard_rows(eco, market)
+    finally:
+        eco.db.close()
+    v = s["village"]
+    rows = [{
+        "firm": f"<a href='/village/firms/{e(r['firm'])}'>{e(r['firm'])}</a>",
+        "return": _signed(r["return_pct"]),
+        "SPY same days": _signed(r["spy_pct"]) if r["spy_pct"] is not None else "—",
+        "vs SPY": _signed(r["excess_pct"]) if r["excess_pct"] is not None else "—",
+        "own universe": _signed(r["own_universe_pct"]) if r["own_universe_pct"] else "—",
+        "drawdown": f"{e(r['drawdown_pct'])}%",
+        "closed / fills": f"{r['closed_trades']} / {r['fills']}",
+        "fees": f"${e(r['fees'])}",
+        "enough data": "yes" if r["sufficient_data"] else "not yet",
+    } for r in s["firms"]]
+    alarms = [{"who": e(a["who"]), "looks like": e(a["what"]), "check": e(a["check"])}
+              for a in s["alarms"]]
+    body = "".join([
+        "<h1>The village against SPY</h1>",
+        f"<p class=muted>as of {e(s['as_of'])} · {v['firms_beating_spy']} of {v['firms']} funded "
+        f"firm(s) ahead of SPY over their own lives · village "
+        f"{_signed(v['return_pct']) if v['return_pct'] is not None else '—'} on "
+        f"${e(v['capital'])}</p>",
+        _panel("Firms, best first", _table(rows) + "<p class=muted>Each firm is compared with SPY "
+               "bought and held over exactly the bars it has traded, after its own costs. "
+               "Under the sample gate a lead is luck until shown otherwise.</p>"),
+        _panel("Too good to be true?", (_table(alarms) if alarms else
+               "<p>Nothing looks too good right now.</p>") +
+               "<p class=muted>A 90%+ win rate or a big lead on a handful of trades is how "
+               "martingale, grid and leverage tricks look (atlas_research/scam_tests). "
+               "These are flags for a person to check; they move no money.</p>"),
+        "<p><a href='/village'>&larr; Mission Control</a></p>",
+    ])
+    return page("Vs SPY — the Village", body)
 
 
 @router.get("/village/solar", response_class=HTMLResponse)

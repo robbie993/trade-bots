@@ -407,6 +407,40 @@ def _research_review(eco, now: datetime) -> list:
     return [f"the village asked outside minds to review {len(finds)} research find(s) (#{q})"] if q else []
 
 
+def _recent_losses(db, firm, limit: int = 4, cap: int = 300) -> list:
+    """The firm's latest losing exits, each with the argument it bought on.
+
+    Every proposal already carries the bull and bear case from the firm's own
+    debate, and nothing read them back. TradingAgents' point, borrowed: a review
+    that sees "lost 2% on JNJ" learns little; one that also sees "bought because
+    RSI was oversold, against a bear case that the trend was down" can say which
+    side was right."""
+    try:
+        sells = db.query(
+            "SELECT symbol, realized_pnl, proposal_id, as_of FROM fills WHERE firm_id = ? "
+            "AND side = 'sell' AND realized_pnl < 0 ORDER BY id DESC LIMIT ?",
+            (firm.id, limit)) or []
+    except Exception:  # noqa: BLE001 - no ledger, no lessons
+        return []
+    out = []
+    for s in sells:
+        try:
+            buy = db.query_one(
+                "SELECT bull_case, bear_case, debate_winner, rationale FROM trade_proposals "
+                "WHERE firm_id = ? AND symbol = ? AND side = 'buy' AND id < ? "
+                "ORDER BY id DESC LIMIT 1",
+                (firm.id, s["symbol"], int(s.get("proposal_id") or 10 ** 12))) or {}
+        except Exception:  # noqa: BLE001
+            buy = {}
+        out.append({
+            "symbol": s["symbol"], "lost": str(s["realized_pnl"]), "closed": str(s["as_of"]),
+            "bull_case": (buy.get("bull_case") or "")[:cap],
+            "bear_case": (buy.get("bear_case") or "")[:cap],
+            "debate_winner": buy.get("debate_winner") or "",
+        })
+    return out
+
+
 def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
     """File whatever questions are due this bar. Returns one note per question."""
     now = now or datetime.now(timezone.utc)
@@ -458,8 +492,10 @@ def consider(eco, cards_by_id: dict, now: Optional[datetime] = None) -> list:
 
         q = ask(eco.db, firm.firm_key, "review",
                 "Here are my numbers today. What is your read, and what one thing "
-                "would you look at first?",
-                profile, f"review:{firm.firm_key}:{now.strftime('%Y-%m-%d')}")
+                "would you look at first? `recent_losses` are my latest losing exits "
+                "with the bull and bear case I bought on: say which side was right.",
+                {**profile, "recent_losses": _recent_losses(eco.db, firm)},
+                f"review:{firm.firm_key}:{now.strftime('%Y-%m-%d')}")
         if q:
             notes.append(f"{firm.firm_key} asked for its weekly review (#{q})")
     return notes

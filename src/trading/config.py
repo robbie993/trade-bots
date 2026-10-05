@@ -90,6 +90,13 @@ class FirmDefaults:
     max_daily_loss_pct: Decimal = field(
         default_factory=lambda: _env_decimal("TRADE_MAX_DAILY_LOSS_PCT", "0.03")
     )
+    # New positions a firm may open (buy fills) per UTC day; exits are never
+    # counted or capped. In the real-money LLM arenas surveyed on 2026-10-05 the
+    # models that traded most lost most, and fees were a large part of why.
+    # 0 turns it off.
+    max_opens_per_day: int = field(
+        default_factory=lambda: _env_int("TRADE_MAX_OPENS_PER_DAY", 12)
+    )
 
 
 @dataclass(frozen=True)
