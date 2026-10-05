@@ -87,6 +87,10 @@ class Scorecard:
     #: it, so the score's return term is measured against whichever of this and
     #: the firm's own universe is higher.
     spy_pct: Optional[Decimal] = None
+    #: Share of this firm's open book, by value, in symbols that two or more
+    #: other active firms also hold. A village of desks all long the same few
+    #: names is one desk paying many fees. `None` when nobody looked.
+    crowded_pct: Optional[Decimal] = None
     components: dict = field(default_factory=dict)
     as_of: Optional[datetime] = None
     # Open positions the feed could not price. Everything above is computed
@@ -460,8 +464,38 @@ class Evaluator:
         card.sufficient_data = card.closed_trades >= self.config.kill.minimum_trades
         card.benchmark_pct = self._benchmark_pct(firm, market)
         card.spy_pct = self._spy_pct(firm, market)
+        card.crowded_pct = self._crowded_pct(firm, open_positions, market)
         card.score, card.components = self.score(card)
         return card
+
+    #: How many *other* active firms must hold a symbol for it to be crowded.
+    CROWD = 2
+
+    def _crowded_pct(self, firm: FirmRecord, open_positions, market: MarketData):
+        """Percent of the open book in symbols at least `CROWD` other firms hold.
+
+        Numerai pays a model for what it adds that the others do not; the
+        survey of 2026-10-05 found herding among the reasons a 500-agent
+        village lost 70% live. Here a desk is marked down for sitting where
+        the rest of the village already sits.
+        """
+        try:
+            book = {}
+            for p in open_positions:
+                book[p.symbol] = book.get(p.symbol, ZERO) + abs(p.market_value(market.mark(p.symbol)))
+            total = sum(book.values(), ZERO)
+            if total <= 0:
+                return None
+            held_by = {}
+            for other in self.store.active_firms():
+                if other.id == firm.id:
+                    continue
+                for sym in {p.symbol for p in self.store.positions(other.id) if p.is_open}:
+                    held_by[sym] = held_by.get(sym, 0) + 1
+            crowded = sum((v for s, v in book.items() if held_by.get(s, 0) >= self.CROWD), ZERO)
+            return percent(crowded / total * D(100))
+        except Exception:  # noqa: BLE001 - no crowd count, no crowd penalty
+            return None
 
     def _spy_pct(self, firm: FirmRecord, market: MarketData) -> Optional[Decimal]:
         """SPY bought and held over the bars this firm has lived, or None."""
@@ -563,6 +597,11 @@ class Evaluator:
         base = D(card.capital_base or 0)
         if base > 0 and D(card.fees or 0) > 0:
             components["fees"] = -_cap(D(card.fees) / base * D(100), ZERO, D(10))
+        # **Being different is worth something.** A book entirely in names two
+        # or more other firms hold loses 10 points; half of it, 5.
+        crowded = getattr(card, "crowded_pct", None)
+        if crowded is not None and D(crowded) > 0:
+            components["crowding"] = -_cap(D(crowded) / D(10), ZERO, D(10))
         if card.sufficient_data:
             # The win rate waits for its own sample: wins and losses, not
             # scratches, the same gate the kill switch applies to it.

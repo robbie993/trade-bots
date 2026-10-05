@@ -716,6 +716,11 @@ class Ecosystem:
         firm.recall_exit = lambda symbol, market, firm_id=record.id: (
             self._recall_exit(firm_id, symbol, market))
         firm.day_open_equity = lambda firm_id=record.id: self._day_open_equity(firm_id)
+        try:
+            data = self._costed_for(record).data
+            firm.round_trip_cost = D(2) * (D(data.fee_bps) + D(data.slippage_bps)) / D(10_000)
+        except Exception:  # noqa: BLE001 - no cost known, no edge rule
+            firm.round_trip_cost = None
         return firm
 
     def _day_open_equity(self, firm_id):

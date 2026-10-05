@@ -52,10 +52,27 @@ GUARDRAILS = (
 )
 
 
+#: Context keys a mind is never shown. The survey of other trading villages
+#: (2026-10-05) found agents that could see the ranking chased it: they copied
+#: whoever was on top and herded into the same trades. A firm's adviser sees
+#: its own score and the stakes, never where it stands against the others.
+HIDDEN = frozenset({"rank", "ranking", "leaderboard", "standings", "tokens",
+                    "token_balance", "reputation", "rivals_scores"})
+
+
+def _unranked(value):
+    if isinstance(value, dict):
+        return {k: _unranked(v) for k, v in value.items() if str(k).lower() not in HIDDEN}
+    if isinstance(value, list):
+        return [_unranked(v) for v in value]
+    return value
+
+
 def ask(db, firm_key: str, topic: str, question: str, context: dict,
         dedupe_key: str) -> Optional[int]:
     """File a question once. Returns its id, or None if it was already asked or
     too many are waiting."""
+    context = _unranked(context)
     try:
         if db.query_one("SELECT id FROM ai_questions WHERE dedupe_key = ?", (dedupe_key,)):
             return None
@@ -246,7 +263,7 @@ def _stakes(db, firm, config=None) -> dict:
         "goal": "beat SPY after costs; the score measures your return against the "
                 "higher of SPY and your own universe bought and held",
         "reward": f"a score of {cfg.brokerage.good_score} or more asks the council for more "
-                  "capital (up to a cap), and earns tokens and titles on the leaderboard",
+                  "capital (up to a cap)",
         "cut": f"a score of {cfg.brokerage.poor_score} or less has capital taken away "
                "automatically",
         "strikes": f"breaking a kill rule (drawdown over {kill.max_drawdown_pct}%, more than "
