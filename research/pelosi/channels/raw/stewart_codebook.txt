@@ -1,0 +1,626 @@
+CONGRESSIONAL COMMITTEE ASSIGNMENTS DATA 1993-2017
+Standing and Permanent Committees of the 103rd to 114th Congresses
+Codebook created: 7/20/98, Updated: 11/17/17
+
+Prof. Charles Stewart
+Jonathan Woon
+
+------------------------------------------------------------------------
+FILE DESCRIPTIONS
+
+File name                       Date Updated	   Description
+house_members_103-115-2.xls	   08/15/17         House membership data
+house_assignments_103-115-1.xls    11/17/17	    House committee assignment data
+senators_103-115-1.xls		   08/15/17         Senate membership data
+senate_assignments_103-115-1.xls   11/17/17         Senate committee assignment data
+
+Note:  I have now converted all the data files to Excel format.  The file names
+should be self-explanatory.  The first line of the data sets should have the date
+of the most recent update.  Ignore any information in the codebooks that make 
+reference to column locations, since that information is now obsolete.
+
+------------------------------------------------------------------------
+NOTE: 	All fields are aligned left. (Fields start in first column 
+of variable, trailed by spaces if necessary.)  Excel files have the variables
+in the described order.
+
+
+FORMAT SUMMARY FOR MEMBER DATA
+Variable
+
+Congress
+Office
+Identification number
+Name (Last, First, Middle)
+District/class
+State	(postal abbr.)
+State code (ICPSR)
+Party (1 letter abbr.)
+Party code
+Chamber seniority
+Chamber period code
+Chamber status code
+Notes 
+
+
+FORMAT SUMMARY FOR ASSIGNMENT DATA
+
+Variable
+
+Congress
+Committee code
+Identification number
+Name (Last, First, Middle)
+Party status code
+Rank within party status
+Date of assignment (mm/dd/yyyy)
+Date of termination (mm/dd/yyyy)
+Senior party member code
+Committee seniority
+Committee period of service code
+Committee status code (at end of congress)
+Committee continuity code (in next congress)
+Appointment citation 
+Notes 
+Committee name 
+ICPSR state code (106th Congress onward)
+District (106th Congress onward)
+Postal state code (106th Congress onward)
+
+------------------------------------------------------------------------
+DETAILED CODE DESCRIPTIONS FOR MEMBER DATA
+
+Variable
+
+CONGRESS NUMBER
+
+103	103rd (1993-1995)
+104	104th (1995-1997)
+105	105th (1997-1999)
+106	106th (1999-2001)
+107	107th (2001-2003)
+108	108th (2003-2005)
+109	109th (2005-2007)
+110	110th (2007-2009)
+111   111th (2009-2011)
+112   112th (2011-2013)
+113   113th (2013-2015)
+114   114th (2015-2017)
+115   115th (2017-2019)
+
+OFFICE 
+
+3 Representative
+4 Senate, 1st Class
+5 Senate, 2nd Class
+6 Senate, 3rd Class
+7 Delegate
+8 Resident Commissioner
+
+IDENTIFICATION NUMBER 
+
+Typically, this is the member's ICPSR number. In practice, 
+however the source for the numbers is Keith Poole's NOMINATE 
+data sets.
+
+For members without numbers, the following conventions were 
+used:
+
+Delegates/Resident Commissioners -- start with 70X001 
+for each congress, where X is the last digit of the 
+number of the congress. Members ordered by last name.
+
+
+NAME 
+
+For the most part, the names are as they appear in the 
+Congressional Directory.
+
+DISTRICT/CLASS 
+
+01-59	House Congressional Districts
+79		Delegate
+80		Resident Commissioner
+81		Senate, 1st Class
+82		Senate, 2nd Class
+83		Senate, 3rd Class
+85		House At-large District
+
+STATE
+
+Two letter postal abbreviation.
+
+STATE CODE 
+
+		New England
+		01	Connecticut
+		02	Maine
+		03	Massachusetts
+		04	New Hampshire
+		05	Rhode Island
+		06	Vermont		
+
+		Middle Atlantic
+		11 	Delaware
+		12 	New Jersey
+		13 	New York
+		14 	Pennsylvania
+
+		East North Central
+		21 	Illinois
+		22	Indiana
+		23	Michigan
+		24 	Ohio
+		25	Wisconsin
+		
+		West North Central
+		31 	Iowa
+		32	Kansas
+		33	Minnesota
+		34	Missouri
+		35	Nebraska
+		36	North Dakota
+		37	South Dakota		
+
+		Solid South
+		41	Alabama
+		42	Arkansas
+		43	Florida
+		44	Georgia
+		45	Louisiana
+		46	Mississippi
+		47	North Carolina
+		48	South Carolina
+		49	Texas
+		40	Virginia
+
+		Border States
+		51	Kentucky
+		52	Maryland
+		53	Oklahoma
+		54	Tennessee
+		56	West Virginia
+	
+		Mountain States
+		61	Arizona
+		62	Colorado
+		63	Idaho
+		64	Montana
+		65	Nevada
+		66	New Mexico
+		67	Utah
+		68	Wyoming
+
+		Pacific States
+		71	California
+		72	Oregon
+		73	Washington
+		81	Alaska
+		82	Hawaii
+	
+		Territories/Districts
+		55 	District of Columbia
+		91	Guam
+		92	Puerto Rico
+		93	Virgin Islands
+		94	American Samoa
+
+PARTY
+
+One letter abbreviation (Some minor parties violate the one letter limit.)
+
+PARTY CODE 
+
+100 	Democrat
+200	Republican
+328	Independent
+999  Unknown or minor third party
+
+CHAMBER SENIORITY 
+
+The term served in this Congress for Representatives. The 
+Year served for Senators. This variable represents total 
+(not just continuous) service in the chamber and is 
+calculated from the dates/terms of service given in the 
+Congressional Directory.
+
+PERIOD OF SERVICE IN CHAMBER 
+
+		1	Only period of House service
+		2	1st Period of House service
+		3	2nd Period of House service
+		4	3rd Period of House service
+		5	4th Period of House service
+
+		6	Only period of Senate service
+		7	1st period of Senate service
+		8	2nd period of Senate Service
+
+STATUS OF MEMBER IN NEXT CONGRESS
+
+		1 	Continued in next congress
+		2	Defeated for election to next congress
+		3	Defeated for nomination to next congress
+		4	Elected to another federal post (Senate, President...)
+		5	Elected to a state or local post (governor, mayor...)
+		6	Appointed to another federal post (cabinet...)
+		7	Appointed to a state or local post
+		8	Retired from public life
+		9 	Unsuccessful contest for another office
+		0	Inapplicable. Member died or left chamber before the 		
+		end of this congress.
+
+NB: 0 would be used if a member resigned midterm to accept 
+an appointment to another post, such as a cabinet 
+position. 
+
+
+------------------------------------------------------------------------
+DETAILED CODE DESCRIPTIONS FOR ASSIGNMENT DATA
+
+Variable
+
+CONGRESS 
+
+Same as member data set.
+
+COMMITTEE CODE 
+
+See list at the end of this document for committee codes. 
+The same set of codes was used for all congresses 
+under consideration. Even though jurisdictions and names of 
+committees changed at the start of the 104th Congress, the 
+same committee codes were used. For example, the Armed 
+Services committee became the National Security committee, 
+but both use the same committee code.
+
+IDENTIFICATION NUMBER
+
+Same as member data set.
+
+NAME 
+
+Same as member data set.
+
+PARTY STATUS CODE 
+
+		Original appointments
+		1	Majority
+		2	Minority
+		3	Other party
+
+		Members added to committees
+		4	Majority addition
+		5	Minority addition
+
+		Members replacing departed members
+		6	Majority replacement
+		7 	Minority replacement
+
+		Other
+		8	Other party additions or replacemnts
+		0	Inapplicable; no committee assignment
+
+RANK WITHIN PARTY STATUS 
+
+Original rankings come from the Resolution appointed the 
+members to committee.
+
+Additions are numbered starting after the original number of 
+appointments. For example: a committee has 10 members and 1 
+member is added midterm. The additional member would be 
+ranked 11, but still categorized as an Addition under Party 
+Status.
+
+Additions and replacements are also ranked according to date 
+of assignment, then the order which they are listed on the 
+resolution.
+
+Sometimes the "Notes" column will record the fact that an 
+appointment resolution specified that a newly-appointed member
+would rank in the middle of existing members.  The ranking in
+this data set does not reflect these special considerations.
+
+
+
+DATE OF ASSIGNMENT (VAR 23-25)
+
+The date is the internal Excel representation of the calendar date.  
+Exercise caution in using this date in other programs.
+
+DATE OF TERMINATION (VAR26-28)
+
+Same format as Date of Assignment. Dates used 
+typically follow the rules set forth in the original 
+codebook. The following rules are a combination of the 
+codebook and the preface to Garrison Nelson's Committees in 
+the U.S. Congress, Volume 1.
+
+For deaths or resignations from the chamber, the date found 
+in the front of the Congressional Directory is used. This 
+also applies to members that change party affiliations.
+For in-session resignations, the date that the resignation 
+letter appears in the Congressional Record is used unless 
+the letter mentions a specific date. This applies mainly to 
+the House.
+
+For House committee assignments that last until the end of 
+the congress, the closing date of the congress is used. The 
+Twentieth Amendment sets this date as the January 3rd in odd 
+numbered years.
+
+The closing date of the term is also used for members in 
+either chamber that are not assigned to committee.
+
+In the Senate, the resolutions appointing members to 
+committees will often list the whole committee roster. The 
+date the resolution appears naming successors to the 
+committee is used. 
+
+If a Senate committee assignment lasts until the end of 
+congress AND the member continues in the next congress, the 
+naming of successors in the next congress is used as the 
+termination date. If the senator does not continue in the 
+next congress, the January 3rd closing date is used.
+
+The date is the internal Excel representation of the calendar date.  
+Exercise caution in using this date in other programs.
+
+
+SENIOR PARTY MEMBER 
+
+These codes only apply to the particular congress listed for 
+that entry. Codes for Speaker, Leaders, or Whips only apply 
+to the committee codes 661 (House Leadership) and 662 
+(Senate Leadership). Otherwise, the senior party codes only 
+apply to that particular committee.
+
+Unless changes are made mid-term, the assignment and 
+termination dates are January 3rd of the appropriate odd 
+numbered year.
+
+		0	Inapplicable; either no committee assignment or the 
+			member did not reach senior party status for that 
+			committee or congress.
+
+		Committee Chairmen
+		11	Only Chairman
+		12	1st Chairman
+		13	2nd Chairman
+		14	3rd Chairman
+		16	Acting Chairman
+
+		Ranking Minority Members
+		21	Only ranking minority member
+		22	1st ranking minority member
+		23	2nd ranking minority member
+		24	3rd ranking minority member
+
+		Speakers of the House
+		31	Only Speaker
+		32	1st Speaker
+		33	2nd Speaker
+
+		Majority Leadership
+		41	Only Majority Leader
+		42	1st Majority Leader
+		43	2nd Majority Leader
+                44      3rd Majority Leader
+
+		51 	Only Majority Whip
+		52	1st Majority Whip
+		53	2nd Majority Whip
+
+		Minority Leadership
+		61	Only Minority Leader
+		62	1st Minority Leader
+		63	2nd Minority Leader
+
+		64	Only Minority Whip
+		65	1st Minority Whip
+		66	2nd Minority Whip
+
+		Non-standing committee senior party status
+		81	Only Vice Chairman
+		82	1st Vice Chairman
+		83	2nd Vice Chairman
+		86	Co-chairman
+
+COMMITTEE SENIORITY 
+
+For the House, this is the number of the term presently 
+served by the member on the committee. Each time a member 
+leaves the committee and returns, the number of terms is 
+reset to 1.
+
+For the Senate, the unit of measure is the year. It can best 
+be described as the year on the committee as of the 
+assignment date for that entry. For example, a freshman 
+senator assigned at the beginning of a congress to committee 
+would have this variable coded 1. Similarly, a senator 
+assigned to a committee in October of the 2nd session would 
+have that initial entry coded 1. If he is reappointed to the 
+same committee at the start of the next congress, he is 
+still coded 1 since he is still serving his first year on 
+the committee.
+
+COMMITTEE PERIOD OF SERVICE 
+
+		1	Temporary assignment
+		2	Only period of service
+		3	First period of service
+		4	Second period of service
+		5	Third period of service
+		0	Inapplicable; no committee assignments
+
+COMMITTEE STATUS AT END OF THIS CONGRESS 
+
+		1	House: Remained on committee until adjournment.
+			Senate: Remained on committee until next assignments 
+			announced.
+		2	Transferred to another committee.
+ on 
+the committee.
+
+COMMITTEE PERIOD OF SERVICE 
+
+		1	Temporary assignment
+		2	Only period of service
+		3	First period of service
+		4	Second period of service
+		5	Third period of service
+		0	Inapplicable; no committee assignments
+
+COMMITTEE STATUS AT END OF THIS CONGRESS 
+
+		1	House: Remained on committee until adjournment.
+			Senate: Remained on committee until next assignments 
+			announced.
+		2	Transferred to another committee.
+		3	Left committee for no other.
+		4	Left committee before departing chamber.
+		5	Member died.
+		6	Resigned to hold another office.
+		7	Resigned to seek another office unsuccessfully.
+		8	Resigned, but neither held nor sought another office.
+		9	Member lost special election (Senate).
+		0	Inapplicable; no committee assignments
+
+COMMITTEE CONTINUITY OF ASSIGNMENT IN NEXT CONGRESS 
+
+		1	Continues on committee (or successor)
+		2	Continues in congress, but not committee
+		3	Continues in congress, presently unassigned
+		4	Committee is eliminated
+		0	Inapplicable; member died or does not serve in next 
+			congress.
+
+APPOINTMENT CITATION (Beginning with 106th Congress)
+
+The first sources consulted were the Congressional Record and the chamber
+Journals.  Other common sources included the Congressional
+Directory, committee reports, and Roll Call.  A citation 
+of the form "H233" indicates Congressional Record, page
+233 of the House section.
+
+NOTES 
+
+Notes about special circumstances surrounding the appointment.
+Includes information about reasons for transferring and 
+special arrangements made concerning committee seniority.
+
+COMMITTEE NAME 
+
+ICPSR STATE CODE (Beginning with 106th Congress)
+
+See membership dataset codings.
+
+DISTRICT (Beginning with 106th Congress)
+
+See membership dataset codings.
+
+POSTAL STATE CODE (Beginning with 106th Congress)
+
+
+
+------------------------------------------------------------------------
+COMMITTEE CODES
+
+House of Representatives
+
+Code	Committee
+
+102	Agriculture
+104	Appropriations
+106	Armed Services (103rd, 109-111th)
+	National Security (104th - 108th)
+113	Banking, Finance and Urban Affairs (103rd)
+	Banking and Financial Services (104th - 106th)
+	Financial Services (106th - 111th)
+115	Budget
+120	District of Columbia (103rd)
+124	Education and Labor (103rd, 111th)
+	Economic and Educational Opportunities (104th)
+	Education and the Workplace (105th - 109th)
+128	Energy and Commerce (103rd, 107th - 111th)
+	Commerce (104th - 106th)
+134	Foreign Affairs (103rd, 110th-111th)
+	International Relations (104th - 109th)
+138	Government Operations (103rd)
+	Government Reform and Oversight (104th - 109th)
+	Oversight and Government Reform (110th-111th)
+142	House Administration (103rd, 109-111th)
+	House Oversight (104th - 108th)
+156	Judiciary
+160	Merchant Marine and Fisheries (103rd)
+164	Natural Resources (103rd, 111th)
+	Resources (104h - 109th)
+168	Post Office and Civil Service (103rd)
+173	Public Works and Transportation (103rd)
+	Transportation and Infrastructure (104th - 111th)
+176	Rules
+182	Science, Space, and Technology (103rd)
+	Science (104th - 109th)
+	Science and Technology (110th-111th)
+184	Small Business
+186	Standards of Official Conduct
+192	Veterans Affairs
+196	Ways and Means
+242	Intelligence (Select)
+251	Homeland Security (Select 107th and 108th; Standing, 109th-111th)
+252	Energy Independence and Global Warming (Select, 110th-111th)
+253	Investigate the Voting Irregularities of August 2, 2007 (Select, 110th)
+254	Events Surrounding the 2012 Terrorist Attack on Benghazi (Select, 113th-114th)
+
+
+SENATE COMMITTEE CODES
+
+Code	Committee Name					
+
+305	Agriculture, Nutrition, and Forestry              
+306	Appropriations                                    
+308	Armed Services                                    
+314	Banking, Housing, and Urban Affairs               
+316	Budget                                            
+321	Commerce, Science, and Transportation             
+330	Energy and Natural Resources                      
+332	Environment and Public Works                      
+336	Finance                                           
+338	Foreign Relations                                 
+344	Governmental Affairs (103rd to 108th)
+  	Homeland Security and Governmental Affairs (109th-)
+358	Judiciary                                         
+362	Labor and Human Resources (103rd to 106th)
+	Health, Education, Labor, and Pensions (107th-)
+380	Rules and Administration                          
+384	Small Business (103rd to 107th)
+	Small Business and Entrepreneurship (108th-)
+388	Veterans' Affairs                                  
+419	Aging (Special)                                   
+432	Intelligence (Select)                             
+434	Ethics (Select)                                   
+435	Indian Affairs (Select)  
+
+
+JOINT COMMITTEES
+
+500  Library
+501  Printing
+503  Taxation
+507	Economic
+
+
+Leadership
+
+661	House Party Leadership               
+662	Senate Party Leadership
+
+
+No assignment
+                     
+770	Elected, not sworn                                
+772	Resigned before assignment                        
+775	Appointed, not sworn                              
+780	Sworn, only select committee                      
+790	Elected and sworn, not assigned                   
+795	Appointed and sworn, not assigned

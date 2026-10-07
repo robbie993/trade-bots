@@ -1,0 +1,29 @@
+channel,action,window,trades,trades_with_data,observed,expected_base_rate,ratio,placebo_mean,p_one_sided_more,p_one_sided_less,local_placebo_mean,p_local_more,p_local_less
+contracts $10M+ (count),purchase,-90..-1,72,18,15.0,14.87,1.01,15.14,0.513,0.5555,15.19,0.5355,0.551
+contracts $10M+ (count),purchase,1..90,72,18,11.0,14.87,0.74,14.84,0.7675,0.3075,15.38,0.8315,0.2295
+contracts $10M+ (count),sale,-90..-1,56,7,10.0,3.45,2.9,3.32,0.041,0.974,3.69,0.0135,0.9955
+contracts $10M+ (count),sale,1..90,56,7,6.0,3.45,1.74,3.36,0.176,0.888,3.11,0.1645,0.9095
+contracts $10M+ ($bn),purchase,-90..-1,72,18,0.59,0.58,1.0,0.58,0.389,0.611,0.58,0.3945,0.6055
+contracts $10M+ ($bn),purchase,1..90,72,18,0.33,0.58,0.57,0.58,0.744,0.256,0.6,0.824,0.176
+contracts $10M+ ($bn),sale,-90..-1,56,7,0.47,0.11,4.09,0.12,0.045,0.955,0.13,0.0,1.0
+contracts $10M+ ($bn),sale,1..90,56,7,0.15,0.11,1.36,0.12,0.2605,0.7395,0.11,0.2785,0.7215
+"insider open-market buys (count, by trade date)",purchase,-90..-1,72,70,28.0,40.94,0.68,40.75,0.6525,0.3715,49.05,0.787,0.236
+"insider open-market buys (count, by trade date)",purchase,1..90,72,70,38.0,40.94,0.93,41.74,0.466,0.547,47.58,0.525,0.485
+"insider open-market buys (count, by trade date)",sale,-90..-1,56,51,17.0,19.91,0.85,20.45,0.476,0.564,35.03,0.848,0.1815
+"insider open-market buys (count, by trade date)",sale,1..90,56,51,31.0,19.91,1.56,20.41,0.1865,0.822,31.1,0.369,0.6405
+insider open-market buys ($m),purchase,-90..-1,72,70,10.1,718.7,0.01,703.95,0.8895,0.1105,204.88,0.9355,0.0645
+insider open-market buys ($m),purchase,1..90,72,70,251.91,718.7,0.35,681.75,0.315,0.685,248.93,0.2875,0.7125
+insider open-market buys ($m),sale,-90..-1,56,51,2.48,441.81,0.01,459.49,0.6815,0.3185,8.94,0.732,0.268
+insider open-market buys ($m),sale,1..90,56,51,5.28,441.81,0.01,437.77,0.509,0.491,22.19,0.1735,0.8265
+insider sales (count),purchase,-90..-1,72,72,6628.0,3957.53,1.67,3948.56,0.0155,0.9845,4405.44,0.0035,0.9965
+insider sales (count),purchase,1..90,72,72,5710.0,3957.53,1.44,3959.47,0.0615,0.9385,4890.47,0.1825,0.8185
+insider sales (count),sale,-90..-1,56,53,1129.0,2383.39,0.47,2366.16,0.9625,0.0375,3312.42,0.9915,0.0085
+insider sales (count),sale,1..90,56,53,1074.0,2383.39,0.45,2395.02,0.98,0.02,2757.25,0.9935,0.0065
+insider buys made public (by filing date),purchase,-90..-1,72,70,47.0,41.65,1.13,41.61,0.3555,0.655,50.35,0.503,0.5045
+insider buys made public (by filing date),purchase,1..90,72,70,33.0,41.65,0.79,41.3,0.5365,0.4815,47.25,0.58,0.434
+insider buys made public (by filing date),sale,-90..-1,56,51,21.0,20.4,1.03,20.59,0.3975,0.6235,33.78,0.6435,0.3715
+insider buys made public (by filing date),sale,1..90,56,51,26.0,20.4,1.27,20.81,0.302,0.718,30.61,0.483,0.53
+Wikipedia attention spikes (>3x 60d median),purchase,-30..-1,63,63,31.0,22.76,1.36,22.93,0.2525,0.7635,30.55,0.4325,0.59
+Wikipedia attention spikes (>3x 60d median),purchase,1..30,63,63,71.0,22.76,3.12,23.17,0.0035,0.9975,27.53,0.0125,0.99
+Wikipedia attention spikes (>3x 60d median),sale,-30..-1,47,44,2.0,12.57,0.16,12.62,0.9615,0.073,11.9,0.9625,0.0775
+Wikipedia attention spikes (>3x 60d median),sale,1..30,47,44,8.0,12.57,0.64,12.39,0.653,0.413,12.26,0.6625,0.3785

@@ -1,0 +1,127 @@
+ticker,yahoo,company,pelosi,member_buys_rank,search,aliases
+AA,AA,Alcoa,True,,Alcoa,Alcoa
+AAPL,AAPL,Apple Inc.,True,2.0,Apple,Apple Inc|Apple
+AB,AB,AllianceBernstein Holding L.P.,True,,AllianceBernstein,AllianceBernstein
+ABBV,ABBV,AbbVie Inc.,False,35.0,AbbVie,AbbVie
+ABT,ABT,Abbott Laboratories,False,34.0,Abbott Laboratories,Abbott Laboratories
+ACN,ACN,Accenture plc,False,15.0,Accenture,Accenture
+ADBE,ADBE,Adobe Inc.,False,13.0,Adobe,Adobe
+ADP,ADP,"Automatic Data Processing, Inc.",False,71.0,Automatic Data Processing,Automatic Data Processing
+AMD,AMD,"Advanced Micro Devices, Inc.",False,100.0,Advanced Micro Devices,Advanced Micro Devices
+AMGN,AMGN,Amgen Inc.,False,62.0,Amgen,Amgen
+AMT,AMT,American Tower Corporation,False,80.0,American Tower,American Tower
+AMZN,AMZN,"Amazon.com, Inc.",True,3.0,Amazon.com,Amazon|Amazon.com
+AVGO,AVGO,Broadcom Inc.,True,48.0,Broadcom,"Broadcom|VMware|CA, Inc.|Symantec"
+AXP,AXP,American Express Company,True,60.0,American Express,American Express
+BA,BA,The Boeing Company,False,74.0,Boeing,Boeing
+BABA,BABA,Alibaba Group Holding Limited,False,85.0,Alibaba Group,Alibaba|Alibaba Group
+BAC,BAC,Bank of America Corporation,False,20.0,Bank of America,Bank of America
+BCOR,BCOR,"Blucora, Inc.",True,,Blucora,Blucora
+BE,BE,Bloom Energy Corporation,True,,Bloom Energy,Bloom Energy
+BFET,BFET,BF Enterprises,True,,BF Enterprises,BF Enterprises
+BIIB,BIIB,Biogen Inc.,False,70.0,Biogen,Biogen
+BKNG,BKNG,Booking Holdings Inc.,False,78.0,Booking,Booking Holdings|Priceline|Booking
+BMY,BMY,Bristol-Myers Squibb Company,False,66.0,Bristol-Myers Squibb,Bristol-Myers Squibb
+BRCM,BRCM,Broadcom Corporation,True,,Broadcom,Broadcom
+BRK-B,BRK-B,Berkshire Hathaway Inc.,False,72.0,Berkshire Hathaway,Berkshire Hathaway
+C,C,Citigroup Inc.,False,49.0,Citigroup,Citigroup|Citibank
+CAT,CAT,Caterpillar Inc.,False,69.0,Caterpillar,Caterpillar
+CB,CB,Chubb Limited,False,75.0,Chubb,Chubb
+CL,CL,Colgate-Palmolive Company,False,94.0,Colgate-Palmolive,Colgate-Palmolive
+CMCSA,CMCSA,Comcast Corporation,False,16.0,Comcast,Comcast|NBCUniversal
+COP,COP,ConocoPhillips,False,96.0,ConocoPhillips,ConocoPhillips
+COST,COST,Costco Wholesale Corporation,False,32.0,Costco Wholesale,Costco|Costco Wholesale
+CRAI,CRAI,"CRA International, Inc.",False,73.0,CRA International,CRA International|Charles River Associates
+CRM,CRM,"Salesforce, Inc.",True,42.0,Salesforce,Salesforce|Tableau|Slack Technologies
+CRWD,CRWD,"CrowdStrike Holdings, Inc.",True,,CrowdStrike,CrowdStrike
+CSCO,CSCO,"Cisco Systems, Inc.",False,47.0,Cisco Systems,Cisco|Cisco Systems
+CTSH,CTSH,Cognizant Technology Solutions Corporation,False,90.0,Cognizant Technology Solutions,Cognizant|Cognizant Technology Solutions
+CVS,CVS,CVS Health Corporation,False,36.0,CVS Health,CVS|Aetna|CVS Health
+CVX,CVX,Chevron Corporation,False,37.0,Chevron,Chevron
+DBX,DBX,"Dropbox, Inc.",True,,Dropbox,Dropbox
+DG,DG,Dollar General Corporation,False,88.0,Dollar General,Dollar General
+DHR,DHR,Danaher Corporation,False,41.0,Danaher,Danaher
+DIS,DIS,The Walt Disney Company,True,5.0,Walt Disney,Walt Disney
+DOW,DOW,The Dow Chemical Company,True,,Dow Chemical,Dow Chemical
+DVN,DVN,Devon Energy Corporation,False,82.0,Devon Energy,Devon Energy
+EL,EL,The Estee Lauder Companies Inc.,False,97.0,Estee Lauder Companies,Estee Lauder|Estee Lauder Companies
+ELX,ELX,Emulex Corporation,True,,Emulex,Emulex
+ENTR,ENTR,Entropic Communications,True,,Entropic Communications,Entropic Communications
+FB,META,"Meta Platforms, Inc.",True,14.0,Meta Platforms,Facebook|Meta Platforms
+FDX,FDX,FedEx Corporation,False,44.0,FedEx,FedEx|Federal Express
+FIS,FIS,"Fidelity National Information Services, Inc.",False,76.0,Fidelity National Information Services,Fidelity National Information Services
+GE,GE,GE Aerospace,False,87.0,GE Aerospace,General Electric|GE Aerospace
+GILD,GILD,"Gilead Sciences, Inc.",False,61.0,Gilead Sciences,Gilead|Gilead Sciences
+GM,GM,General Motors Company,False,64.0,General Motors,General Motors
+GOOG,GOOG,Alphabet Inc.,True,19.0,Alphabet,Google|Alphabet
+GOOGL,GOOGL,Alphabet Inc.,True,6.0,Alphabet,Google|Alphabet
+HD,HD,"The Home Depot, Inc.",False,8.0,Home Depot,Home Depot
+HON,HON,Honeywell International Inc.,False,91.0,Honeywell International,Honeywell|Honeywell International
+HTZ,HTZ,Hertz Global Holdings,True,,Hertz Global,Hertz|Hertz Global
+IBKR,IBKR,"Interactive Brokers Group, Inc.",True,,Interactive Brokers,Interactive Brokers
+IBM,IBM,International Business Machines Corporation,False,39.0,International Business Machines,International Business Machines
+INTC,INTC,Intel Corporation,True,27.0,Intel,Intel Corporation|Intel
+INTU,INTU,Intuit Inc.,False,56.0,Intuit,Intuit
+ISRG,ISRG,"Intuitive Surgical, Inc.",False,93.0,Intuitive Surgical,Intuitive Surgical
+JNJ,JNJ,Johnson & Johnson,False,10.0,Johnson & Johnson,Johnson & Johnson|Janssen
+JPM,JPM,JPMorgan Chase & Co.,False,11.0,JPMorgan Chase,JPMorgan Chase
+KO,KO,The Coca-Cola Company,False,25.0,Coca-Cola,Coca-Cola
+LIN,LIN,Linde plc,False,79.0,Linde,Linde|Praxair
+LLY,LLY,Eli Lilly and Company,False,68.0,Eli Lilly and,Eli Lilly|Eli Lilly and
+MA,MA,Mastercard Incorporated,False,53.0,Mastercard,Mastercard
+MCD,MCD,McDonald's Corporation,False,67.0,McDonald's,McDonald's
+MDT,MDT,Medtronic plc,False,33.0,Medtronic,Medtronic
+META,META,"Meta Platforms, Inc.",False,63.0,Meta Platforms,Facebook|Meta Platforms
+MGRC,MGRC,McGrath RentCorp,True,89.0,McGrath RentCorp,McGrath RentCorp|Mobile Modular
+MMM,MMM,3M Company,False,84.0,3M,3M
+MO,MO,"Altria Group, Inc.",False,99.0,Altria,Altria
+MORN,MORN,"Morningstar, Inc.",True,,Morningstar,Morningstar
+MRK,MRK,"Merck & Co., Inc.",False,21.0,Merck & Co.,Merck|Merck & Co.
+MS,MS,Morgan Stanley,False,92.0,Morgan Stanley,Morgan Stanley
+MSFT,MSFT,Microsoft Corporation,True,1.0,Microsoft,Microsoft
+MU,MU,"Micron Technology, Inc.",True,50.0,Micron Technology,Micron|Micron Technology
+NEE,NEE,"NextEra Energy, Inc.",False,59.0,NextEra Energy,NextEra|Florida Power & Light|NextEra Energy
+NFLX,NFLX,"Netflix, Inc.",True,24.0,Netflix,Netflix
+NKE,NKE,"NIKE, Inc.",False,57.0,NIKE,Nike|NIKE
+NOW,NOW,"ServiceNow, Inc.",False,83.0,ServiceNow,ServiceNow
+NTAP,NTAP,"NetApp, Inc.",False,28.0,NetApp,NetApp
+NVDA,NVDA,NVIDIA Corporation,True,4.0,NVIDIA,NVIDIA
+ORCL,ORCL,Oracle Corporation,False,58.0,Oracle,Oracle
+PANW,PANW,"Palo Alto Networks, Inc.",True,,Palo Alto Networks,Palo Alto Networks
+PEP,PEP,"PepsiCo, Inc.",False,40.0,PepsiCo,PepsiCo
+PFE,PFE,Pfizer Inc.,False,26.0,Pfizer,Pfizer
+PG,PG,The Procter & Gamble Company,False,17.0,Procter & Gamble,Procter & Gamble
+PM,PM,Philip Morris International Inc.,False,86.0,Philip Morris International,Philip Morris|Philip Morris International
+PYPL,PYPL,"PayPal Holdings, Inc.",True,30.0,PayPal,PayPal
+QCOM,QCOM,QUALCOMM Incorporated,False,52.0,QUALCOMM,Qualcomm|QUALCOMM
+RBLX,RBLX,Roblox Corporation,True,,Roblox,Roblox
+RGS,RGS,Regis Corporation,False,95.0,Regis,Regis Corporation|Regis
+RHI,RHI,Robert Half Inc.,True,,Robert Half,Robert Half
+SBUX,SBUX,Starbucks Corporation,False,12.0,Starbucks,Starbucks
+SCHW,SCHW,The Charles Schwab Corporation,False,45.0,Charles Schwab,Charles Schwab
+SFLY,SFLY,"Shutterfly, Inc.",True,,Shutterfly,Shutterfly
+SGU,SGU,"Star Group, L.P.",False,77.0,Star,Star Group|Star
+SLB,SLB,SLB N.V.,False,65.0,SLB,Schlumberger|SLB
+SQ,XYZ,"Block, Inc.",True,,Block,"Block, Inc.|Square, Inc.|Block"
+SUNE,SUNE,"SunEdison, Inc.",True,,SunEdison,SunEdison
+T,T,AT&T Inc.,True,9.0,AT&T,AT&T
+TEM,TEM,"Tempus AI, Inc.",True,,Tempus AI,Tempus|Tempus AI
+TGT,TGT,Target Corporation,False,98.0,Target,Target Corporation|Target
+TJX,TJX,"The TJX Companies, Inc.",False,38.0,TJX Companies,TJX|TJX Companies
+TMO,TMO,Thermo Fisher Scientific Inc.,False,31.0,Thermo Fisher Scientific,Thermo Fisher|Thermo Fisher Scientific
+TSLA,TSLA,"Tesla, Inc.",True,51.0,Tesla,Tesla
+TXN,TXN,Texas Instruments Incorporated,False,29.0,Texas Instruments,Texas Instruments
+UBER,UBER,"Uber Technologies, Inc.",True,,Uber Technologies,Uber|Uber Technologies
+UNH,UNH,UnitedHealth Group Incorporated,False,18.0,UnitedHealth,UnitedHealth|Optum
+UNP,UNP,Union Pacific Corporation,False,55.0,Union Pacific,Union Pacific
+UPS,UPS,"United Parcel Service, Inc.",False,46.0,United Parcel Service,United Parcel Service
+V,V,Visa Inc.,True,7.0,Visa,Visa U.S.A.|Visa Inc|Visa
+VSNT,VSNT,"Versant Media Group, Inc.",True,,Versant Media,Versant Media
+VST,VST,Vistra Corp.,True,,Vistra,Vistra
+VZ,VZ,Verizon Communications Inc.,False,23.0,Verizon Communications,Verizon|Verizon Communications
+WBD,WBD,"Warner Bros. Discovery, Inc.",True,,Warner Bros. Discovery,Warner Bros. Discovery
+WFC,WFC,Wells Fargo & Company,False,22.0,Wells Fargo &,Wells Fargo|Wells Fargo &
+WMT,WMT,Walmart Inc.,False,54.0,Walmart,Walmart|Wal-Mart
+WORK,WORK,Slack Technologies,True,,Slack Technologies,Slack Technologies
+XHR,XHR,"Xenia Hotels & Resorts, Inc.",False,81.0,Xenia Hotels & Resorts,Xenia Hotels|Xenia Hotels & Resorts
+ZTS,ZTS,Zoetis Inc.,False,43.0,Zoetis,Zoetis
