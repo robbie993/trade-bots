@@ -4,6 +4,15 @@ Run 2026-10-07. Every number here comes from `study.py` on the data in `data/`, 
 
 ## Executive summary
 
+**Round 2 update (section 10), after Robbie's pushback:**
+- **She does beat SPY, consistently.** The realistic copy beat SPY in 8 of 11 full years, 83% of 3-year windows and 92% of 5-year windows.
+- **Holding each of her buys for 2 years** (and ignoring her sales) makes it 30.8% a year vs SPY 13.8% and QQQ 19.2%. It beat SPY in almost every 3-year window and QQQ in 81%.
+- **Her edge is which stocks she owns, not when she buys.** Her exact dates did slightly worse than random days on the same stocks. Her copy only matched SPY while she was Speaker, and the big gains came after she left leadership.
+- **A public rule gets the same thing without her:** the 10 most-traded US stocks, refreshed monthly. It made 29.6% a year (Sharpe 1.04) and already held 52% of her buys before she made them.
+- **Every version loses badly in a tech bear year like 2022**, so all of them fail the plan's validation rule. That is a big-tech beta bet, not hidden information.
+
+**Round 1 summary:**
+
 - **Copying Pelosi made money, but not because of anything special she knows.** A realistic copier who bought the day after each filing went public and sold when she disclosed a sale made **23.6% a year** from Dec 2014 to Oct 2026. Over the same span SPY made 13.8%, QQQ 19.2% and the tech ETF XLK 22.6%.
 - **It is a leveraged big-tech bet.** Its beta to QQQ is 1.2. After controlling for SPY, QQQ and momentum, the leftover alpha is +3.5% a year with t = 0.8, which is not significant. Its Sharpe of 0.83 is the same as QQQ's (0.83), and its worst drawdown was **-49.5%** against QQQ's -35%.
 - **It rests on a few trades.** NVDA (Nov 2023 calls), CRWD (2020) and AVGO (2024) carry it. Without those three, CAGR falls to 17.4%, below QQQ. From 2014 to 2022 the copy did no better than SPY. All of its lead comes from 2023-2026, the AI boom.
@@ -190,22 +199,22 @@ What it means:
 | Realistic copy return | +10.1% per buy vs SPY at 1 year (CI -1.6 to +23.1); -2.2% vs the tech basket |
 | SPY-relative alpha | +3.5%/yr after SPY, QQQ and momentum factors, t = 0.8, not significant |
 | Beats SPY after delays and costs? | On return yes; on drawdown no; on risk-adjusted terms it ties QQQ |
-| Best filtered strategy | None. The walk-forward pick failed validation |
+| Best filtered strategy | Best copy rule: hold each buy 2 years and ignore her sales (30.8% CAGR, Sharpe 0.96). Best public rule: the 10 most-traded stocks each month (29.6%, Sharpe 1.04). Both fail 2021-22 validation (section 10) |
 | Best bot | None for real money (see below) |
 | Why-model predictive value | None. 86% of buys followed a public catalyst; buys with a legislative link did worse (+0.4% vs +20.9%) |
 | Walk-forward performance | Train +19.9%, validate -12.3%, test +29.9%: inconsistent |
 | Congress-wide before 2023 | Done (section 7b): average buy about 0% vs SPY in 2014-2022, call-option buys -1.4% at 6 months in 2019-22, member ranking no better than the bottom 10 |
-| Final verdict | **Fail.** The apparent Pelosi edge is mega-cap tech beta plus a few big AI-era winners |
+| Final verdict | **She beats SPY consistently, but it's mega-cap tech beta that a public rule reproduces.** Copy thesis: fail as an edge; as a beta bet it works except in tech bear years. Original verdict: **Fail.** The apparent Pelosi edge is mega-cap tech beta plus a few big AI-era winners |
 
 ## 9. Bot (doc sections 18 and 23)
 
-Nothing passed, so there is no Pelosi bot to paper-trade. If you want Pelosi exposure, QQQ or XLK gave the same risk-adjusted return with a much smaller drawdown.
+Round 2 (section 10.9) supersedes this: no copy bot; the honest version is a "10 most-traded stocks" paper firm, if wanted. Round 1 text: nothing passed, so there is no Pelosi bot to paper-trade. If you want Pelosi exposure, QQQ or XLK gave the same risk-adjusted return with a much smaller drawdown.
 
 What the evidence does support, for the village's existing congress scanner (paper scoring in the idea lab only):
 1. ~~**Score congress call-option buys**~~ as bullish calls on the underlying. They looked like the only positive slice in 2023-26 (+5.2% at 6 months, n = 40), but the full-history rerun (section 7b) shows them losing in 2019-22 (-1.4%, n = 189). The evidence no longer supports adding them; PR #38 should be closed rather than merged.
 2. **Do not weight members by past record.** The walk-forward lift was small and not significant, and the bottom-10 control did about as well as average.
 
-Reproduce: `python research/pelosi/study.py <old Alpaca prices.json>` and `python research/pelosi/congress_full.py` (data from branch `research/pelosi-data`). Tables are in `research/pelosi/out/`.
+Reproduce: `python research/pelosi/study.py <old Alpaca prices.json>`, then `congress_full.py`, `why_table.py`, `round2.py`, `round2b.py` and `precursors.py` (data from branch `research/pelosi-data`). Tables are in `research/pelosi/out/`.
 
 ## 10. Round 2: where she does beat SPY (`round2.py`, `round2b.py`)
 
@@ -314,3 +323,59 @@ Our Pelosi-specific result fits Chen & Sacerdote: no outperformance while she he
 - Every historical example in doc section 16 was found in the ledger with matching contracts, strikes and dates: HTZ 50 calls at $22 expiring 1/15/2016, the 2021 AMZN, AAPL and NVDA calls, the GOOGL exercise, the June 2022 NVDA exercise at $100 (public 27 days later), the 2024 NVDA buys, the Dec 2024 exercise and sales, and the Jan 2025 calls. One correction: the TEM and VST trades on 2025-01-14 were calls, not stock.
 - `out/why_trades.csv` now has a counter-evidence column for all 52 decisions. For buys it compares her date with random days on the same stock; for sales it shows whether the stock kept beating SPY afterwards. Result: her buy timing helped 22 times and hurt 29 times. Her sales avoided a lag 5 times, and 9 times the stock kept beating SPY after she sold.
 - Options: of 58 modeled call positions, 12 lost more than half and 5 went to zero. Almost all of those were bought in Dec 2021 near the top (DIS, CRM, RBLX, MU and GOOG calls). The filings confirm these losses: for example, "expired with no value for a total loss of $303,001" on the RBLX calls. Copying her options would have doubled her 2022 drawdown.
+
+### 10.7 Picking her stocks before she does (`precursors.py`)
+
+Public rules only. At each month-end a rule picks 10 stocks from the 30 most-traded stocks (by 63-day dollar volume, among everything any member traded, ETFs and second share classes removed), holds them equal weight for a month, and pays 10 bps per trade. "Already held" means her later buy was in the rule's holdings at the month-end before her trade date.
+
+| Rule | 2014-20 | 2021-22 | 2023-26 | All: CAGR / Sharpe / Max DD | Her buys already held |
+|---|---|---|---|---|---|
+| **10 most-traded stocks** | 31.4% | -15.2% | 59.5% | **29.6% / 1.04 / -52.2%** | **52%** |
+| 30 most-traded, best 12-month momentum | 29.6% | -6.4% | 57.1% | 30.4% / 0.95 / -37.7% | 37% |
+| 30 most-traded, best 6-month momentum | 31.7% | -10.8% | 44.4% | 27.0% / 0.89 / -41.1% | 35% |
+| Dip in an uptrend (her own playbook) | 24.2% | -15.2% | 48.5% | 23.3% / 0.82 / -48.4% | 27% |
+| Most bought by other members, last 60 days | 17.2% | -7.0% | 28.5% | 16.0% / 0.80 / -36.0% | 35% |
+| Pelosi copy, realistic (for comparison) | | | | 23.6% / 0.83 / -49.5% | |
+| Pelosi copy, hold 2 years | | | | 30.8% / 0.96 / -50.7% | |
+| SPY | 12.6% | 3.4% | 22.3% | 13.7% / 0.82 / -33.7% | |
+| QQQ | 20.9% | -6.7% | 33.0% | 19.0% / 0.91 / -35.1% | |
+
+- **You can get her returns without her.** Just holding the 10 most-traded US stocks, chosen fresh each month from public volume data, made 29.6% a year with a Sharpe of 1.04. That's better risk-adjusted than any version of the Pelosi copy, and it doesn't wait 25 days for a filing.
+- **It already owned half her picks before she bought them.** 52% of her buys were in its holdings the month before her trade date. 68% were among the 30 most-traded stocks. 75% had been bought by other members of Congress (median 6 buys) in the 90 days before her.
+- **It has the same weakness.** Picked on 2014-20 (best Sharpe), it lost 15% a year in 2021-22 while SPY made 3%, then made 60% a year in 2023-26. It's the same mega-cap tech bet she makes, so it fails the plan's validation rule the same way.
+- Survivorship: the universe only includes stocks that still have Yahoo prices today. That matters little for the 10 most-traded names, which are giant companies, but it is not zero.
+
+### 10.8 How she gets her picks, as far as public data can show
+
+- **The stocks:** her buys are mostly names that are already the most traded in the market (section 10.7). Picking them takes no inside knowledge.
+- **The timing:** 86% of her buys came right after public news, mostly earnings, dips, splits and IPOs (section 6). Her exact dates did no better than random days on the same stocks (section 10.3).
+- **Her power:** her copy only matched SPY during her four years as Speaker, the most powerful years she had. Trades linked to bills or regulators did worse (+0.4% vs +20.9%).
+- **Her edge:** a long-run, concentrated, leveraged bet on Bay Area mega-cap tech, held through the 2023-26 AI boom. Paul Pelosi is a San Francisco venture and real-estate investor, so these are the companies he has watched for decades.
+- Non-public information can't be tested with public data, and this project doesn't try to obtain it. Nothing in the public record shows that she used it.
+
+### 10.9 Updated verdict
+
+- **She does beat SPY, consistently:** 8 of 11 years and 83% of 3-year windows. Holding her buys 2 years makes it 30.8% a year.
+- **It isn't a secret.** A public rule (the 10 most-traded stocks) matches it with a better Sharpe and no filing delay. Both lose badly in a tech bear market like 2022.
+- **For the village:** a Pelosi copy bot still isn't worth building. If you want this kind of return, the honest version is a "10 most-traded stocks, monthly" paper firm, scored against SPY and QQQ like every other firm. It is a big-tech beta bet with 2022-style drawdowns (-52%), not an edge, and it should be labeled that way.
+
+### 10.10 Metrics the plan lists (doc section 14), realistic copy
+
+Total return +1,112% (Dec 2014 to Oct 2026). CAGR 23.6%, volatility 28.1%, Sharpe 0.83, Sortino 1.13, Calmar 0.48, max drawdown -49.5%. Beta 1.23 to SPY. Exposure 99% (almost always invested). Turnover 3.7x a year. 74 positions: 73% made money, 57% beat SPY over their holding period, profit factor 7.1, average hold 546 trading days (median 401). Performance by delay: section 2. By trade type and sector: section 10.3. By regime: sections 5 and 10.4. Out of sample: sections 4 and 10.2.
+
+### 10.11 Paper-trading rules, if Robbie wants the "10 most-traded" firm (doc sections 18 and 24)
+
+1. On the last trading day of each month, rank US stocks by 63-day average dollar volume. Leave out ETFs and funds, and keep one share class per company.
+2. Hold the top 10 at equal weight. Rebalance monthly.
+3. Paper only, scored in the idea lab against SPY and QQQ after costs.
+4. Kill it if it trails SPY by more than 15 points over any rolling 12 months, or trails QQQ over 3 years.
+5. Expect 2022-style drawdowns (-52% in backtest). Present it as a beta bet, not an edge.
+
+### 10.12 Limitations (doc section 21)
+
+- Disclosure amounts are ranges, so weights use midpoints.
+- Option results are modeled (Black-Scholes, no historical quotes), and the filings confirm the big losses.
+- 16% of congress-wide trades had no price. The data is survivor-biased, and a quality screen removed 177 tickers with bad prints.
+- The congress price file is from Yahoo; the Pelosi one also covers delisted names she traded via fixes in section 1.
+- Leaders' non-public information can't be tested. No claim is made either way beyond what public data shows.
+- Every result depends heavily on 2023-26, the AI rally.
