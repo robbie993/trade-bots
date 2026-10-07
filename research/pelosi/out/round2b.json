@@ -1,0 +1,421 @@
+{
+ "walk_forward_rules": {
+  "sell when she sells": {
+   "train 2014-2020": {
+    "cagr": 18.7,
+    "vs_spy": 6.1,
+    "vs_qqq": -2.5,
+    "maxdd": -38.6
+   },
+   "validate 2021-2022": {
+    "cagr": -13.5,
+    "vs_spy": -16.8,
+    "vs_qqq": -6.8,
+    "maxdd": -53.3
+   },
+   "test 2023-2026": {
+    "cagr": 49.6,
+    "vs_spy": 27.3,
+    "vs_qqq": 16.6,
+    "maxdd": -36.3
+   }
+  },
+  "never sell": {
+   "train 2014-2020": {
+    "cagr": 25.2,
+    "vs_spy": 12.6,
+    "vs_qqq": 4.0,
+    "maxdd": -31.4
+   },
+   "validate 2021-2022": {
+    "cagr": -12.5,
+    "vs_spy": -15.9,
+    "vs_qqq": -5.8,
+    "maxdd": -52.2
+   },
+   "test 2023-2026": {
+    "cagr": 52.2,
+    "vs_spy": 29.8,
+    "vs_qqq": 19.2,
+    "maxdd": -35.7
+   }
+  },
+  "hold 6 months": {
+   "train 2014-2020": {
+    "cagr": 20.0,
+    "vs_spy": 7.4,
+    "vs_qqq": -1.2,
+    "maxdd": -44.6
+   },
+   "validate 2021-2022": {
+    "cagr": 0.3,
+    "vs_spy": -3.0,
+    "vs_qqq": 7.0,
+    "maxdd": -44.8
+   },
+   "test 2023-2026": {
+    "cagr": 42.6,
+    "vs_spy": 20.2,
+    "vs_qqq": 9.5,
+    "maxdd": -42.8
+   }
+  },
+  "hold 1 year": {
+   "train 2014-2020": {
+    "cagr": 22.9,
+    "vs_spy": 10.3,
+    "vs_qqq": 1.7,
+    "maxdd": -40.7
+   },
+   "validate 2021-2022": {
+    "cagr": -15.5,
+    "vs_spy": -18.8,
+    "vs_qqq": -8.8,
+    "maxdd": -55.0
+   },
+   "test 2023-2026": {
+    "cagr": 47.1,
+    "vs_spy": 24.7,
+    "vs_qqq": 14.1,
+    "maxdd": -35.9
+   }
+  },
+  "hold 2 years": {
+   "train 2014-2020": {
+    "cagr": 24.8,
+    "vs_spy": 12.2,
+    "vs_qqq": 3.6,
+    "maxdd": -41.2
+   },
+   "validate 2021-2022": {
+    "cagr": -12.5,
+    "vs_spy": -15.9,
+    "vs_qqq": -5.8,
+    "maxdd": -52.2
+   },
+   "test 2023-2026": {
+    "cagr": 51.2,
+    "vs_spy": 28.8,
+    "vs_qqq": 18.1,
+    "maxdd": -35.7
+   }
+  },
+  "hold 3 years": {
+   "train 2014-2020": {
+    "cagr": 24.7,
+    "vs_spy": 12.1,
+    "vs_qqq": 3.5,
+    "maxdd": -32.0
+   },
+   "validate 2021-2022": {
+    "cagr": -12.5,
+    "vs_spy": -15.9,
+    "vs_qqq": -5.8,
+    "maxdd": -52.2
+   },
+   "test 2023-2026": {
+    "cagr": 52.2,
+    "vs_spy": 29.8,
+    "vs_qqq": 19.2,
+    "maxdd": -35.7
+   }
+  },
+  "never sell, equal weight": {
+   "train 2014-2020": {
+    "cagr": 31.2,
+    "vs_spy": 18.7,
+    "vs_qqq": 10.1,
+    "maxdd": -29.5
+   },
+   "validate 2021-2022": {
+    "cagr": -12.8,
+    "vs_spy": -16.2,
+    "vs_qqq": -6.1,
+    "maxdd": -49.2
+   },
+   "test 2023-2026": {
+    "cagr": 45.9,
+    "vs_spy": 23.6,
+    "vs_qqq": 12.9,
+    "maxdd": -33.5
+   }
+  },
+  "sell when she sells, equal weight": {
+   "train 2014-2020": {
+    "cagr": 31.0,
+    "vs_spy": 18.4,
+    "vs_qqq": 9.8,
+    "maxdd": -29.0
+   },
+   "validate 2021-2022": {
+    "cagr": -13.2,
+    "vs_spy": -16.5,
+    "vs_qqq": -6.5,
+    "maxdd": -49.7
+   },
+   "test 2023-2026": {
+    "cagr": 45.8,
+    "vs_spy": 23.5,
+    "vs_qqq": 12.8,
+    "maxdd": -34.4
+   }
+  }
+ },
+ "train_pick": {
+  "rule": "never sell, equal weight",
+  "train 2014-2020": {
+   "cagr": 31.2,
+   "vs_spy": 18.7,
+   "vs_qqq": 10.1,
+   "maxdd": -29.5
+  },
+  "validate 2021-2022": {
+   "cagr": -12.8,
+   "vs_spy": -16.2,
+   "vs_qqq": -6.1,
+   "maxdd": -49.2
+  },
+  "test 2023-2026": {
+   "cagr": 45.9,
+   "vs_spy": 23.6,
+   "vs_qqq": 12.9,
+   "maxdd": -33.5
+  }
+ },
+ "full_metrics": {
+  "sell when she sells": {
+   "total": 1112.1,
+   "cagr": 23.6,
+   "vol": 28.1,
+   "sharpe": 0.83,
+   "sortino": 1.13,
+   "maxdd": -49.5,
+   "calmar": 0.48,
+   "beta": 1.23,
+   "alpha": 7.8
+  },
+  "never sell": {
+   "total": 1175.2,
+   "cagr": 24.1,
+   "vol": 26.6,
+   "sharpe": 0.87,
+   "sortino": 1.19,
+   "maxdd": -49.1,
+   "calmar": 0.49,
+   "beta": 1.21,
+   "alpha": 8.1
+  },
+  "hold 6 months": {
+   "total": 1036.4,
+   "cagr": 22.9,
+   "vol": 29.6,
+   "sharpe": 0.78,
+   "sortino": 0.96,
+   "maxdd": -44.8,
+   "calmar": 0.51,
+   "beta": 0.89,
+   "alpha": 11.9
+  },
+  "hold 1 year": {
+   "total": 1466.7,
+   "cagr": 26.3,
+   "vol": 31.0,
+   "sharpe": 0.85,
+   "sortino": 1.11,
+   "maxdd": -55.1,
+   "calmar": 0.48,
+   "beta": 1.19,
+   "alpha": 11.3
+  },
+  "hold 2 years": {
+   "total": 2283.1,
+   "cagr": 30.8,
+   "vol": 31.4,
+   "sharpe": 0.96,
+   "sortino": 1.32,
+   "maxdd": -50.7,
+   "calmar": 0.61,
+   "beta": 1.29,
+   "alpha": 13.8
+  },
+  "hold 3 years": {
+   "total": 1491.3,
+   "cagr": 26.4,
+   "vol": 29.5,
+   "sharpe": 0.88,
+   "sortino": 1.21,
+   "maxdd": -50.9,
+   "calmar": 0.52,
+   "beta": 1.27,
+   "alpha": 10.1
+  },
+  "never sell, equal weight": {
+   "total": 1319.8,
+   "cagr": 25.2,
+   "vol": 24.9,
+   "sharpe": 0.95,
+   "sortino": 1.24,
+   "maxdd": -45.7,
+   "calmar": 0.55,
+   "beta": 1.19,
+   "alpha": 8.9
+  },
+  "sell when she sells, equal weight": {
+   "total": 1773.4,
+   "cagr": 28.2,
+   "vol": 26.4,
+   "sharpe": 1.0,
+   "sortino": 1.32,
+   "maxdd": -46.4,
+   "calmar": 0.61,
+   "beta": 1.21,
+   "alpha": 11.4
+  }
+ },
+ "by_sector_1y_vs_spy": {
+  "Big tech": {
+   "n": 24,
+   "mean": 8.6,
+   "hit": 48.1
+  },
+  "Energy/industrial": {
+   "n": 1,
+   "mean": -28.7,
+   "hit": 0.0
+  },
+  "Financials/other": {
+   "n": 5,
+   "mean": 16.1,
+   "hit": 41.7
+  },
+  "Media/consumer": {
+   "n": 7,
+   "mean": 5.7,
+   "hit": 50.0
+  },
+  "Payments": {
+   "n": 4,
+   "mean": 55.8,
+   "hit": 100.0
+  },
+  "Semis": {
+   "n": 9,
+   "mean": 21.4,
+   "hit": 38.5
+  },
+  "Software/cyber": {
+   "n": 11,
+   "mean": -9.0,
+   "hit": 50.0
+  }
+ },
+ "by_kind_1y_vs_spy": {
+  "buy_call": {
+   "n": 49,
+   "mean": 10.6,
+   "hit": 43.8
+  },
+  "buy_stock": {
+   "n": 12,
+   "mean": 8.2,
+   "hit": 50.0
+  }
+ },
+ "options_positions_worst": [
+  {
+   "ticker": "AMZN",
+   "entry": "2021-07-06",
+   "exit": "2026-01-26",
+   "opt": true,
+   "ret": -100.0,
+   "worst": -100.0,
+   "usd": 750000.5
+  },
+  {
+   "ticker": "DIS",
+   "entry": "2021-12-30",
+   "exit": "2022-10-17",
+   "opt": true,
+   "ret": -100.0,
+   "worst": -100.0,
+   "usd": 175000.5
+  },
+  {
+   "ticker": "CRM",
+   "entry": "2021-12-30",
+   "exit": "2023-01-13",
+   "opt": true,
+   "ret": -100.0,
+   "worst": -100.0,
+   "usd": 175000.5
+  },
+  {
+   "ticker": "CRM",
+   "entry": "2021-12-30",
+   "exit": "2023-01-13",
+   "opt": true,
+   "ret": -100.0,
+   "worst": -100.0,
+   "usd": 750000.5
+  },
+  {
+   "ticker": "RBLX",
+   "entry": "2021-12-30",
+   "exit": "2023-01-13",
+   "opt": true,
+   "ret": -100.0,
+   "worst": -100.0,
+   "usd": 375000.5
+  },
+  {
+   "ticker": "MU",
+   "entry": "2021-12-30",
+   "exit": "2022-10-17",
+   "opt": true,
+   "ret": -93.5,
+   "worst": -94.0,
+   "usd": 375000.5
+  },
+  {
+   "ticker": "GOOG",
+   "entry": "2021-12-30",
+   "exit": "2026-10-05",
+   "opt": true,
+   "ret": -73.8,
+   "worst": -93.7,
+   "usd": 750000.5
+  },
+  {
+   "ticker": "DIS",
+   "entry": "2021-01-22",
+   "exit": "2022-10-17",
+   "opt": true,
+   "ret": -65.4,
+   "worst": -67.4,
+   "usd": 750000.5
+  },
+  {
+   "ticker": "PYPL",
+   "entry": "2020-07-21",
+   "exit": "2023-01-13",
+   "opt": true,
+   "ret": -62.7,
+   "worst": -68.3,
+   "usd": 375000.5
+  },
+  {
+   "ticker": "TSLA",
+   "entry": "2021-01-22",
+   "exit": "2023-01-13",
+   "opt": true,
+   "ret": -59.5,
+   "worst": -64.2,
+   "usd": 750000.5
+  }
+ ],
+ "options_positions_count": {
+  "n": 58,
+  "lost_over_half": 12,
+  "wiped": 5
+ }
+}

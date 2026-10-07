@@ -206,3 +206,111 @@ What the evidence does support, for the village's existing congress scanner (pap
 2. **Do not weight members by past record.** The walk-forward lift was small and not significant, and the bottom-10 control did about as well as average.
 
 Reproduce: `python research/pelosi/study.py <old Alpaca prices.json>` and `python research/pelosi/congress_full.py` (data from branch `research/pelosi-data`). Tables are in `research/pelosi/out/`.
+
+## 10. Round 2: where she does beat SPY (`round2.py`, `round2b.py`)
+
+Robbie's pushback was that she beats SPY pretty consistently. **She does.** This section starts from that and tests how far it goes.
+
+### 10.1 How consistent is it?
+
+Realistic copy (buy the day after each filing goes public, sell when she discloses a sale), by calendar year:
+
+| Year | Copy | SPY | QQQ | QQQ at 1.2x (same risk as the copy) |
+|---|---|---|---|---|
+| 2015 | 11.7% | 1.2% | 9.4% | 11.0% |
+| 2016 | 9.7% | 12.0% | 7.1% | 8.2% |
+| 2017 | 30.9% | 21.7% | 32.7% | 40.0% |
+| 2018 | -14.3% | -4.6% | -0.1% | -1.1% |
+| 2019 | 33.9% | 31.2% | 39.0% | 47.3% |
+| 2020 | 52.8% | 18.3% | 48.4% | 58.0% |
+| 2021 | 37.8% | 28.7% | 27.4% | 33.2% |
+| 2022 | -42.6% | -18.2% | -32.6% | -38.6% |
+| 2023 | 77.7% | 26.2% | 54.9% | 66.7% |
+| 2024 | 87.3% | 24.9% | 25.6% | 29.6% |
+| 2025 | 31.0% | 17.7% | 20.8% | 23.6% |
+| 2026 to Oct 5 | 25.0% | 14.5% | 23.5% | 27.7% |
+
+- **She beat SPY in 8 of 11 full years**, in 83% of all rolling 3-year windows and in 92% of rolling 5-year windows. The median 5-year window is 78 points ahead of SPY. That is consistent.
+- QQQ also beat SPY in 8 of 11 years and in 92% of 3-year windows. Against QQQ the copy wins only 44% of 3-year windows. Against QQQ levered to the same risk (1.2x), it wins 7 of 11 years by calendar year but loses most multi-year windows, mainly because of 2022.
+- Her own timing (trade date, which a copier can't get) beat SPY in 9 of 11 years.
+
+### 10.2 Copy rules that keep more of it
+
+Her sales are followed by her stocks beating SPY by +17% (section 2), so selling when she sells throws money away. Testing other exit rules (Dec 2014 to Oct 2026, 5 bps costs):
+
+| Rule | CAGR | Sharpe | Sortino | Max DD | 3-factor alpha (t) | Beats SPY, 3-yr windows | Beats QQQ, 3-yr windows |
+|---|---|---|---|---|---|---|---|
+| Sell when she sells (baseline) | 23.6% | 0.83 | 1.13 | -49.5% | +3.5% (0.8) | 83% | 44% |
+| **Never sell (keep her picks)** | 24.1% | 0.87 | 1.19 | -49.1% | +3.3% (1.0) | **93%** | **85%** |
+| Hold each buy 1 year | 26.3% | 0.85 | 1.11 | -55.1% | +6.4% (1.1) | 84% | 62% |
+| **Hold each buy 2 years** | **30.8%** | **0.96** | **1.32** | -50.7% | **+8.1% (1.6)** | **99.7%** | **81%** |
+| Never sell, equal weight | 25.2% | 0.95 | 1.24 | -45.7% | +5.2% (1.6) | 82% | 73% |
+| Sell when she sells, equal weight | 28.2% | 1.00 | 1.32 | -46.4% | | | |
+| Her options, copied (modeled) | 9.5% | 0.45 | | -92.6% | -8.4% | 48% | 30% |
+| SPY | 13.8% | 0.72 | | -33.7% | | | |
+| QQQ | 19.2% | 0.83 | | -35.1% | | 92% | |
+| QQQ at 1.2x | 22.3% | 0.83 | | -41.4% | 0.0% | 97% | 99.7% |
+| XLK | 22.6% | 0.89 | | -33.6% | +2.3% (1.5) | 100% | 96% |
+
+**Holding each of her buys for 2 years and ignoring her sales is the best copy found: 30.8% a year, beating SPY in almost every 3-year window and QQQ in 81% of them.** Its alpha after SPY, QQQ and momentum is +8.1% a year, but t = 1.6, so it is still not statistically solid.
+
+Walk-forward check (choose the rule on 2014-2020 only, then lock it):
+
+| Rule | Train 2014-20 vs SPY | Validate 2021-22 vs SPY | Test 2023-26 vs SPY | Test vs QQQ |
+|---|---|---|---|---|
+| Never sell, equal weight (train winner) | +18.7% | **-16.2%** | +23.6% | +12.9% |
+| Hold 2 years | +12.2% | -15.9% | +28.8% | +18.1% |
+| Sell when she sells | +6.1% | -16.8% | +27.3% | +16.6% |
+| Hold 6 months | +7.4% | -3.0% | +20.2% | +9.5% |
+
+Every rule has the same shape: well ahead in 2014-20, about 16 points behind SPY in 2021-22, well ahead in 2023-26. The rule choice only moves how much it wins. By the plan's kill rule (must survive validation), all of them fail on 2021-22. But that loss is one bad year for tech (2022), not a rule falling apart. **If you can sit through a 2022-style year (-43% vs SPY -18%), the hold-2-years copy has beaten SPY over almost every 3-year stretch since 2014.**
+
+### 10.3 Is it timing or stock choice?
+
+For every buy, I compared her 1-year return vs SPY with the same stock bought on 60 random days 1-12 months before or after:
+
+| | Her date | Same stock, random days | Timing edge |
+|---|---|---|---|
+| Copier (public date) | +10.2% | +18.7% | -8.5% (CI -18.7 to +2.1) |
+| Her own trade date | +14.0% | +16.8% | -2.8% (CI -11.5 to +5.9) |
+
+- **Her timing adds nothing.** Even on her own trade dates, the same stocks bought at random times did slightly better. By decision, her timing beat random days 22 times and lost 29 times.
+- **The edge is which stocks she owns:** mega-cap tech and semis, held for years. Against an equal-weight AAPL/MSFT/AMZN/GOOGL/META/NVDA basket over the same year, her picks did -2.1% (CI -9.1 to +6.6), and beat it only 39% of the time.
+- By sector (1-year vs SPY per buy): payments +56% (4 buys), semis +21% (9), big tech +9% (24), media/consumer +6% (7), software/cyber -9% (11). Calls +10.6% (49) vs stock +8.2% (12).
+
+### 10.4 Does power explain it?
+
+| Era | Copy | Her trade date | Never sell | SPY | QQQ |
+|---|---|---|---|---|---|
+| Minority Leader, Dec 2014-2018 | 8.7% | 10.7% | 13.9% | 7.1% | 11.5% |
+| **Speaker, 2019-2022** | 13.5% | 13.7% | 14.6% | **13.6%** | 16.0% |
+| Out of leadership, 2023-2026 | 56.3% | 57.8% | 49.3% | 22.1% | 32.9% |
+
+**Her best years came after she gave up the Speaker's gavel.** As Speaker, the most powerful seat in the House, her copy matched SPY and lost to QQQ. If her edge came from inside information, you'd expect the opposite. The 2023-26 run lines up with the AI rally in the stocks she already liked (NVDA, AVGO, big tech).
+
+### 10.5 Published numbers vs ours (doc section 15)
+
+| Source | Their number | Ours |
+|---|---|---|
+| Quiver "Nancy Pelosi" strategy (backtest, since May 2014) | 21.5%/yr, max DD -37.3%, Sharpe 0.75, beta 1.14 | 23.6%/yr, max DD -49.5%, Sharpe 0.83, beta 1.2 (copy); 73% of positions profitable, same as Quiver's 73% win rate |
+| Unusual Whales 2022 | about -20% (S&P -19%) | Copy -42.6%; ours is more concentrated in her trades only |
+| Unusual Whales 2023 | +65% (S&P +24%) | +77.7% |
+| Unusual Whales 2024 | +70.9% (S&P +25%) | +87.3% |
+| 2025 (24/7 Wall St) | +20.1% (S&P +16.6%) | +31.0% |
+| Autopilot Pelosi Tracker (live) | +54% in 2024 | +87.3% (ours is a pure copy, theirs rebalances to a live account) |
+| NANC ETF (all Democrats) | +88.5% from Feb 2023 launch | Copy 51.1%/yr vs NANC 23.3%/yr since launch |
+
+Unusual Whales doesn't say how it weights options or whether it uses trade date; its wording points to trade date, which flatters the numbers. The direction matches ours every year.
+
+Academic work disagrees on whether leaders have an edge:
+- Wei & Zhou (NBER, Nov 2025, 20 leaders, 1995-2021) find leaders beat matched peers by up to 47 points a year after taking leadership, with sales ahead of hearings and regulatory actions.
+- Chen & Sacerdote (NBER, Apr 2026, 2012-2023) find leaders trailed the market by 4.4 points at one year, and that trades in industries their own committees oversee did worse.
+- Eggers & Hainmueller (2004-08) found Congress overall trailed the market. Belmont et al. (2012-2020) found no outperformance.
+
+Our Pelosi-specific result fits Chen & Sacerdote: no outperformance while she held the most power, and trades with a legislative link did worse (section 6).
+
+### 10.6 The trade-by-trade check, item by item (doc sections 16 and 17)
+
+- Every historical example in doc section 16 was found in the ledger with matching contracts, strikes and dates: HTZ 50 calls at $22 expiring 1/15/2016, the 2021 AMZN, AAPL and NVDA calls, the GOOGL exercise, the June 2022 NVDA exercise at $100 (public 27 days later), the 2024 NVDA buys, the Dec 2024 exercise and sales, and the Jan 2025 calls. One correction: the TEM and VST trades on 2025-01-14 were calls, not stock.
+- `out/why_trades.csv` now has a counter-evidence column for all 52 decisions. For buys it compares her date with random days on the same stock; for sales it shows whether the stock kept beating SPY afterwards. Result: her buy timing helped 22 times and hurt 29 times. Her sales avoided a lag 5 times, and 9 times the stock kept beating SPY after she sold.
+- Options: of 58 modeled call positions, 12 lost more than half and 5 went to zero. Almost all of those were bought in Dec 2021 near the top (DIS, CRM, RBLX, MU and GOOG calls). The filings confirm these losses: for example, "expired with no value for a total loss of $303,001" on the RBLX calls. Copying her options would have doubled her 2022 drawdown.

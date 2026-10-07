@@ -1,0 +1,538 @@
+{
+ "variants": {
+  "A. Copy, sell when she sells (baseline)": {
+   "cagr": 23.6,
+   "sharpe": 0.83,
+   "maxdd": -49.5,
+   "years_beating_SPY": "8 of 11",
+   "years_beating_QQQ": "7 of 11",
+   "roll3y": {
+    "share_beating_SPY": 82.8,
+    "share_beating_QQQ": 44.5,
+    "worst_vs_SPY": -22.2,
+    "median_vs_SPY": 22.1
+   },
+   "roll5y": {
+    "share_beating_SPY": 91.5,
+    "share_beating_QQQ": 43.1,
+    "worst_vs_SPY": -22.4,
+    "median_vs_SPY": 78.0
+   },
+   "alpha3": 3.5,
+   "alpha3_t": 0.8
+  },
+  "B. Copy, never sell (keep her picks)": {
+   "cagr": 24.1,
+   "sharpe": 0.87,
+   "maxdd": -49.1,
+   "years_beating_SPY": "7 of 11",
+   "years_beating_QQQ": "8 of 11",
+   "roll3y": {
+    "share_beating_SPY": 93.0,
+    "share_beating_QQQ": 85.0,
+    "worst_vs_SPY": -14.7,
+    "median_vs_SPY": 38.6
+   },
+   "roll5y": {
+    "share_beating_SPY": 99.6,
+    "share_beating_QQQ": 86.9,
+    "worst_vs_SPY": -6.0,
+    "median_vs_SPY": 91.6
+   },
+   "alpha3": 3.3,
+   "alpha3_t": 0.95
+  },
+  "C. Copy, hold each buy 1 year": {
+   "cagr": 26.3,
+   "sharpe": 0.85,
+   "maxdd": -55.1,
+   "years_beating_SPY": "9 of 11",
+   "years_beating_QQQ": "7 of 11",
+   "roll3y": {
+    "share_beating_SPY": 84.3,
+    "share_beating_QQQ": 61.9,
+    "worst_vs_SPY": -23.6,
+    "median_vs_SPY": 39.3
+   },
+   "roll5y": {
+    "share_beating_SPY": 99.5,
+    "share_beating_QQQ": 63.5,
+    "worst_vs_SPY": -2.5,
+    "median_vs_SPY": 121.6
+   },
+   "alpha3": 6.4,
+   "alpha3_t": 1.1
+  },
+  "D. Copy, hold each buy 2 years": {
+   "cagr": 30.8,
+   "sharpe": 0.96,
+   "maxdd": -50.7,
+   "years_beating_SPY": "8 of 11",
+   "years_beating_QQQ": "8 of 11",
+   "roll3y": {
+    "share_beating_SPY": 99.7,
+    "share_beating_QQQ": 81.2,
+    "worst_vs_SPY": -5.4,
+    "median_vs_SPY": 48.9
+   },
+   "roll5y": {
+    "share_beating_SPY": 99.8,
+    "share_beating_QQQ": 85.5,
+    "worst_vs_SPY": -5.6,
+    "median_vs_SPY": 178.7
+   },
+   "alpha3": 8.1,
+   "alpha3_t": 1.59
+  },
+  "E. Copy, never sell, equal weight": {
+   "cagr": 25.2,
+   "sharpe": 0.95,
+   "maxdd": -45.7,
+   "years_beating_SPY": "8 of 11",
+   "years_beating_QQQ": "8 of 11",
+   "roll3y": {
+    "share_beating_SPY": 82.3,
+    "share_beating_QQQ": 73.4,
+    "worst_vs_SPY": -21.8,
+    "median_vs_SPY": 62.0
+   },
+   "roll5y": {
+    "share_beating_SPY": 98.7,
+    "share_beating_QQQ": 86.1,
+    "worst_vs_SPY": -9.1,
+    "median_vs_SPY": 79.1
+   },
+   "alpha3": 5.2,
+   "alpha3_t": 1.64
+  },
+  "F. Her own timing (trade date, not copyable)": {
+   "cagr": 24.8,
+   "sharpe": 0.84,
+   "maxdd": -51.6,
+   "years_beating_SPY": "9 of 11",
+   "years_beating_QQQ": "7 of 11",
+   "roll3y": {
+    "share_beating_SPY": 87.4,
+    "share_beating_QQQ": 48.4,
+    "worst_vs_SPY": -17.1,
+    "median_vs_SPY": 24.1
+   },
+   "roll5y": {
+    "share_beating_SPY": 96.0,
+    "share_beating_QQQ": 47.6,
+    "worst_vs_SPY": -16.8,
+    "median_vs_SPY": 83.2
+   },
+   "alpha3": 3.9,
+   "alpha3_t": 0.89
+  },
+  "G. Her own timing with her options (not copyable)": {
+   "cagr": 16.9,
+   "sharpe": 0.53,
+   "maxdd": -88.2,
+   "years_beating_SPY": "7 of 11",
+   "years_beating_QQQ": "6 of 11",
+   "roll3y": {
+    "share_beating_SPY": 57.2,
+    "share_beating_QQQ": 53.6,
+    "worst_vs_SPY": -112.8,
+    "median_vs_SPY": 30.5
+   },
+   "roll5y": {
+    "share_beating_SPY": 39.9,
+    "share_beating_QQQ": 31.5,
+    "worst_vs_SPY": -176.0,
+    "median_vs_SPY": -61.4
+   },
+   "alpha3": -4.6,
+   "alpha3_t": -0.32
+  },
+  "H. Copy with her options (deep calls), sell when she sells": {
+   "cagr": 9.5,
+   "sharpe": 0.45,
+   "maxdd": -92.6,
+   "years_beating_SPY": "8 of 11",
+   "years_beating_QQQ": "6 of 11",
+   "roll3y": {
+    "share_beating_SPY": 48.3,
+    "share_beating_QQQ": 30.1,
+    "worst_vs_SPY": -109.6,
+    "median_vs_SPY": -4.0
+   },
+   "roll5y": {
+    "share_beating_SPY": 23.9,
+    "share_beating_QQQ": 16.3,
+    "worst_vs_SPY": -138.8,
+    "median_vs_SPY": -54.6
+   },
+   "alpha3": -8.4,
+   "alpha3_t": -0.58
+  },
+  "SPY": {
+   "cagr": 13.8,
+   "sharpe": 0.72,
+   "maxdd": -33.7,
+   "years_beating_SPY": "0 of 11",
+   "years_beating_QQQ": "3 of 11",
+   "roll3y": {
+    "share_beating_SPY": 0.0,
+    "share_beating_QQQ": 8.5,
+    "worst_vs_SPY": 0.0,
+    "median_vs_SPY": 0.0
+   },
+   "roll5y": {
+    "share_beating_SPY": 0.0,
+    "share_beating_QQQ": 0.8,
+    "worst_vs_SPY": 0.0,
+    "median_vs_SPY": 0.0
+   },
+   "alpha3": 0.0,
+   "alpha3_t": 0.65
+  },
+  "QQQ": {
+   "cagr": 19.2,
+   "sharpe": 0.83,
+   "maxdd": -35.1,
+   "years_beating_SPY": "8 of 11",
+   "years_beating_QQQ": "0 of 11",
+   "roll3y": {
+    "share_beating_SPY": 91.5,
+    "share_beating_QQQ": 0.0,
+    "worst_vs_SPY": -5.1,
+    "median_vs_SPY": 22.7
+   },
+   "roll5y": {
+    "share_beating_SPY": 99.2,
+    "share_beating_QQQ": 0.0,
+    "worst_vs_SPY": -1.8,
+    "median_vs_SPY": 48.2
+   },
+   "alpha3": 0.0,
+   "alpha3_t": 0.33
+  },
+  "XLK": {
+   "cagr": 22.6,
+   "sharpe": 0.89,
+   "maxdd": -33.6,
+   "years_beating_SPY": "9 of 11",
+   "years_beating_QQQ": "7 of 11",
+   "roll3y": {
+    "share_beating_SPY": 100.0,
+    "share_beating_QQQ": 96.2,
+    "worst_vs_SPY": 0.8,
+    "median_vs_SPY": 33.3
+   },
+   "roll5y": {
+    "share_beating_SPY": 100.0,
+    "share_beating_QQQ": 100.0,
+    "worst_vs_SPY": 21.4,
+    "median_vs_SPY": 79.9
+   },
+   "alpha3": 2.3,
+   "alpha3_t": 1.45
+  },
+  "TECH6": {
+   "cagr": 33.9,
+   "sharpe": 1.15,
+   "maxdd": -47.8,
+   "years_beating_SPY": "10 of 11",
+   "years_beating_QQQ": "9 of 11",
+   "roll3y": {
+    "share_beating_SPY": 100.0,
+    "share_beating_QQQ": 100.0,
+    "worst_vs_SPY": 12.6,
+    "median_vs_SPY": 83.3
+   },
+   "roll5y": {
+    "share_beating_SPY": 100.0,
+    "share_beating_QQQ": 100.0,
+    "worst_vs_SPY": 41.8,
+    "median_vs_SPY": 233.5
+   },
+   "alpha3": 9.7,
+   "alpha3_t": 3.86
+  },
+  "QQQ x1.2 (same risk as copy)": {
+   "cagr": 22.3,
+   "sharpe": 0.83,
+   "maxdd": -41.4,
+   "years_beating_SPY": "9 of 11",
+   "years_beating_QQQ": "9 of 11",
+   "roll3y": {
+    "share_beating_SPY": 97.4,
+    "share_beating_QQQ": 99.7,
+    "worst_vs_SPY": -4.7,
+    "median_vs_SPY": 38.4
+   },
+   "roll5y": {
+    "share_beating_SPY": 100.0,
+    "share_beating_QQQ": 100.0,
+    "worst_vs_SPY": 9.9,
+    "median_vs_SPY": 76.7
+   },
+   "alpha3": -0.0,
+   "alpha3_t": -0.7
+  }
+ },
+ "yearly": {
+  "2014": {
+   "A. Copy, sell when she sells (baseline)": 0.0,
+   "B. Copy, never sell (keep her picks)": 0.0,
+   "C. Copy, hold each buy 1 year": 0.0,
+   "D. Copy, hold each buy 2 years": 0.0,
+   "E. Copy, never sell, equal weight": 0.0,
+   "F. Her own timing (trade date, not copyable)": 4.0,
+   "G. Her own timing with her options (not copyable)": 12.8,
+   "H. Copy with her options (deep calls), sell when she sells": 0.0,
+   "SPY": -0.1,
+   "QQQ": -0.6,
+   "XLK": -0.4,
+   "TECH6": 0.2,
+   "QQQ x1.2 (same risk as copy)": -0.7
+  },
+  "2015": {
+   "A. Copy, sell when she sells (baseline)": 11.7,
+   "B. Copy, never sell (keep her picks)": 11.7,
+   "C. Copy, hold each buy 1 year": 11.7,
+   "D. Copy, hold each buy 2 years": 11.7,
+   "E. Copy, never sell, equal weight": 11.7,
+   "F. Her own timing (trade date, not copyable)": 12.9,
+   "G. Her own timing with her options (not copyable)": 54.1,
+   "H. Copy with her options (deep calls), sell when she sells": 45.1,
+   "SPY": 1.2,
+   "QQQ": 9.4,
+   "XLK": 5.5,
+   "TECH6": 45.7,
+   "QQQ x1.2 (same risk as copy)": 11.0
+  },
+  "2016": {
+   "A. Copy, sell when she sells (baseline)": 9.7,
+   "B. Copy, never sell (keep her picks)": 9.7,
+   "C. Copy, hold each buy 1 year": 14.8,
+   "D. Copy, hold each buy 2 years": 9.7,
+   "E. Copy, never sell, equal weight": 12.8,
+   "F. Her own timing (trade date, not copyable)": 12.8,
+   "G. Her own timing with her options (not copyable)": -23.8,
+   "H. Copy with her options (deep calls), sell when she sells": -60.5,
+   "SPY": 12.0,
+   "QQQ": 7.1,
+   "XLK": 15.0,
+   "TECH6": 35.2,
+   "QQQ x1.2 (same risk as copy)": 8.2
+  },
+  "2017": {
+   "A. Copy, sell when she sells (baseline)": 30.9,
+   "B. Copy, never sell (keep her picks)": 45.3,
+   "C. Copy, hold each buy 1 year": 36.6,
+   "D. Copy, hold each buy 2 years": 49.9,
+   "E. Copy, never sell, equal weight": 69.0,
+   "F. Her own timing (trade date, not copyable)": 18.2,
+   "G. Her own timing with her options (not copyable)": 27.9,
+   "H. Copy with her options (deep calls), sell when she sells": 50.1,
+   "SPY": 21.7,
+   "QQQ": 32.7,
+   "XLK": 34.3,
+   "TECH6": 53.3,
+   "QQQ x1.2 (same risk as copy)": 40.0
+  },
+  "2018": {
+   "A. Copy, sell when she sells (baseline)": -14.3,
+   "B. Copy, never sell (keep her picks)": -6.8,
+   "C. Copy, hold each buy 1 year": -19.3,
+   "D. Copy, hold each buy 2 years": -14.0,
+   "E. Copy, never sell, equal weight": 13.2,
+   "F. Her own timing (trade date, not copyable)": -3.4,
+   "G. Her own timing with her options (not copyable)": 62.9,
+   "H. Copy with her options (deep calls), sell when she sells": -3.8,
+   "SPY": -4.6,
+   "QQQ": -0.1,
+   "XLK": -1.7,
+   "TECH6": -2.3,
+   "QQQ x1.2 (same risk as copy)": -1.1
+  },
+  "2019": {
+   "A. Copy, sell when she sells (baseline)": 33.9,
+   "B. Copy, never sell (keep her picks)": 37.6,
+   "C. Copy, hold each buy 1 year": 32.6,
+   "D. Copy, hold each buy 2 years": 33.9,
+   "E. Copy, never sell, equal weight": 47.3,
+   "F. Her own timing (trade date, not copyable)": 33.2,
+   "G. Her own timing with her options (not copyable)": 5.5,
+   "H. Copy with her options (deep calls), sell when she sells": 7.8,
+   "SPY": 31.2,
+   "QQQ": 39.0,
+   "XLK": 49.9,
+   "TECH6": 55.3,
+   "QQQ x1.2 (same risk as copy)": 47.3
+  },
+  "2020": {
+   "A. Copy, sell when she sells (baseline)": 52.8,
+   "B. Copy, never sell (keep her picks)": 68.1,
+   "C. Copy, hold each buy 1 year": 82.0,
+   "D. Copy, hold each buy 2 years": 77.1,
+   "E. Copy, never sell, equal weight": 62.5,
+   "F. Her own timing (trade date, not copyable)": 50.2,
+   "G. Her own timing with her options (not copyable)": 119.3,
+   "H. Copy with her options (deep calls), sell when she sells": 86.0,
+   "SPY": 18.3,
+   "QQQ": 48.4,
+   "XLK": 43.6,
+   "TECH6": 64.1,
+   "QQQ x1.2 (same risk as copy)": 58.0
+  },
+  "2021": {
+   "A. Copy, sell when she sells (baseline)": 37.8,
+   "B. Copy, never sell (keep her picks)": 27.9,
+   "C. Copy, hold each buy 1 year": 55.8,
+   "D. Copy, hold each buy 2 years": 38.4,
+   "E. Copy, never sell, equal weight": 24.8,
+   "F. Her own timing (trade date, not copyable)": 46.8,
+   "G. Her own timing with her options (not copyable)": 82.0,
+   "H. Copy with her options (deep calls), sell when she sells": 58.2,
+   "SPY": 28.7,
+   "QQQ": 27.4,
+   "XLK": 34.7,
+   "TECH6": 48.4,
+   "QQQ x1.2 (same risk as copy)": 33.2
+  },
+  "2022": {
+   "A. Copy, sell when she sells (baseline)": -42.6,
+   "B. Copy, never sell (keep her picks)": -43.0,
+   "C. Copy, hold each buy 1 year": -48.6,
+   "D. Copy, hold each buy 2 years": -43.8,
+   "E. Copy, never sell, equal weight": -40.6,
+   "F. Her own timing (trade date, not copyable)": -44.2,
+   "G. Her own timing with her options (not copyable)": -85.4,
+   "H. Copy with her options (deep calls), sell when she sells": -72.5,
+   "SPY": -18.2,
+   "QQQ": -32.6,
+   "XLK": -27.7,
+   "TECH6": -41.9,
+   "QQQ x1.2 (same risk as copy)": -38.6
+  },
+  "2023": {
+   "A. Copy, sell when she sells (baseline)": 77.7,
+   "B. Copy, never sell (keep her picks)": 80.7,
+   "C. Copy, hold each buy 1 year": 43.2,
+   "D. Copy, hold each buy 2 years": 132.1,
+   "E. Copy, never sell, equal weight": 63.4,
+   "F. Her own timing (trade date, not copyable)": 63.9,
+   "G. Her own timing with her options (not copyable)": 55.0,
+   "H. Copy with her options (deep calls), sell when she sells": 44.3,
+   "SPY": 26.2,
+   "QQQ": 54.9,
+   "XLK": 56.0,
+   "TECH6": 106.1,
+   "QQQ x1.2 (same risk as copy)": 66.7
+  },
+  "2024": {
+   "A. Copy, sell when she sells (baseline)": 87.3,
+   "B. Copy, never sell (keep her picks)": 67.8,
+   "C. Copy, hold each buy 1 year": 169.1,
+   "D. Copy, hold each buy 2 years": 113.7,
+   "E. Copy, never sell, equal weight": 45.5,
+   "F. Her own timing (trade date, not copyable)": 85.1,
+   "G. Her own timing with her options (not copyable)": 49.1,
+   "H. Copy with her options (deep calls), sell when she sells": 76.3,
+   "SPY": 24.9,
+   "QQQ": 25.6,
+   "XLK": 21.6,
+   "TECH6": 57.6,
+   "QQQ x1.2 (same risk as copy)": 29.6
+  },
+  "2025": {
+   "A. Copy, sell when she sells (baseline)": 31.0,
+   "B. Copy, never sell (keep her picks)": 24.8,
+   "C. Copy, hold each buy 1 year": 37.5,
+   "D. Copy, hold each buy 2 years": 36.1,
+   "E. Copy, never sell, equal weight": 16.7,
+   "F. Her own timing (trade date, not copyable)": 30.9,
+   "G. Her own timing with her options (not copyable)": 15.0,
+   "H. Copy with her options (deep calls), sell when she sells": 27.4,
+   "SPY": 17.7,
+   "QQQ": 20.8,
+   "XLK": 24.6,
+   "TECH6": 26.4,
+   "QQQ x1.2 (same risk as copy)": 23.6
+  },
+  "2026": {
+   "A. Copy, sell when she sells (baseline)": 25.0,
+   "B. Copy, never sell (keep her picks)": 20.4,
+   "C. Copy, hold each buy 1 year": 8.2,
+   "D. Copy, hold each buy 2 years": 21.2,
+   "E. Copy, never sell, equal weight": 19.6,
+   "F. Her own timing (trade date, not copyable)": 38.0,
+   "G. Her own timing with her options (not copyable)": 38.9,
+   "H. Copy with her options (deep calls), sell when she sells": 25.3,
+   "SPY": 14.5,
+   "QQQ": 23.5,
+   "XLK": 40.1,
+   "TECH6": 17.9,
+   "QQQ x1.2 (same risk as copy)": 27.7
+  }
+ },
+ "eras_cagr": {
+  "Minority Leader 2014-2018": {
+   "A. Copy, sell when she sells (baseline)": 8.7,
+   "B. Copy, never sell (keep her picks)": 13.9,
+   "F. Her own timing (trade date, not copyable)": 10.7,
+   "SPY": 7.1,
+   "QQQ": 11.5
+  },
+  "Speaker 2019-2022": {
+   "A. Copy, sell when she sells (baseline)": 13.5,
+   "B. Copy, never sell (keep her picks)": 14.6,
+   "F. Her own timing (trade date, not copyable)": 13.7,
+   "SPY": 13.6,
+   "QQQ": 16.0
+  },
+  "Out of leadership 2023-2026": {
+   "A. Copy, sell when she sells (baseline)": 56.3,
+   "B. Copy, never sell (keep her picks)": 49.3,
+   "F. Her own timing (trade date, not copyable)": 57.8,
+   "SPY": 22.1,
+   "QQQ": 32.9
+  }
+ },
+ "timing_vs_selection": {
+  "copy": {
+   "n": 61,
+   "her_pick_vs_SPY": 10.2,
+   "same_stock_random_day_vs_SPY": 18.7,
+   "timing_edge": -8.5,
+   "timing_ci": [
+    -18.7,
+    2.1
+   ],
+   "timing_edge_by_era": {
+    "Minority Leader 2014-2018": -2.8,
+    "Speaker 2019-2022": -9.8,
+    "Out of leadership 2023-2026": -11.6
+   }
+  },
+  "her": {
+   "n": 61,
+   "her_pick_vs_SPY": 14.0,
+   "same_stock_random_day_vs_SPY": 16.8,
+   "timing_edge": -2.8,
+   "timing_ci": [
+    -11.5,
+    5.9
+   ],
+   "timing_edge_by_era": {
+    "Minority Leader 2014-2018": -2.4,
+    "Speaker 2019-2022": -4.6,
+    "Out of leadership 2023-2026": 1.1
+   }
+  }
+ },
+ "selection_vs_tech_basket": {
+  "n": 61,
+  "mean": -2.1,
+  "ci": [
+   -9.1,
+   6.6
+  ],
+  "hit": 39.3
+ }
+}

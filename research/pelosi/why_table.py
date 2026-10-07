@@ -88,3 +88,50 @@ B["kind"] = np.select([B.catalyst.str.contains("dip"), B.catalyst.str.contains("
 print(B.groupby("kind").x252.agg(["count", "mean", "median"]).round(3))
 print("public catalyst before or same day:", (B.public_before.isin(["before", "same day", "same/next day"])).mean().round(2))
 B.to_csv(OUT / "why_buys_scored.csv", index=False)
+
+# Counter-evidence for every decision, from prices (doc section 17 asks for it):
+# buys: did buying on her date beat buying the same stock on random days 1-12
+# months either side? sells: did the stock fall vs SPY in the year after?
+from engine import Prices  # noqa: E402
+
+P = Prices()
+rng = np.random.default_rng(0)
+OFFS = np.r_[np.arange(-252, -21), np.arange(22, 253)]
+
+
+def x1y(t, i):
+    a = P.adj[t].values
+    s = P.adj["SPY"].values
+    if i < 0 or i + 252 >= len(a) or not (np.isfinite(a[i]) and np.isfinite(a[i + 252])):
+        return np.nan
+    return a[i + 252] / a[i] - s[i + 252] / s[i]
+
+
+def counter(r):
+    i = P.idx_on_or_after(r.date)
+    out = []
+    for t in r.tickers.replace("FB", "META").replace("SQ", "XYZ").split(","):
+        if t not in P.adj or i is None:
+            continue
+        x = x1y(t, i)
+        if not np.isfinite(x):
+            continue
+        if r.side == "buy":
+            rnd = [x1y(t, i + o) for o in rng.choice(OFFS, 60)]
+            rnd = np.nanmean(rnd) if np.isfinite(rnd).sum() >= 20 else np.nan
+            if np.isfinite(rnd):
+                verdict = "her timing helped" if x > rnd else "random days did better"
+                out.append(f"{t}: {x:+.0%} vs SPY next year; same stock on random days {rnd:+.0%} ({verdict})")
+        else:
+            verdict = "sale avoided a lag" if x < 0 else "stock kept beating SPY after she sold"
+            out.append(f"{t}: {x:+.0%} vs SPY in the year after the sale ({verdict})")
+    return "; ".join(out) if out else "no price history to check"
+
+
+W["counter_evidence"] = W.apply(counter, axis=1)
+W.to_csv(OUT / "why_trades.csv", index=False)
+hb = W[W.side == "buy"].counter_evidence.str.count("her timing helped").sum()
+rb = W[W.side == "buy"].counter_evidence.str.count("random days did better").sum()
+hs = W[W.side == "sell"].counter_evidence.str.count("sale avoided").sum()
+ks = W[W.side == "sell"].counter_evidence.str.count("kept beating").sum()
+print(f"buy timing: helped {hb}, random better {rb}; sells: avoided a lag {hs}, kept beating {ks}")
