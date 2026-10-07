@@ -11,7 +11,7 @@ Run 2026-10-07. Every number here comes from `study.py` on the data in `data/`, 
 - **Copying her options is reckless.** Buying modeled calls with her dollar weights loses heavily (max drawdown about -92%), driven mostly by the 2021 calls that expired in 2022.
 - **Her sales are not sell signals.** Stocks she sold went on to beat SPY by **+16.9%** over the next year (95% CI +8 to +32). Half of her sales and gifts happen in December (taxes and charity).
 - **The "beat Pelosi" bot failed walk-forward.** The best filter on 2014-2020 ("calls only, hold 1 year", +19.9% vs SPY) lost -12.3% in 2021-2022 validation, then made +29.9% in 2023-2026 (n = 9). That inconsistency is a kill.
-- **Congress-wide, the average member loses to SPY.** Across 18,702 House and Senate trades from 2023-2026, the average stock buy trailed SPY by **-1.9% at 3 months** and **-4.3% at 6 months**, and $250k+ buys trailed by -10.3% at 6 months. Picking the 10 members with the best past record gave +1.1% (CI -1.5 to +4.0), which is not enough to trade.
+- **Congress-wide, the average member loses to SPY.** Across 18,702 House and Senate trades from 2023-2026, the average stock buy trailed SPY by **-1.9% at 3 months** and **-4.3% at 6 months**, and $250k+ buys trailed by -10.3% at 6 months. Picking the 10 members with the best past record gave +1.1% (CI -1.5 to +4.0), which is not enough to trade. **The full 2014-2026 rerun (122,522 trades, 378 members) agrees:** the average buy is about zero vs SPY in 2014-2022 and negative since 2023, and the call-option slice that looked good in 2023-26 lost in 2019-22 (-1.4% at 6 months, n = 189).
 - **Verdict: the copy thesis fails the project's pass bar.** It beats SPY on return but not on drawdown, its edge disappears after controlling for big tech, it is fragile, and nothing filtered survives out-of-sample. Recommended bot: none for real money. Two small, evidence-backed changes to the village's congress scanner are proposed for paper scoring only.
 
 ## 1. Data and reconciliation (doc sections 3-8)
@@ -137,7 +137,48 @@ Sources checked: Fox News on SunEdison and First Wind; Fortune 2014-11-20 (Hertz
 | Same quarters, all members | | -1.6% | | 6,388 |
 | Bottom 10 members (control) | | -1.1% | | 347 |
 
-Senate buys did -0.4% at 3 months and House buys -2.0%. This window uses the old Alpaca daily file (adjusted, Dec 2022 to Jul 2026), because the PC's full congress price download didn't finish. Pre-2023 congress-wide is still to be determined.
+Senate buys did -0.4% at 3 months and House buys -2.0%. This window uses the old Alpaca daily file (adjusted, Dec 2022 to Jul 2026), because the PC's full congress price download didn't finish. The full-history rerun below replaces "to be determined" for pre-2023.
+
+### 7b. Congress-wide, full history 2014-2026 (`congress_full.py`)
+
+Prices: the PC's yearly `congress_prices_YYYY.parquet` (Yahoo adjusted close, 3,400 tickers). Of 146,617 House and Senate stock and call-option trades made public since 2014, 122,522 could be priced. 24,095 (16%) were dropped: 1,625 tickers have no Yahoo history (mostly delisted or acquired companies), and a data-quality screen removed 177 more (foreign OTC lines and tickers with a one-day move over 3x, which were bad prints). So this is biased toward companies that survived. Same rules as above: buy at the close of the first session after the trade went public, 10 bps cost, return minus SPY. Brackets are 95% CIs, resampled by filing date.
+
+Average stock buy vs SPY, by when it went public:
+
+| Period | 1 month | 3 months | 6 months | 1 year | n |
+|---|---|---|---|---|---|
+| 2014-2018 | -0.1% | -0.1% | -0.1% [-0.6, +0.5] | 0.0% | 21,129 |
+| 2019-2022 | +0.4% | +0.1% | -0.2% [-1.0, +0.7] | +0.9% | 23,020 |
+| 2023-2026 | -0.3% | -1.2% | **-2.7%** [-3.6, -1.9] | -3.5% | 15,283 |
+| All | 0.0% | -0.4% | **-0.8%** [-1.2, -0.3] | -0.4% | 59,432 |
+
+The median buy trails SPY by 1.8% at 6 months, and only 45% of buys beat SPY.
+
+Other slices, 6 months vs SPY:
+
+| Signal | 2014-2018 | 2019-2022 | 2023-2026 | All |
+|---|---|---|---|---|
+| Call-option buys | -3.9% (n = 7) | **-1.4%** [-7.5, +5.6] (n = 189) | +8.2% [+1.7, +17.2] (n = 48) | +0.4% [-4.8, +6.3] (n = 244) |
+| Big buys ($250k+) | -2.4% | +1.7% | -5.7% | -1.0% (n = 493) |
+| Stock sales | -0.9% | 0.0% | -1.5% | -0.7% |
+| Senate buys | +1.1% | -0.2% | -0.9% | +0.3% [-0.8, +1.4] |
+| House buys | -0.2% | -0.2% | -2.9% | -0.9% |
+| Filed within 15 days | +0.3% | +0.8% | -2.5% | -0.3% |
+
+Member skill, walk-forward by quarter from 2015 (rank members on buys whose 6-month result was already known, follow the top 10 next quarter):
+
+| Group | 6 months vs SPY | n |
+|---|---|---|
+| Top 10 by past record | +0.8% [-1.5, +3.1] | 1,211 |
+| Bottom 10 by past record | +0.3% [-1.8, +3.0] | 1,103 |
+| All members, same quarters | -0.8% | 56,271 |
+
+A member's 2014-2019 record barely predicts their 2020-2026 record (rank correlation 0.22, p = 0.11, 55 members with 10+ buys in each half). Momentum before the trade doesn't help either (rank correlation 0.02). Pelosi's own stock buys did +5.1% at 6 months [-0.8, +11.8] (n = 55), better than almost everyone, but that is the big-tech tilt from sections 3-5.
+
+What it means:
+- **There is no congress-wide edge to copy.** Over twelve years the average member's buys roughly match SPY, and since 2023 they trail it.
+- **The call-option slice doesn't hold up.** It was the one positive result in 2023-26, but over 2019-22, with four times as many trades, it lost. The 2023-26 number is most likely the AI rally in big tech (where most of these calls are), not skill.
+- **Following the "best" members doesn't work.** The top 10 did about as well as the bottom 10, and past skill barely carries forward.
 
 ## 8. Doc section 22, filled in
 
@@ -153,6 +194,7 @@ Senate buys did -0.4% at 3 months and House buys -2.0%. This window uses the old
 | Best bot | None for real money (see below) |
 | Why-model predictive value | None. 86% of buys followed a public catalyst; buys with a legislative link did worse (+0.4% vs +20.9%) |
 | Walk-forward performance | Train +19.9%, validate -12.3%, test +29.9%: inconsistent |
+| Congress-wide before 2023 | Done (section 7b): average buy about 0% vs SPY in 2014-2022, call-option buys -1.4% at 6 months in 2019-22, member ranking no better than the bottom 10 |
 | Final verdict | **Fail.** The apparent Pelosi edge is mega-cap tech beta plus a few big AI-era winners |
 
 ## 9. Bot (doc sections 18 and 23)
@@ -160,7 +202,7 @@ Senate buys did -0.4% at 3 months and House buys -2.0%. This window uses the old
 Nothing passed, so there is no Pelosi bot to paper-trade. If you want Pelosi exposure, QQQ or XLK gave the same risk-adjusted return with a much smaller drawdown.
 
 What the evidence does support, for the village's existing congress scanner (paper scoring in the idea lab only):
-1. **Score congress call-option buys** as bullish calls on the underlying. They are the only congress slice with a positive tilt (+5.2% at 6 months, n = 40, not yet significant), and the scanner currently skips them.
+1. ~~**Score congress call-option buys**~~ as bullish calls on the underlying. They looked like the only positive slice in 2023-26 (+5.2% at 6 months, n = 40), but the full-history rerun (section 7b) shows them losing in 2019-22 (-1.4%, n = 189). The evidence no longer supports adding them; PR #38 should be closed rather than merged.
 2. **Do not weight members by past record.** The walk-forward lift was small and not significant, and the bottom-10 control did about as well as average.
 
-Reproduce: `python research/pelosi/study.py <old Alpaca prices.json>` (data from branch `research/pelosi-data`). Tables are in `research/pelosi/out/`.
+Reproduce: `python research/pelosi/study.py <old Alpaca prices.json>` and `python research/pelosi/congress_full.py` (data from branch `research/pelosi-data`). Tables are in `research/pelosi/out/`.
