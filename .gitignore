@@ -87,6 +87,7 @@ bots/*
 !bots/scanner.py
 !bots/sentinel.py
 !bots/veritas_reversion.py
+!bots/big5_trend.py
 !bots/wheel.py
 
 # The bridges: they carry a live bot's own output into the signal board rather

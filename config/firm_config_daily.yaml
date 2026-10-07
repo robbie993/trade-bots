@@ -51,6 +51,35 @@ firms:
       time_stop_days: 10
       max_concurrent: 4
 
+  firm_big5_trend:
+    name: "Big-5 Trend"
+    asset_class: "Equity"
+    # The public rule left standing after the Pelosi research: hold the five
+    # most-traded US stocks, monthly, only while QQQ is above its 200-day
+    # average. Every constant lives in the bot file and is the backtest's own.
+    # Daily village only: the 200-day filter needs daily bars.
+    strategy: "bot:bots/big5_trend.py"
+    venue: "paper"
+    # 0.20 so one new position can be the rule's full 20% of the firm. The
+    # village's own 25% position cap and eight-position limit still apply.
+    risk_limit: 0.20
+    capital_allocation: 20000
+    # Fixed pool (the bot can only rank what it is given) plus QQQ as the trend
+    # gauge, which is never bought. Chosen in October 2026 from what is big now:
+    # fine for a forward test, not a fair universe for a backtest.
+    universe: [NVDA, TSLA, AAPL, MSFT, AMZN, META, GOOGL, AVGO, AMD, PLTR, NFLX, MU, LLY, JPM, COIN, ORCL, UNH, COST, V, MA, WMT, XOM, BAC, CRM, INTC, MSTR, SMCI, ADBE, QCOM, HOOD, QQQ]
+    analysts: [technical, sentiment, macro]
+    # Recorded for the leaderboard and the court; the adapter does not read it.
+    # Frozen: changing these ends the forward test.
+    genome:
+      top_n: 5
+      weight: 0.20
+      rank_days: 63
+      trend_days: 200
+      trend_symbol: QQQ
+      rebalance: monthly
+    genome_locked: true
+
   firm_fleet_desk:
     name: "Fleet Desk"
     asset_class: "Equity"
