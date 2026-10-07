@@ -462,3 +462,47 @@ Each one compared activity around her trades with that company's normal rate, an
 | Copy without NVDA | | 19.3%/yr, the same as QQQ, with more volatility and a -46% worst drop. 2024 alone was +156% because of NVDA |
 
 Still being gathered: lobbying filings, every law 2013-2026 and every hearing with witnesses.
+
+## 12. The public "Pelosi-like" strategy, tested properly (`mt_grid.py`)
+
+Robbie passed on GPT's review: kill the copy bot, and instead test the public most-traded-stocks strategy in 12 steps, keeping 2022 in validation. This section runs steps 1, 2, 5-12. Valuation (step 3) and earnings catalysts (step 4) need fundamentals data, which is being gathered on the PC.
+
+**Grid, fixed before looking:** 240 variants.
+- Portfolio size: 5, 10, 20 or 30 stocks.
+- Signal: most traded (size), 12-1 momentum, 6-month momentum, low volatility, or a size+momentum blend. The non-size signals pick from the 50 most traded.
+- Weights: equal or inverse-volatility.
+- Rebalance: monthly or weekly.
+- Bear-market filter: none, SPY above its 200-day average, or QQQ above its 200-day average. When the filter is off, the money sits in T-bills.
+
+The universe is point in time, ETFs are removed, and trading costs are 10 bps.
+
+**Selection rule:** best Sharpe on train (Dec 2014 to 2020), then validate on 2021-22, then test on 2023 to Oct 2026.
+
+| | Train CAGR | Validate (2021-22) | Test (2023-26) | Whole period CAGR / Sharpe / Max DD |
+|---|---|---|---|---|
+| **Train pick: 5 most traded, equal, monthly, no filter** | 35.4% | **-18.7%** | 59.6% | 30.7% / 1.02 / -51.5% |
+| Average of the 10 best on train | | -15.8% | 51.2% | |
+| 10 most traded, plain | 31.3% | -15.3% | 58.7% | 29.4% / 1.03 / -51.3% |
+| **10 most traded + QQQ 200-day filter** | 22.5% | **+9.4%** | 34.5% | **23.8% / 1.02 / -31.1%** |
+| 10 most traded + SPY 200-day filter | 21.2% | -11.5% | 30.4% | 17.7% / 0.81 / -46.9% |
+| SPY | 12.6% | 3.4% | 22.3% | 13.7% / 0.82 / -33.7% |
+| QQQ | 20.9% | -6.7% | 33.0% | 19.0% / 0.91 / -35.1% |
+
+**The pre-registered pick failed validation again (-18.7% in 2021-22).** Every concentrated big-stock variant without a bear filter crashes in 2022.
+
+**What the grid shows across all 240 variants:**
+- **The QQQ 200-day filter is the one thing that fixes 2022.** Averaged over every variant, 2021-22 return goes from -8.3% (no filter) to -0.2% (QQQ filter). The SPY filter barely helps (-6.6%), because QQQ broke trend earlier in the 2022 tech bear.
+- With the QQQ filter, 15% of variants beat SPY in all three periods, against 2% without a filter.
+- Every 5- or 10-stock "most traded" variant with the QQQ filter beat SPY in 2021-22 (+5% to +13%). So it's a stable neighborhood, not one lucky setting:
+  - 10 most traded, inverse-vol, monthly, QQQ filter: 22.4%/yr, Sharpe 1.06, max DD -29.5%.
+  - 5 most traded, inverse-vol, monthly, QQQ filter: 23.6%/yr, Sharpe 1.06, max DD -26.9%.
+  - Over the whole period, these beat SPY (13.7%) and QQQ (19.0%) with a smaller worst drop than either.
+- Momentum signals did worst in 2022 (-9% to -12% on average). Low volatility survived 2022 but only made about 8% a year overall. Fewer stocks gave more return and bigger drawdowns. Inverse-vol weights traded a little return for smaller drawdowns. Weekly vs monthly rebalancing made little difference.
+
+**Honest caveat:** the QQQ-filter version was not the train pick. I can see it works in 2021-22 only because I looked at 2021-22. 2022 is one bear market, and trend filters do well in slow bears and can get whipsawed in fast V-shaped crashes. It still held up in 2020's fast crash (train period) and in 2023-26. But there is no untouched history left. **The only real out-of-sample test is a forward paper book**, run like Atlas R3: rules frozen now, a shadow ledger, no orders.
+
+**Proposed frozen rules ("Big-10 trend"):** on the last trading day of each month:
+1. If QQQ closes above its 200-day average, hold the 10 most-traded US stocks (63-day average dollar volume, no ETFs, one share class), weighted by inverse 63-day volatility.
+2. Otherwise hold T-bills.
+
+Score it vs SPY and QQQ using the Atlas R3 pass bar: CAGR above SPY, max drawdown smaller than SPY's, Sharpe at least SPY's, and it survives 2x costs.
