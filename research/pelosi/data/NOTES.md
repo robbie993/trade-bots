@@ -72,3 +72,10 @@ Returns use the underlying stock, never the option. FB is priced from META and S
 - **Amendments:** the 4 "missing" PTRs are 3 amendments, whose rows are folded into the original filings, plus 20035553 (filed 2026-10-02), a $500k–$1M real-estate LLC (REOF XXX, 225 Bush St). That one is newer than the dataset snapshot. No stock trades are missing.
 - **Scanned PTR:** 8214491 is the scanned 2013 filing for the Active Network cash-out. It matches its dataset row.
 - **Annual and amendment reports:** `annual_pdfs/` holds the 15 annual reports, 5 amendments and 2 extension filings. `annual_text.csv` has their text, which lists full holdings, including the LEAPS positions and private stakes such as the Forge/Databricks fund.
+
+## Fix made on 2026-10-07 (evening)
+
+- **`congress_prices_failed.txt` rewritten** as "requested minus priced": 1,628 entries.
+  - A later retry recovered TEV, which is now merged into the yearly price files.
+  - Raw strings like `-- DIS` stay listed as failed. DIS itself is priced. Split the file on newlines, not whitespace.
+- **Renamed tickers:** some missing names were ticker changes (BK → BNY, MMC → MRSH, ABC → COR and more). Their prices are in `../delisted/renamed_prices.parquet`. See `../delisted/NOTES.md`.

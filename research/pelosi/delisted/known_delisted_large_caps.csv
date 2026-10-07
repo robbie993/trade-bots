@@ -1,0 +1,59 @@
+ticker,what_happened,in_congress_trades,member_trades_since_2014,members,yahoo_price_missing
+FB,Facebook (renamed META; old FB history lost on Yahoo),True,590,69,False
+DISCA,Discovery (to WBD 2022),True,270,18,True
+CELG,Celgene (to BMY 2019),True,228,28,True
+ALXN,Alexion (to AZN 2021),True,214,13,True
+WBA,Walgreens (private 2025),True,213,33,True
+AGN,Allergan (to ABBV 2020),True,199,33,True
+UTX,United Technologies (became RTX 2020),True,177,41,True
+ATVI,Activision Blizzard (to MSFT 2023),True,167,23,True
+PXD,Pioneer Natural (to XOM 2024),True,147,19,True
+TWTR,Twitter (taken private 2022),True,146,19,True
+CERN,Cerner (to ORCL 2022),True,136,19,True
+WFM,Whole Foods (to AMZN 2017),True,135,14,True
+SQ,Block (renamed XYZ; now priced as XYZ),True,129,20,True
+CTL,CenturyLink (renamed LUMN),True,124,15,True
+ESRX,Express Scripts (to CI 2018),True,124,24,True
+FRC,First Republic (failed 2023),True,123,10,True
+ANSS,Ansys (to SNPS 2025),True,122,11,True
+DFS,Discover (to COF 2025),True,117,30,True
+ANTM,Anthem (renamed ELV),True,108,21,True
+TWX,Time Warner (to T 2018),True,100,25,True
+VMW,VMware (to AVGO 2023),True,85,14,True
+PCP,Precision Castparts (2016),True,82,10,True
+MRO,Marathon Oil (to COP 2024),True,81,14,True
+RTN,Raytheon (merged 2020),True,81,24,True
+K,Kellanova (to Mars 2025),True,78,15,True
+X,US Steel (to Nippon 2025),True,78,11,True
+HES,Hess (to CVX 2025),True,67,10,True
+SIVB,SVB Financial (failed 2023),True,66,9,True
+DWDP,DowDuPont (split 2019),True,64,22,True
+AET,Aetna (to CVS 2018),True,64,12,True
+MON,Monsanto (to Bayer 2018),True,63,5,True
+CTLT,Catalent (2024),True,61,10,True
+CTXS,Citrix (private 2022),True,61,11,True
+RHT,Red Hat (to IBM 2019),True,60,14,True
+XLNX,Xilinx (to AMD 2022),True,48,10,True
+ABMD,Abiomed (to JNJ 2022),True,45,5,True
+DISH,DISH (to SATS 2023),True,39,8,True
+SPLK,Splunk (to CSCO 2024),True,38,7,True
+EMC,EMC (to Dell 2016),True,36,12,False
+JNPR,Juniper (to HPE 2025),True,36,4,True
+BHI,Baker Hughes (merged 2017),True,30,6,True
+COL,Rockwell Collins (to UTX 2018),True,28,8,True
+SGEN,Seagen (to PFE 2023),True,27,6,True
+LNKD,LinkedIn (to MSFT 2016),True,27,8,True
+NUAN,Nuance (to MSFT 2022),True,26,7,True
+STJ,St. Jude Medical (to ABT 2017),True,21,7,True
+SNI,Scripps Networks (2018),True,20,3,True
+BXLT,Baxalta (to Shire 2016),True,19,8,True
+YHOO,Yahoo/Altaba,True,18,8,True
+MXIM,Maxim (to ADI 2021),True,14,4,True
+HZNP,Horizon (to AMGN 2023),True,12,5,True
+KRFT,Kraft Foods (to KHC 2015),True,11,7,True
+GGP,GGP (2018),True,10,2,True
+PARA,Paramount (to Skydance 2025),True,8,3,False
+LLL,L3 (merged 2019),True,6,3,True
+DTV,DirecTV (to T 2015),True,3,1,True
+CA,CA Inc (to AVGO 2018),True,3,3,True
+ANDV,Andeavor (to MPC 2018),True,1,1,True
