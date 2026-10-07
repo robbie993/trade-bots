@@ -46,3 +46,18 @@ Format: long, with columns date, ticker, open, high, low, close, adj_close, volu
 ## Not gathered (the "why" beyond the filing)
 
 These sources aren't fetched yet: committee assignments, bill votes and timing (for example the CHIPS Act around the NVDA calls), and news around each trade date. Ask if the analysis needs them.
+
+## Trade-by-trade table: `pelosi_trades.csv` (216 rows × 71 columns)
+
+Each row is one of Pelosi's disclosed trades, with all the dataset columns plus:
+
+- **Filing:** `FilingType` and `clerkFilingDate` from the Clerk index.
+- **Timing:** `tradeDate`, `disclosedAt` (availableAt in New York time), and `lagDays` from trade to disclosure.
+- **Forward returns, two ways:**
+  - `trade_*` enters at the adj_close of the first session on or after the trade date. That is the member's own timing, which no one outside could copy.
+  - `disc_*` enters at the adj_close of the first session after the disclosure date. That is what a copier could actually do.
+  - Each has `_ret{1,5,20,60,120,250}d` (raw return) and `_xs…d` (return minus SPY over the same window).
+- **Earnings:** `nextEarnings` and `daysToEarnings` from the trade date.
+- **Parsed from her comments:** `optContracts`, `optRight` (call/put), `optStrike`, `optExpiry`, `shares`, and `nonDirectional`. The last one is 'gift' (15 rows: charity contributions) or 'exercise' (32 rows: option exercises), so these can be left out of a signal test.
+
+Returns use the underlying stock, never the option. FB is priced from META and SQ from XYZ. 26 rows have no price (no ticker, a delisted name, or an LLC or other non-stock asset).
