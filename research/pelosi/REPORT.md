@@ -506,3 +506,9 @@ The universe is point in time, ETFs are removed, and trading costs are 10 bps.
 2. Otherwise hold T-bills.
 
 Score it vs SPY and QQQ using the Atlas R3 pass bar: CAGR above SPY, max drawdown smaller than SPY's, Sharpe at least SPY's, and it survives 2x costs.
+
+These rules already pass that bar on history, but only in-sample:
+- 22.4% CAGR vs SPY 13.7%, Sharpe 1.06 vs 0.82, max drawdown -29.5% vs -33.7%.
+- At 2x costs: 21.9%, Sharpe 1.05. At 5x costs: 20.7%, Sharpe 1.00.
+- By period: 2021-22 +12.5% (SPY +3.4%), 2023-26 +30.7% (SPY 22.3%, QQQ 33.0%).
+- The filter kept it invested 83% of the time.
