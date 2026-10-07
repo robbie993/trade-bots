@@ -1,0 +1,59 @@
+tradeDate,priceTicker,optContracts,optRight,optStrike,optExpiry,spot_raw,moneyness,monthsToExpiry,comment
+2015-07-15,HTZ,42.0,call,14.0,2016-01-15,,,6.052631578947369,Purchase of 42 call options with a strike price of $14 and an expiration date of 1/15/16
+2015-07-16,HTZ,258.0,call,14.0,2016-01-15,,,6.019736842105264,Purchase of 258 call options with a strike price of $14 and an expiration date of 1/15/16
+2016-01-13,AAPL,200.0,call,90.0,2017-01-20,99.95999908447266,0.9003601523039649,12.269736842105264,Purchase of 200 call options with a strike price of $90 and an expiration date of 1/20/17
+2016-05-17,AAPL,100.0,call,80.0,2017-06-16,93.87999725341797,0.8521517079303853,12.993421052631579,Purchase of 100 call options with a strike price of $80 and an expiration date of 6/16/17
+2016-05-17,XYZ,50.0,call,8.0,2017-01-20,9.15999984741211,0.8733624599633772,8.157894736842106,Purchase of 50 call options with a strike price of $8 and an expiration date of 1/20/17
+2018-02-02,AAPL,50.0,call,140.0,2018-09-21,167.77999877929688,0.8344260401632285,7.598684210526316,Purchase of 50 call options with a strike price of $140 and an expiration date of 9/21/18.
+2018-02-02,AAPL,50.0,call,130.0,2018-09-21,167.77999877929688,0.7748241801515693,7.598684210526316,Purchase of 50 call options with a strike price of $130 and an expiration date of 9/21/18.
+2018-07-27,AMZN,20.0,call,1700.0,2020-01-17,1808.0000305175781,0.9402654708547429,17.730263157894736,Purchase of 20 call options with a strike price of $1700 and an expiration date of 1/17/20.
+2018-07-27,META,20.0,call,150.0,2020-01-17,176.25999450683594,0.8510155717392951,17.730263157894736,Purchase of 20 call options with a strike price of $150 and an expiration date of 1/17/20.
+2018-09-11,AAPL,100.0,call,145.0,2020-06-19,218.3300018310547,0.6641322712588169,21.282894736842106,Purchased 100 call options with a strike price of $145 and an expiration date of 6/19/20.
+2018-10-09,META,30.0,call,140.0,2020-01-17,157.25,0.890302066772655,15.296052631578949,Purchased 30 call options with a strike price of $140 and an expiration date of 1/17/20.
+2018-10-12,AMZN,30.0,call,1600.0,2020-01-17,1719.3600463867188,0.9305787949199139,15.197368421052632,Purchased 30 call options with a strike price of $1600 and an expiration date of 1/17/20.
+2019-06-14,CRM,20.0,call,140.0,2020-06-19,151.33999633789062,0.9250694025882472,12.203947368421053,Purchased 20 call options with a strike price of $140 and an expiration date of 6/19/20.
+2019-06-18,CRM,80.0,call,140.0,2020-06-19,150.2899932861328,0.9315324123639956,12.072368421052632,Purchased 80 call options with a strike price of $140 and an expiration date of 6/19/20.
+2019-07-05,NFLX,20.0,call,250.0,2020-06-19,381.72000885009766,0.6549303002300191,11.513157894736842,Purchased 20 call options with a strike price of $250 and an expiration date of 6/19/20.
+2019-07-22,AMZN,20.0,call,1700.0,2020-01-17,1964.5199584960938,0.8653513509231066,5.8881578947368425,Purchased 20 call options with a strike price of $1700 and an expiration date of 1/17/20.
+2019-07-22,NFLX,30.0,call,250.0,2020-06-19,315.10000228881836,0.7933989152143891,10.953947368421053,Purchased 30 call options with a strike price of $250 and an expiration date of 6/19/20.
+2020-02-20,MSFT,100.0,call,140.0,2021-03-19,187.27999877929688,0.7475437895799286,12.927631578947368,Purchased 100 call options with a strike price of $140 and an expiration date of 3/19/2021.
+2020-02-21,MSFT,100.0,call,130.0,2021-03-19,184.4199981689453,0.7049127062722791,12.894736842105264,Purchased 100 call options with a strike price of $130 and an expiration date of 3/19/2021.
+2020-02-27,GOOGL,40.0,call,1200.0,2021-06-18,1390.469970703125,0.8630175590150938,15.69078947368421,Purchased 40 call options with a strike price of $1200 and an expiration date of 6/18/2021.
+2020-02-28,MSFT,50.0,call,130.0,2021-03-19,158.17999267578125,0.8218485650486703,12.664473684210527,Purchased 50 call options with a strike price of $130 and an expiration date of 3/19/2021.
+2020-06-24,AXP,50.0,call,80.0,2022-01-21,99.41999816894531,0.8046670838200507,18.947368421052634,Purchased 50 call options with a strike price of $80 and an expiration date of 1/21/2022.
+2020-06-24,PYPL,50.0,call,100.0,2022-01-21,172.7899932861328,0.5787372179267598,18.947368421052634,Purchased 50 call options with a strike price of $100 and an expiration date of 1/21/2022.
+2020-12-22,AAPL,100.0,call,100.0,2022-01-21,128.22999572753906,0.7798487353339566,12.993421052631579,Purchased 100 call options with a strike price of $100 and an expiration date of 1/21/22.
+2020-12-22,DIS,100.0,call,100.0,2022-01-21,170.69000244140625,0.5858573939286665,12.993421052631579,Purchased 100 call options with a strike price of $100 and an expiration date of 1/21/22.
+2020-12-22,TSLA,25.0,call,500.0,2022-03-18,649.8599853515625,0.7693965027397541,14.835526315789474,Purchased 25 call options with a strike price of $500 and an expiration date of 3/18/22.
+2021-05-21,AAPL,50.0,call,100.0,2022-06-17,127.30999755859375,0.7854842661038897,12.894736842105264,Purchased 50 call options with a strike price of $100 and an expiration date of 6/17/22.
+2021-05-21,AMZN,20.0,call,3000.0,2022-06-17,3247.6800537109375,0.9237363134253549,12.894736842105264,"Purchased 20 call options with a strike price of $3,000 and an expiration date of 6/17/22."
+2021-06-03,NVDA,50.0,call,400.0,2022-06-17,671.1299896240234,0.5960097241729366,12.467105263157896,Purchased 50 call options with a strike price of $400 and an expiration date of 6/17/22.
+2021-07-23,NVDA,50.0,call,100.0,2022-09-16,195.93999862670898,0.5103603179589326,13.81578947368421,Purchased 50 call options with a strike price of $100 and an expiration date of 9/16/22.
+2021-12-17,DIS,50.0,call,130.0,2022-09-16,148.75,0.8739495798319328,8.980263157894738,Purchased 50 call options with a strike price of $130 and an expiration date of 9/16/22.
+2021-12-17,GOOG,10.0,call,2000.0,2022-09-16,2896.77001953125,0.6904241574288442,8.980263157894738,Purchased 10 call options with a strike price of $2000 and an expiration date of 9/16/22.
+2021-12-20,CRM,30.0,call,210.0,2023-01-20,252.92999267578125,0.8302692684975043,13.026315789473685,Purchased 30 call options with a strike price of $210 and an expiration date of 1/20/23.
+2021-12-20,CRM,100.0,call,210.0,2023-01-20,252.92999267578125,0.8302692684975043,13.026315789473685,Purchased 100 call options with a strike price of $210 and an expiration date of 1/20/23.
+2021-12-20,RBLX,100.0,call,100.0,2023-01-20,102.4000015258789,0.976562485448085,13.026315789473685,Purchased 100 call options with a strike price of $100 and an expiration date of 1/20/23.
+2021-12-21,MU,100.0,call,50.0,2022-09-16,82.02999877929688,0.6095331067177736,8.848684210526317,Purchased 100 call options with a strike price of $50 and an expiration date of 9/16/22.
+2022-05-13,AAPL,100.0,call,80.0,2023-03-17,142.55999755859375,0.5611672374441442,10.131578947368421,Purchased 100 call options with a strike price of $80 and an expiration date of 3/17/23.
+2022-05-24,AAPL,50.0,call,80.0,2023-06-16,143.11000061035156,0.5590105489400254,12.763157894736842,Purchased 50 call options with a strike price of $80 and an expiration date of 6/16/23.
+2022-05-24,MSFT,40.0,call,180.0,2023-06-16,260.6499938964844,0.690581255380677,12.763157894736842,Purchased 40 call options with a strike price of $180 and an expiration date of 6/16/23.
+2022-05-24,MSFT,10.0,call,180.0,2023-06-16,260.6499938964844,0.690581255380677,12.763157894736842,Purchased 10 call options with a strike price of $180 and an expiration date of 6/16/23.
+2023-11-22,NVDA,50.0,call,120.0,2024-12-20,499.44000244140625,0.24026910021905637,12.960526315789474,Purchased 50 call options with a strike price of $120 and an expiration date of 12/20/24.
+2024-02-12,PANW,50.0,call,200.0,2025-01-17,376.8999938964844,0.5306447419442782,11.18421052631579,Purchased 50 call options with a strike price of $200 and an expiration date of 1/17/25.
+2024-02-21,PANW,20.0,call,200.0,2025-01-17,366.0899963378906,0.5463137534504103,10.888157894736842,Purchased 20 call options with a strike price of $200 and an expiration date of 1/17/25.
+2024-06-24,AVGO,20.0,call,800.0,2025-06-20,1658.6300659179688,0.48232575571771036,11.875,Purchased 20 call options with a strike price of $800 and an expiration date of 6/20/25.
+2025-01-14,AMZN,50.0,call,150.0,2026-01-16,218.4600067138672,0.6866245325922095,12.072368421052632,Purchased 50 call options with a strike price of $150 and an expiration date of 1/16/26.
+2025-01-14,GOOGL,50.0,call,150.0,2026-01-16,191.00999450683594,0.7852992215788569,12.072368421052632,Purchased 50 call options with a strike price of $150 and an expiration date of 1/16/26.
+2025-01-14,NVDA,50.0,call,80.0,2026-01-16,133.22999572753906,0.6004653799104172,12.072368421052632,Purchased 50 call options with a strike price of $80 and an expiration date of 1/16/26.
+2025-01-14,TEM,50.0,call,20.0,2026-01-16,32.34000015258789,0.6184291869398638,12.072368421052632,Purchased 50 call options with a strike price of $20 and an expiration date of 1/16/26.
+2025-01-14,VST,50.0,call,50.0,2026-01-16,162.1300048828125,0.3083944889543424,12.072368421052632,Purchased 50 call options with a strike price of $50 and an expiration date of 1/16/26.
+2025-12-30,AAPL,20.0,call,100.0,2027-01-15,273.760009765625,0.3652834469344639,12.532894736842106,Purchased 20 call options with a strike price of $100 and an expiration date of 1/15/27.
+2025-12-30,AMZN,20.0,call,120.0,2027-01-15,232.07000732421875,0.5170853458557927,12.532894736842106,Purchased 20 call options with a strike price of $120 and an expiration date of 1/15/27.
+2025-12-30,GOOGL,20.0,call,150.0,2027-01-15,313.55999755859375,0.47837734777367474,12.532894736842106,Purchased 20 call options with a strike price of $150 and an expiration date of 1/15/27.
+2025-12-30,NVDA,20.0,call,100.0,2027-01-15,188.22000122070312,0.5312931641241567,12.532894736842106,Purchased 20 call options with a strike price of $100 and an expiration date of 1/15/27.
+2026-05-29,INTC,200.0,call,50.0,2027-03-19,120.88999938964844,0.41359914180197604,9.671052631578949,Purchased 200 call options with a strike price of $50 and an expiration date of 3/19/27.
+2026-05-29,UBER,200.0,call,50.0,2027-03-19,70.91999816894531,0.7050197587553544,9.671052631578949,Purchased 200 call options with a strike price of $50 and an expiration date of 3/19/27.
+2026-07-24,BE,100.0,call,100.0,2027-06-17,217.3000030517578,0.46019327471514765,10.789473684210527,Purchased 100 call options with a strike price of $100 and an expiration date of 6/17/27.
+2026-07-24,INTC,50.0,call,50.0,2027-06-17,100.2300033569336,0.49885262222273646,10.789473684210527,Purchased 50 call options with a strike price of $50 and an expiration date of 6/17/27.
+2026-07-28,BE,100.0,call,100.0,2027-06-17,188.17999267578125,0.5314061212250754,10.657894736842106,Purchased 100 call options with a strike price of $100 and an expiration date of 6/17/27.

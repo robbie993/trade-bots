@@ -27,7 +27,9 @@ Lake notes: Node isn't installed on the PC, so I ran a portable Node 22.20 from 
 
 ## Prices (yfinance 1.7.0, auto_adjust=False, actions=True, from 2012-01-01)
 
-Format: long, with columns date, ticker, open, high, low, close, adj_close, volume, dividends, splits.
+Format: long, with columns date, ticker, open, high, low, close, adj_close, volume, dividends, splits, raw_close.
+
+**Correction:** Yahoo's `close` is already adjusted for splits even with auto_adjust=False; it only leaves out dividends. `raw_close` is the price as it actually traded that day: close times every split ratio after that date. Use `raw_close` to compare against option strikes. Example: NVDA on 2021-06-03 has close 16.97 and raw_close 678.79.
 
 - `pelosi_prices.parquet` has 155,982 rows for 51 tickers, 2012-01-03 to 2026-10-05.
   - These failed: BFET, BRCM, ELX, ENTR, KRUZ, SFLY, SQ, WORK. All are delisted, acquired or renamed. KRUZ (the Republican-trades ETF) has closed.
@@ -63,3 +65,10 @@ Each row is one of Pelosi's disclosed trades, with all the dataset columns plus:
 - **Parsed from her comments:** `optContracts`, `optRight` (call/put), `optStrike`, `optExpiry`, `shares`, and `nonDirectional`. The last one is 'gift' (15 rows: charity contributions) or 'exercise' (32 rows: option exercises), so these can be left out of a signal test.
 
 Returns use the underlying stock, never the option. FB is priced from META and SQ from XYZ. 26 rows have no price (no ticker, a delisted name, or an LLC or other non-stock asset).
+
+## Fixes made on 2026-10-07
+
+- **Reused tickers:** HTZ (2014–15, old Hertz), DOW (2014, Dow Chemical) and BCOR now belong to different companies on Yahoo. The trade table had picked up their first available price years later. Those 8 rows now have no `trade_*` or `disc_*` values (182 priced rows instead of 190).
+- **Amendments:** the 4 "missing" PTRs are 3 amendments, whose rows are folded into the original filings, plus 20035553 (filed 2026-10-02), a $500k–$1M real-estate LLC (REOF XXX, 225 Bush St). That one is newer than the dataset snapshot. No stock trades are missing.
+- **Scanned PTR:** 8214491 is the scanned 2013 filing for the Active Network cash-out. It matches its dataset row.
+- **Annual and amendment reports:** `annual_pdfs/` holds the 15 annual reports, 5 amendments and 2 extension filings. `annual_text.csv` has their text, which lists full holdings, including the LEAPS positions and private stakes such as the Forge/Databricks fund.

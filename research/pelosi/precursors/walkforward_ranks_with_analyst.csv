@@ -1,0 +1,319 @@
+ev,tradeDate,ticker,rk,n,model
+4,2020-12-22,AAPL,4.0,500,baseline: biggest by $ volume
+5,2021-05-21,AAPL,4.0,500,baseline: biggest by $ volume
+6,2022-05-13,AAPL,4.0,500,baseline: biggest by $ volume
+7,2022-05-24,AAPL,4.0,500,baseline: biggest by $ volume
+8,2025-12-30,AAPL,6.0,500,baseline: biggest by $ volume
+9,2020-12-22,AB,501.0,501,baseline: biggest by $ volume
+10,2021-02-18,AB,501.0,501,baseline: biggest by $ volume
+11,2021-02-23,AB,501.0,501,baseline: biggest by $ volume
+12,2022-01-27,AB,501.0,501,baseline: biggest by $ volume
+13,2026-01-16,AB,501.0,501,baseline: biggest by $ volume
+16,2019-07-22,AMZN,2.0,500,baseline: biggest by $ volume
+17,2021-05-21,AMZN,5.0,500,baseline: biggest by $ volume
+18,2025-01-14,AMZN,8.0,500,baseline: biggest by $ volume
+19,2025-12-30,AMZN,9.0,500,baseline: biggest by $ volume
+20,2024-06-24,AVGO,13.0,500,baseline: biggest by $ volume
+21,2020-06-24,AXP,116.0,500,baseline: biggest by $ volume
+22,2026-07-24,BE,35.0,500,baseline: biggest by $ volume
+23,2026-07-28,BE,36.0,500,baseline: biggest by $ volume
+24,2019-06-14,CRM,49.0,500,baseline: biggest by $ volume
+25,2019-06-18,CRM,49.0,500,baseline: biggest by $ volume
+26,2021-12-20,CRM,47.0,500,baseline: biggest by $ volume
+27,2020-09-03,CRWD,95.0,500,baseline: biggest by $ volume
+31,2020-12-22,DIS,25.0,500,baseline: biggest by $ volume
+32,2021-12-17,DIS,29.0,500,baseline: biggest by $ volume
+33,2021-12-17,GOOG,15.0,500,baseline: biggest by $ volume
+34,2020-02-27,GOOGL,13.0,500,baseline: biggest by $ volume
+35,2025-01-14,GOOGL,13.0,500,baseline: biggest by $ volume
+36,2025-12-30,GOOGL,10.0,500,baseline: biggest by $ volume
+43,2026-05-29,INTC,11.0,500,baseline: biggest by $ volume
+44,2026-07-24,INTC,10.0,500,baseline: biggest by $ volume
+47,2020-02-20,MSFT,6.0,500,baseline: biggest by $ volume
+48,2020-02-21,MSFT,6.0,500,baseline: biggest by $ volume
+49,2020-02-28,MSFT,6.0,500,baseline: biggest by $ volume
+50,2022-05-24,MSFT,8.0,500,baseline: biggest by $ volume
+51,2021-12-21,MU,52.0,500,baseline: biggest by $ volume
+52,2019-07-05,NFLX,11.0,500,baseline: biggest by $ volume
+53,2019-07-22,NFLX,11.0,500,baseline: biggest by $ volume
+54,2021-06-03,NVDA,9.0,500,baseline: biggest by $ volume
+55,2021-07-23,NVDA,6.0,500,baseline: biggest by $ volume
+56,2023-11-22,NVDA,3.0,500,baseline: biggest by $ volume
+57,2024-06-26,NVDA,1.0,500,baseline: biggest by $ volume
+58,2024-07-26,NVDA,1.0,500,baseline: biggest by $ volume
+59,2025-01-14,NVDA,2.0,500,baseline: biggest by $ volume
+60,2025-12-30,NVDA,4.0,500,baseline: biggest by $ volume
+61,2024-02-12,PANW,51.0,500,baseline: biggest by $ volume
+62,2024-02-21,PANW,52.0,500,baseline: biggest by $ volume
+63,2020-06-12,PYPL,54.0,500,baseline: biggest by $ volume
+64,2020-06-24,PYPL,49.0,500,baseline: biggest by $ volume
+66,2021-12-20,RBLX,32.0,500,baseline: biggest by $ volume
+69,2025-01-14,TEM,501.0,501,baseline: biggest by $ volume
+70,2020-12-22,TSLA,2.0,500,baseline: biggest by $ volume
+71,2026-05-29,UBER,107.0,500,baseline: biggest by $ volume
+72,2025-01-14,VST,114.0,500,baseline: biggest by $ volume
+4,2020-12-22,AAPL,1.0,500,baseline: names she already disclosed
+5,2021-05-21,AAPL,1.0,500,baseline: names she already disclosed
+6,2022-05-13,AAPL,1.0,500,baseline: names she already disclosed
+7,2022-05-24,AAPL,1.0,500,baseline: names she already disclosed
+8,2025-12-30,AAPL,1.0,500,baseline: names she already disclosed
+9,2020-12-22,AB,258.5,501,baseline: names she already disclosed
+10,2021-02-18,AB,14.5,501,baseline: names she already disclosed
+11,2021-02-23,AB,14.5,501,baseline: names she already disclosed
+12,2022-01-27,AB,5.0,501,baseline: names she already disclosed
+13,2026-01-16,AB,6.5,501,baseline: names she already disclosed
+16,2019-07-22,AMZN,6.0,500,baseline: names she already disclosed
+17,2021-05-21,AMZN,3.0,500,baseline: names she already disclosed
+18,2025-01-14,AMZN,4.0,500,baseline: names she already disclosed
+19,2025-12-30,AMZN,4.0,500,baseline: names she already disclosed
+20,2024-06-24,AVGO,262.0,500,baseline: names she already disclosed
+21,2020-06-24,AXP,256.5,500,baseline: names she already disclosed
+22,2026-07-24,BE,265.0,500,baseline: names she already disclosed
+23,2026-07-28,BE,265.0,500,baseline: names she already disclosed
+24,2019-06-14,CRM,8.0,500,baseline: names she already disclosed
+25,2019-06-18,CRM,8.0,500,baseline: names she already disclosed
+26,2021-12-20,CRM,6.5,500,baseline: names she already disclosed
+27,2020-09-03,CRWD,258.0,500,baseline: names she already disclosed
+31,2020-12-22,DIS,7.5,500,baseline: names she already disclosed
+32,2021-12-17,DIS,6.5,500,baseline: names she already disclosed
+33,2021-12-17,GOOG,260.0,500,baseline: names she already disclosed
+34,2020-02-27,GOOGL,255.5,500,baseline: names she already disclosed
+35,2025-01-14,GOOGL,10.5,500,baseline: names she already disclosed
+36,2025-12-30,GOOGL,9.0,500,baseline: names she already disclosed
+43,2026-05-29,INTC,263.5,500,baseline: names she already disclosed
+44,2026-07-24,INTC,25.5,500,baseline: names she already disclosed
+47,2020-02-20,MSFT,255.5,500,baseline: names she already disclosed
+48,2020-02-21,MSFT,255.5,500,baseline: names she already disclosed
+49,2020-02-28,MSFT,255.5,500,baseline: names she already disclosed
+50,2022-05-24,MSFT,7.0,500,baseline: names she already disclosed
+51,2021-12-21,MU,260.0,500,baseline: names she already disclosed
+52,2019-07-05,NFLX,255.0,500,baseline: names she already disclosed
+53,2019-07-22,NFLX,255.0,500,baseline: names she already disclosed
+54,2021-06-03,NVDA,260.0,500,baseline: names she already disclosed
+55,2021-07-23,NVDA,15.5,500,baseline: names she already disclosed
+56,2023-11-22,NVDA,8.0,500,baseline: names she already disclosed
+57,2024-06-26,NVDA,6.5,500,baseline: names she already disclosed
+58,2024-07-26,NVDA,5.0,500,baseline: names she already disclosed
+59,2025-01-14,NVDA,4.0,500,baseline: names she already disclosed
+60,2025-12-30,NVDA,3.0,500,baseline: names she already disclosed
+61,2024-02-12,PANW,261.5,500,baseline: names she already disclosed
+62,2024-02-21,PANW,261.5,500,baseline: names she already disclosed
+63,2020-06-12,PYPL,256.5,500,baseline: names she already disclosed
+64,2020-06-24,PYPL,256.5,500,baseline: names she already disclosed
+66,2021-12-20,RBLX,16.0,500,baseline: names she already disclosed
+69,2025-01-14,TEM,262.5,501,baseline: names she already disclosed
+70,2020-12-22,TSLA,258.0,500,baseline: names she already disclosed
+71,2026-05-29,UBER,263.5,500,baseline: names she already disclosed
+72,2025-01-14,VST,262.0,500,baseline: names she already disclosed
+16,2019-07-22,AMZN,71.0,500,model: price only
+24,2019-06-14,CRM,1.0,500,model: price only
+25,2019-06-18,CRM,3.0,500,model: price only
+52,2019-07-05,NFLX,171.0,500,model: price only
+53,2019-07-22,NFLX,1.0,500,model: price only
+4,2020-12-22,AAPL,94.0,500,model: price only
+9,2020-12-22,AB,497.0,501,model: price only
+21,2020-06-24,AXP,38.0,500,model: price only
+27,2020-09-03,CRWD,145.0,500,model: price only
+31,2020-12-22,DIS,48.0,500,model: price only
+34,2020-02-27,GOOGL,47.0,500,model: price only
+47,2020-02-20,MSFT,78.0,500,model: price only
+48,2020-02-21,MSFT,60.0,500,model: price only
+49,2020-02-28,MSFT,21.0,500,model: price only
+63,2020-06-12,PYPL,113.0,500,model: price only
+64,2020-06-24,PYPL,193.0,500,model: price only
+70,2020-12-22,TSLA,49.0,500,model: price only
+5,2021-05-21,AAPL,45.0,500,model: price only
+10,2021-02-18,AB,392.0,501,model: price only
+11,2021-02-23,AB,413.0,501,model: price only
+17,2021-05-21,AMZN,49.0,500,model: price only
+26,2021-12-20,CRM,34.0,500,model: price only
+32,2021-12-17,DIS,78.0,500,model: price only
+33,2021-12-17,GOOG,32.0,500,model: price only
+51,2021-12-21,MU,100.0,500,model: price only
+54,2021-06-03,NVDA,6.0,500,model: price only
+55,2021-07-23,NVDA,2.0,500,model: price only
+66,2021-12-20,RBLX,4.0,500,model: price only
+6,2022-05-13,AAPL,10.0,500,model: price only
+7,2022-05-24,AAPL,4.0,500,model: price only
+12,2022-01-27,AB,424.0,501,model: price only
+50,2022-05-24,MSFT,20.0,500,model: price only
+56,2023-11-22,NVDA,11.0,500,model: price only
+20,2024-06-24,AVGO,1.0,500,model: price only
+57,2024-06-26,NVDA,7.0,500,model: price only
+58,2024-07-26,NVDA,13.0,500,model: price only
+61,2024-02-12,PANW,48.0,500,model: price only
+62,2024-02-21,PANW,30.0,500,model: price only
+8,2025-12-30,AAPL,85.0,500,model: price only
+18,2025-01-14,AMZN,20.0,500,model: price only
+19,2025-12-30,AMZN,108.0,500,model: price only
+35,2025-01-14,GOOGL,25.0,500,model: price only
+36,2025-12-30,GOOGL,31.0,500,model: price only
+59,2025-01-14,NVDA,15.0,500,model: price only
+60,2025-12-30,NVDA,42.0,500,model: price only
+69,2025-01-14,TEM,358.0,501,model: price only
+72,2025-01-14,VST,35.0,500,model: price only
+13,2026-01-16,AB,489.0,501,model: price only
+22,2026-07-24,BE,15.0,500,model: price only
+23,2026-07-28,BE,13.0,500,model: price only
+43,2026-05-29,INTC,1.0,500,model: price only
+44,2026-07-24,INTC,5.0,500,model: price only
+71,2026-05-29,UBER,137.0,500,model: price only
+16,2019-07-22,AMZN,8.0,500,model: price + other members
+24,2019-06-14,CRM,160.0,500,model: price + other members
+25,2019-06-18,CRM,174.0,500,model: price + other members
+52,2019-07-05,NFLX,99.0,500,model: price + other members
+53,2019-07-22,NFLX,2.0,500,model: price + other members
+4,2020-12-22,AAPL,21.0,500,model: price + other members
+9,2020-12-22,AB,495.0,501,model: price + other members
+21,2020-06-24,AXP,75.0,500,model: price + other members
+27,2020-09-03,CRWD,328.0,500,model: price + other members
+31,2020-12-22,DIS,20.0,500,model: price + other members
+34,2020-02-27,GOOGL,77.0,500,model: price + other members
+47,2020-02-20,MSFT,43.0,500,model: price + other members
+48,2020-02-21,MSFT,37.0,500,model: price + other members
+49,2020-02-28,MSFT,4.0,500,model: price + other members
+63,2020-06-12,PYPL,54.0,500,model: price + other members
+64,2020-06-24,PYPL,66.0,500,model: price + other members
+70,2020-12-22,TSLA,18.0,500,model: price + other members
+5,2021-05-21,AAPL,29.0,500,model: price + other members
+10,2021-02-18,AB,418.0,501,model: price + other members
+11,2021-02-23,AB,431.0,501,model: price + other members
+17,2021-05-21,AMZN,13.0,500,model: price + other members
+26,2021-12-20,CRM,80.0,500,model: price + other members
+32,2021-12-17,DIS,23.0,500,model: price + other members
+33,2021-12-17,GOOG,21.0,500,model: price + other members
+51,2021-12-21,MU,41.0,500,model: price + other members
+54,2021-06-03,NVDA,1.0,500,model: price + other members
+55,2021-07-23,NVDA,1.0,500,model: price + other members
+66,2021-12-20,RBLX,5.0,500,model: price + other members
+6,2022-05-13,AAPL,6.0,500,model: price + other members
+7,2022-05-24,AAPL,1.0,500,model: price + other members
+12,2022-01-27,AB,450.0,501,model: price + other members
+50,2022-05-24,MSFT,6.0,500,model: price + other members
+56,2023-11-22,NVDA,6.0,500,model: price + other members
+20,2024-06-24,AVGO,2.0,500,model: price + other members
+57,2024-06-26,NVDA,2.0,500,model: price + other members
+58,2024-07-26,NVDA,3.0,500,model: price + other members
+61,2024-02-12,PANW,14.0,500,model: price + other members
+62,2024-02-21,PANW,9.0,500,model: price + other members
+8,2025-12-30,AAPL,21.0,500,model: price + other members
+18,2025-01-14,AMZN,4.0,500,model: price + other members
+19,2025-12-30,AMZN,25.0,500,model: price + other members
+35,2025-01-14,GOOGL,11.0,500,model: price + other members
+36,2025-12-30,GOOGL,4.0,500,model: price + other members
+59,2025-01-14,NVDA,3.0,500,model: price + other members
+60,2025-12-30,NVDA,9.0,500,model: price + other members
+69,2025-01-14,TEM,390.0,501,model: price + other members
+72,2025-01-14,VST,175.0,500,model: price + other members
+13,2026-01-16,AB,492.0,501,model: price + other members
+22,2026-07-24,BE,144.0,500,model: price + other members
+23,2026-07-28,BE,114.0,500,model: price + other members
+43,2026-05-29,INTC,3.0,500,model: price + other members
+44,2026-07-24,INTC,3.0,500,model: price + other members
+71,2026-05-29,UBER,56.0,500,model: price + other members
+16,2019-07-22,AMZN,2.0,500,model: price + members + her history
+24,2019-06-14,CRM,102.0,500,model: price + members + her history
+25,2019-06-18,CRM,111.0,500,model: price + members + her history
+52,2019-07-05,NFLX,100.0,500,model: price + members + her history
+53,2019-07-22,NFLX,7.0,500,model: price + members + her history
+4,2020-12-22,AAPL,8.0,500,model: price + members + her history
+9,2020-12-22,AB,495.0,501,model: price + members + her history
+21,2020-06-24,AXP,72.0,500,model: price + members + her history
+27,2020-09-03,CRWD,338.0,500,model: price + members + her history
+31,2020-12-22,DIS,7.0,500,model: price + members + her history
+34,2020-02-27,GOOGL,83.0,500,model: price + members + her history
+47,2020-02-20,MSFT,51.0,500,model: price + members + her history
+48,2020-02-21,MSFT,46.0,500,model: price + members + her history
+49,2020-02-28,MSFT,10.0,500,model: price + members + her history
+63,2020-06-12,PYPL,66.0,500,model: price + members + her history
+64,2020-06-24,PYPL,79.0,500,model: price + members + her history
+70,2020-12-22,TSLA,25.0,500,model: price + members + her history
+5,2021-05-21,AAPL,8.0,500,model: price + members + her history
+10,2021-02-18,AB,258.0,501,model: price + members + her history
+11,2021-02-23,AB,290.0,501,model: price + members + her history
+17,2021-05-21,AMZN,5.0,500,model: price + members + her history
+26,2021-12-20,CRM,26.0,500,model: price + members + her history
+32,2021-12-17,DIS,9.0,500,model: price + members + her history
+33,2021-12-17,GOOG,30.0,500,model: price + members + her history
+51,2021-12-21,MU,49.0,500,model: price + members + her history
+54,2021-06-03,NVDA,11.0,500,model: price + members + her history
+55,2021-07-23,NVDA,1.0,500,model: price + members + her history
+66,2021-12-20,RBLX,4.0,500,model: price + members + her history
+6,2022-05-13,AAPL,6.0,500,model: price + members + her history
+7,2022-05-24,AAPL,2.0,500,model: price + members + her history
+12,2022-01-27,AB,156.0,501,model: price + members + her history
+50,2022-05-24,MSFT,7.0,500,model: price + members + her history
+56,2023-11-22,NVDA,4.0,500,model: price + members + her history
+20,2024-06-24,AVGO,10.0,500,model: price + members + her history
+57,2024-06-26,NVDA,1.0,500,model: price + members + her history
+58,2024-07-26,NVDA,3.0,500,model: price + members + her history
+61,2024-02-12,PANW,24.0,500,model: price + members + her history
+62,2024-02-21,PANW,20.0,500,model: price + members + her history
+8,2025-12-30,AAPL,9.0,500,model: price + members + her history
+18,2025-01-14,AMZN,4.0,500,model: price + members + her history
+19,2025-12-30,AMZN,11.0,500,model: price + members + her history
+35,2025-01-14,GOOGL,8.0,500,model: price + members + her history
+36,2025-12-30,GOOGL,2.0,500,model: price + members + her history
+59,2025-01-14,NVDA,3.0,500,model: price + members + her history
+60,2025-12-30,NVDA,4.0,500,model: price + members + her history
+69,2025-01-14,TEM,356.0,501,model: price + members + her history
+72,2025-01-14,VST,175.0,500,model: price + members + her history
+13,2026-01-16,AB,237.0,501,model: price + members + her history
+22,2026-07-24,BE,132.0,500,model: price + members + her history
+23,2026-07-28,BE,101.0,500,model: price + members + her history
+43,2026-05-29,INTC,15.0,500,model: price + members + her history
+44,2026-07-24,INTC,3.0,500,model: price + members + her history
+71,2026-05-29,UBER,65.0,500,model: price + members + her history
+16,2019-07-22,AMZN,1.0,500,model: + analysts & earnings
+24,2019-06-14,CRM,55.0,500,model: + analysts & earnings
+25,2019-06-18,CRM,64.0,500,model: + analysts & earnings
+52,2019-07-05,NFLX,182.0,500,model: + analysts & earnings
+53,2019-07-22,NFLX,27.0,500,model: + analysts & earnings
+4,2020-12-22,AAPL,17.0,500,model: + analysts & earnings
+9,2020-12-22,AB,452.0,501,model: + analysts & earnings
+21,2020-06-24,AXP,37.0,500,model: + analysts & earnings
+27,2020-09-03,CRWD,189.0,500,model: + analysts & earnings
+31,2020-12-22,DIS,21.0,500,model: + analysts & earnings
+34,2020-02-27,GOOGL,176.0,500,model: + analysts & earnings
+47,2020-02-20,MSFT,101.0,500,model: + analysts & earnings
+48,2020-02-21,MSFT,91.0,500,model: + analysts & earnings
+49,2020-02-28,MSFT,33.0,500,model: + analysts & earnings
+63,2020-06-12,PYPL,136.0,500,model: + analysts & earnings
+64,2020-06-24,PYPL,154.0,500,model: + analysts & earnings
+70,2020-12-22,TSLA,173.0,500,model: + analysts & earnings
+5,2021-05-21,AAPL,10.0,500,model: + analysts & earnings
+10,2021-02-18,AB,246.0,501,model: + analysts & earnings
+11,2021-02-23,AB,271.0,501,model: + analysts & earnings
+17,2021-05-21,AMZN,6.0,500,model: + analysts & earnings
+26,2021-12-20,CRM,22.0,500,model: + analysts & earnings
+32,2021-12-17,DIS,8.0,500,model: + analysts & earnings
+33,2021-12-17,GOOG,35.0,500,model: + analysts & earnings
+51,2021-12-21,MU,34.0,500,model: + analysts & earnings
+54,2021-06-03,NVDA,9.0,500,model: + analysts & earnings
+55,2021-07-23,NVDA,1.0,500,model: + analysts & earnings
+66,2021-12-20,RBLX,2.0,500,model: + analysts & earnings
+6,2022-05-13,AAPL,3.0,500,model: + analysts & earnings
+7,2022-05-24,AAPL,2.0,500,model: + analysts & earnings
+12,2022-01-27,AB,205.0,501,model: + analysts & earnings
+50,2022-05-24,MSFT,6.0,500,model: + analysts & earnings
+56,2023-11-22,NVDA,2.0,500,model: + analysts & earnings
+20,2024-06-24,AVGO,7.0,500,model: + analysts & earnings
+57,2024-06-26,NVDA,1.0,500,model: + analysts & earnings
+58,2024-07-26,NVDA,3.0,500,model: + analysts & earnings
+61,2024-02-12,PANW,80.0,500,model: + analysts & earnings
+62,2024-02-21,PANW,18.0,500,model: + analysts & earnings
+8,2025-12-30,AAPL,9.0,500,model: + analysts & earnings
+18,2025-01-14,AMZN,3.0,500,model: + analysts & earnings
+19,2025-12-30,AMZN,10.0,500,model: + analysts & earnings
+35,2025-01-14,GOOGL,9.0,500,model: + analysts & earnings
+36,2025-12-30,GOOGL,3.0,500,model: + analysts & earnings
+59,2025-01-14,NVDA,2.0,500,model: + analysts & earnings
+60,2025-12-30,NVDA,2.0,500,model: + analysts & earnings
+69,2025-01-14,TEM,389.0,501,model: + analysts & earnings
+72,2025-01-14,VST,99.0,500,model: + analysts & earnings
+13,2026-01-16,AB,265.0,501,model: + analysts & earnings
+22,2026-07-24,BE,201.0,500,model: + analysts & earnings
+23,2026-07-28,BE,165.0,500,model: + analysts & earnings
+43,2026-05-29,INTC,29.0,500,model: + analysts & earnings
+44,2026-07-24,INTC,2.0,500,model: + analysts & earnings
+71,2026-05-29,UBER,38.0,500,model: + analysts & earnings

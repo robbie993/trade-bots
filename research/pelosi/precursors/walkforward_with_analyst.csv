@@ -1,0 +1,7 @@
+model,events,median_rank,universe,top5,top10,top25,top50
+baseline: biggest by $ volume,53.0,13.0,500.0,0.226,0.434,0.585,0.736
+baseline: names she already disclosed,53.0,15.5,500.0,0.226,0.434,0.528,0.547
+model: + analysts & earnings,53.0,27.0,500.0,0.245,0.415,0.491,0.623
+model: price + members + her history,53.0,15.0,500.0,0.245,0.453,0.566,0.642
+model: price + other members,53.0,21.0,500.0,0.264,0.377,0.566,0.642
+model: price only,53.0,38.0,500.0,0.17,0.226,0.396,0.642
