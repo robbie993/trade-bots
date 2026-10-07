@@ -1,0 +1,48 @@
+# Pelosi backtest data: notes
+
+Gathered 2026-10-05 to 10-07 on Robbie's PC, because the cloud thread can't reach these sites. This folder has data only. There is no analysis here.
+
+## Congress trades
+
+| File | Rows | Notes |
+|---|---|---|
+| `congress_hf.parquet` | 181,647 | HF `austin-starks/congressional-stock-trades`, table `political_trade_events` (the table `src/trading/congress.py` reads). All members (465 filerKeys), all 28 columns, including 192 superseded rows. transactionDate runs 2004-03-03 to 2026-09-23 (526 null); availableAt runs 2012-07-26 to 2026-10-02. |
+| `congress_hf_trades.parquet` | 186,340 | Same dataset, table `political_trades`: raw per-row parse with printed vs resolved ticker, `capGainsOver200`, notification/filing dates. |
+| `congress_hf_filings.parquet` | 10,825 | Same dataset, table `political_filings`: one row per filing, with parse method and failure reason. |
+| `hf_raw/` | | Dataset README, METHODOLOGY, LICENSE_DATA and snapshot.json. Read METHODOLOGY for how availableAt is defined. |
+| `congress_lake.csv.gz` | 181,647 | `npx congressional-disclosures@latest download --sqlite`, table `political_trade_events`, all rows. Columns are snake_case. It is the same data as the HF table: the eventId sets match exactly. |
+| `lake_schema.txt` | | CREATE statements for every SQLite table, plus row counts. |
+
+Lake notes: Node isn't installed on the PC, so I ran a portable Node 22.20 from a temp folder. The README's bare `--sqlite` fails on Windows with "unable to open database file". Passing an explicit Windows path to `--sqlite` worked.
+
+**Pelosi in the dataset:** 216 rows, all House and all Nancy, 0 superseded, transactions 2013-11-26 to 2026-07-28, 45 distinct tickers (18 rows have no ticker). Asset types: ST 94, OP 55, none 45, AB 14, OL 5, OT 2, PS 1. The rows come from 63 source documents, all of them in the Clerk's PTR list. Rows by availableAt year: 2014 16, 2015 5, 2016 9, 2017 7, 2018 17, 2019 10, 2020 33, 2021 27, 2022 23, 2023 20, 2024 10, 2025 12, 2026 27.
+
+**The filing's own "why":** the `comment` column is filled on 207 of the 216 Pelosi rows. It carries the filer's description, for example "Purchase of 50 Options", strikes and expiries, exercises, and "Contribution of shares … to The Paul & Nancy Pelosi Charitable Foundation". Use it to split real directional bets from gifts, option exercises and rebalancing.
+
+## House Clerk
+
+- `pelosi_clerk_index.csv` has 89 rows where Last == 'Pelosi', taken from the 2012–2026 `{YEAR}FD.zip` XML indexes. FilingType counts: P 67, O 15, A 5, X 2. No year failed.
+- `ptr_pdfs/` holds all 67 PTR PDFs (P filings), none missing. Four of them have no rows in the dataset (67 PTRs against 63 source docs). They are worth checking by hand.
+- `ptr_text.csv` (extra) has the extracted text of each PDF, keyed by DocID. One PDF is a scan with no text layer.
+
+## Prices (yfinance 1.7.0, auto_adjust=False, actions=True, from 2012-01-01)
+
+Format: long, with columns date, ticker, open, high, low, close, adj_close, volume, dividends, splits.
+
+- `pelosi_prices.parquet` has 155,982 rows for 51 tickers, 2012-01-03 to 2026-10-05.
+  - These failed: BFET, BRCM, ELX, ENTR, KRUZ, SFLY, SQ, WORK. All are delisted, acquired or renamed. KRUZ (the Republican-trades ETF) has closed.
+  - I added these replacements: XYZ (Block, formerly SQ) and META (formerly FB).
+  - **Warning: ticker `FB` in this file is NOT Meta.** Yahoo now maps FB to a different security that only starts on 2025-06-26. Use META for any FB trade.
+- `congress_prices/{YEAR}.parquet` holds the prices for every ticker any member traded since 2019-01-01. All the years together come to about 137 MB, over the 90 MB limit, so the file is split by year (each 8–10 MB, zstd).
+  - 9.1M rows and 2,876 tickers, from 2012-01-03 to 2026-10-07.
+  - 3,680 ticker strings were requested in batches of 200. The first pass lost about 1,100, mostly to Yahoo rate-limiting in the last batches. A retry two days later and a cleanup of malformed strings (for example "-- RTN") recovered about 300.
+  - `congress_prices_failed.txt` lists the 803 that are still missing. Most are delisted or acquired companies (ABMD, AGN, ATVI-style names), foreign or OTC lines, or junk strings like "AIV AIRC".
+  - **This is survivorship bias:** trades in companies that later went away have no prices here. A cross-member backtest should report how many trades it dropped for missing prices.
+
+## Earnings
+
+`pelosi_earnings.csv` has 2,494 rows for 39 tickers, from `get_earnings_dates(limit=60)`, covering 2000-02 to 2026-12 (future rows are scheduled dates). Columns: ticker, Earnings Date, EPS Estimate, Reported EPS, Surprise(%). These had none: BCOR, BFET, BRCM, ELX, ENTR, FB, SFLY, WORK. Use META and XYZ in place of FB and SQ.
+
+## Not gathered (the "why" beyond the filing)
+
+These sources aren't fetched yet: committee assignments, bill votes and timing (for example the CHIPS Act around the NVDA calls), and news around each trade date. Ask if the analysis needs them.
