@@ -33,10 +33,12 @@ Format: long, with columns date, ticker, open, high, low, close, adj_close, volu
   - These failed: BFET, BRCM, ELX, ENTR, KRUZ, SFLY, SQ, WORK. All are delisted, acquired or renamed. KRUZ (the Republican-trades ETF) has closed.
   - I added these replacements: XYZ (Block, formerly SQ) and META (formerly FB).
   - **Warning: ticker `FB` in this file is NOT Meta.** Yahoo now maps FB to a different security that only starts on 2025-06-26. Use META for any FB trade.
-- `congress_prices/{YEAR}.parquet` holds the prices for every ticker any member traded since 2019-01-01. All the years together come to about 137 MB, over the 90 MB limit, so the file is split by year (each 8–10 MB, zstd).
-  - 9.1M rows and 2,876 tickers, from 2012-01-03 to 2026-10-07.
-  - 3,680 ticker strings were requested in batches of 200. The first pass lost about 1,100, mostly to Yahoo rate-limiting in the last batches. A retry two days later and a cleanup of malformed strings (for example "-- RTN") recovered about 300.
-  - `congress_prices_failed.txt` lists the 803 that are still missing. Most are delisted or acquired companies (ABMD, AGN, ATVI-style names), foreign or OTC lines, or junk strings like "AIV AIRC".
+- `congress_prices_{YYYY}.parquet` (2013 through 2026) holds the prices for every ticker any member traded since 2014-01-01, starting 2013-06-01. Together the files are over the 90 MB limit, so they are split by year (each at most 13.4 MB, zstd).
+  - 9,953,085 rows and 3,400 tickers, from 2013-06-03 to 2026-10-07.
+  - 5,028 ticker strings were requested in batches of 200.
+    - The tickers traded since 2019 (3,680) were fetched first. That pass lost about 1,100, mostly to Yahoo rate-limiting. A retry two days later and a cleanup of malformed strings (for example "-- RTN") recovered about 300.
+    - The 1,348 tickers traded only from 2014 to 2018 were fetched next. 823 of them failed, and a retry recovered none, so these are real misses, not rate limits.
+  - `congress_prices_failed.txt` lists the 1,626 that are still missing. Most are delisted or acquired companies (ABMD, AGN, ATVI-style names), foreign or OTC lines, or junk strings like "AIV AIRC".
   - **This is survivorship bias:** trades in companies that later went away have no prices here. A cross-member backtest should report how many trades it dropped for missing prices.
 
 ## Earnings
