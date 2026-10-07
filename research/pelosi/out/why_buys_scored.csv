@@ -1,0 +1,43 @@
+date,tickers,side,explanation,catalyst,public_before,leg_link,leg_direction,confidence,x252,leg,kind
+2014-10-24,SUNE,buy,Solar growth story after TerraForm yieldco IPO; First Wind deal announced 24 days later (+29%),later news,after,solar tax-credit debate (ITC),favorable,low,,True,other
+2014-11-05,HTZ,buy,"Activist turnaround: Icahn stake, accounting restatement, CEO search; new CEO named 11-20",activist,before,none,n/a,medium,,False,other
+2014-11-28,DIS,buy,Star Wars: The Force Awakens teaser released the same day,company news,same day,none,n/a,medium,0.1837040592770077,False,other
+2015-07-15,HTZ,buy,"Hertz completed its restatement 07-16, stock +14%",company news,same/next day,none,n/a,medium,,False,other
+2016-01-13,AAPL,buy,Dip buy: AAPL fell below $100 on iPhone slowdown fears,dip,before,none,n/a,medium,0.1866450365583826,False,dip buy
+2016-05-17,"AAPL,SQ",buy,Day after Buffett's Berkshire disclosed a $1B Apple stake,famous investor,before,none,n/a,high,0.7235160374069594,False,other
+2018-02-02,AAPL,buy,Day after record Q1 earnings,post-earnings,before,none,n/a,high,-0.05036942758077,False,earnings/split
+2018-03-27,DBX,buy,4 days after Dropbox IPO (+36% day one); Bay Area tech,IPO,before,none,n/a,medium,-0.3840490112685435,False,IPO
+2018-07-27,"AMZN,FB",buy,Day after FB's record one-day crash and Amazon's earnings beat,dip + post-earnings,before,none,n/a,high,-0.020870893927804397,False,dip buy
+2018-09-11,AAPL,buy,Day before iPhone XS launch event; strong momentum,event,before,none,n/a,low,-0.0242393978595442,False,other
+2018-10-09,"AMZN,FB",buy,Into the Oct-2018 tech selloff,dip,before,none,n/a,medium,0.2059645283996584,False,dip buy
+2018-10-24,T,buy,Same day AT&T missed and fell ~8%; 6%+ yield,dip + post-earnings,before,none,n/a,high,0.2483938635380881,False,dip buy
+2019-06-14,CRM,buy,Days after the $15.7B Tableau deal pulled the stock back,dip after deal,before,none,n/a,medium,0.1223193666077705,False,dip buy
+2019-07-05,NFLX,buy,12 days before earnings; momentum,pre-earnings,n/a,none,n/a,low,0.3980840823918582,False,earnings/split
+2019-07-22,"AMZN,NFLX",buy,NFLX after first US subscriber loss (-10%); AMZN 3 days before earnings,dip + pre-earnings,before,House antitrust probe of Big Tech (hearing 07-16),unfavorable,medium,0.48998963975946574,True,dip buy
+2020-02-20,"MSFT,WORK",buy,Bought at the market top as the COVID crash began 02-24,momentum,n/a,Army IVAS HoloLens contract (awarded 2021-03-31),favorable,low,-0.0199911060959044,True,momentum
+2020-02-27,"GOOGL,MSFT",buy,Bought during the first COVID crash week,dip,before,none,n/a,medium,0.345976483216231,False,dip buy
+2020-06-12,PYPL,buy,Pandemic e-commerce momentum (+52% in 3 months),momentum,before,none,n/a,medium,0.3607533314812993,False,momentum
+2020-06-24,"AXP,PYPL",buy,Same theme; AXP recovery,momentum,before,none,n/a,low,0.4087793773862938,False,momentum
+2020-09-03,CRWD,buy,2 days after CrowdStrike's earnings beat,post-earnings,before,none,n/a,high,0.3968224859911332,False,earnings/split
+2020-12-22,"AAPL,DIS,TSLA",buy,TSLA joined S&P 500 on 12-21; DIS after record Investor Day 12-10,index add + company news,before,EV credits in BBB/IRA (TSLA),favorable,medium,-0.13181734479617743,True,other
+2020-12-22,AB,buy,AllianceBernstein units for income; repeated adds,income,n/a,none,n/a,low,0.2745583462935094,False,other
+2021-03-10,RBLX,buy,Bought on Roblox's direct-listing day,IPO,same day,none,n/a,high,-0.5279265143292312,False,IPO
+2021-05-21,"AAPL,AMZN",buy,AMZN: DoD cancelled JEDI and opened JWCC to Amazon 07-06 (cancellation reported as under review in May),later news,partly public,Pentagon cloud contract (JEDI/JWCC),favorable,medium,-0.08175092617002605,True,other
+2021-06-03,NVDA,buy,After 4:1 split announcement (05-21) and record Q1 (05-26); USICA chip subsidies passed Senate 06-08,split + post-earnings,before,USICA / CHIPS chip subsidies,favorable,medium,-0.1673651401997442,True,earnings/split
+2021-07-23,NVDA,buy,Right after the split took effect (07-20); momentum,momentum,before,USICA / CHIPS chip subsidies,favorable,medium,-0.1530740687677679,True,momentum
+2021-12-17,"DIS,GOOG",buy,Days after Pelosi defended member trading (12-15); dip buys off highs,dip,before,AICOA Big Tech bill pending (GOOG),unfavorable,low,-0.234733089638996,True,dip buy
+2021-12-20,"CRM,MU,RBLX",buy,"Dip buys: CRM -20% after Dec guidance, RBLX -27% from Nov peak",dip,before,none,n/a,medium,-0.3766252678343392,False,dip buy
+2022-05-13,AAPL,buy,Bear-market dip buy (AAPL -19% off high),dip,before,AICOA Big Tech bill pending,unfavorable,medium,0.1696505279717058,True,dip buy
+2022-05-24,"AAPL,MSFT",buy,Bear-market dip buy (MSFT -24% off high),dip,before,AICOA Big Tech bill pending,unfavorable,medium,0.16355824470457808,True,dip buy
+2023-11-22,NVDA,buy,Day after NVDA Q3 FY24 earnings,post-earnings,before,none,n/a,high,1.585622745449122,False,earnings/split
+2024-02-12,PANW,buy,8 days before earnings; strong momentum,momentum,before,none,n/a,medium,0.0664432464183305,False,momentum
+2024-02-21,PANW,buy,Day after PANW fell 28% on cut guidance,dip + post-earnings,before,none,n/a,high,0.0664432464183305,False,dip buy
+2024-06-24,AVGO,buy,After earnings and the 10-for-1 split announcement (06-12),split + post-earnings,before,none,n/a,high,0.4498038959480951,False,earnings/split
+2024-06-26,NVDA,buy,After NVDA's 10-for-1 split (06-10); AI momentum,momentum,before,none,n/a,medium,0.1077500689340612,False,momentum
+2024-07-26,NVDA,buy,Dip buy: NVDA -17% off high,dip,before,none,n/a,medium,0.3775180154720891,False,dip buy
+2025-01-14,"AMZN,GOOGL,NVDA,TEM,VST",buy,AI and data-center-power theme a week before inauguration; VST +33% in a month,theme momentum,before,none found,n/a,medium,0.10488065149924342,False,momentum
+2025-12-30,"AAPL,AMZN,GOOGL,NVDA",buy,"Rolled into 1-year deep-ITM calls after selling stock (keeps exposure, frees cash)",roll,n/a,none,n/a,medium,,False,other
+2026-05-29,INTC,buy,Momentum: Intel +170% to records on reported Apple foundry deal (05-07); US government stake (Aug 2025),momentum,before,US government 10% Intel stake / CHIPS grants,favorable,medium,,True,momentum
+2026-05-29,UBER,buy,"Contrarian: near lows on robotaxi fears (Waymo, Tesla)",dip,before,none,n/a,medium,,False,dip buy
+2026-07-24,INTC,buy,"Day after Intel's Q2 blowout (rev +25%, AI +59%)",post-earnings,before,US government Intel stake,favorable,high,,True,earnings/split
+2026-07-24,BE,buy,Dip buy after Bloom Energy's July crash; AI data-center power theme; earnings 07-28,dip + theme,before,none,n/a,medium,,False,dip buy

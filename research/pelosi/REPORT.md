@@ -98,28 +98,32 @@ Every filter has the same shape: up in bull markets, down in 2022. That is tech 
 
 ## 6. Why she traded (doc section 17)
 
-Private intent cannot be determined from public data. What the public record shows:
+Method: every buy and sell decision (52 of them, grouped by date) was checked against news, company filings, bills, votes, hearings and government contracts from before the trade. Each decision got a best public explanation, a confidence level, and a flag for any legislative or regulatory link. The full table is `out/why_trades.csv`, and the scored buys are `out/why_buys_scored.csv`. Private intent can't be determined from public data, and nothing here claims it.
 
-- **Her calls are deep in-the-money LEAPs, not lottery tickets.** Median stock-to-strike ratio is about 1.7, with roughly 1-year expiries. That is a leveraged way to hold the stock, not a bet on a surprise.
-- **Mostly momentum in mega-cap tech.** Typical 12-month excess return before a buy was +50% to +200% (NVDA, MSFT, TSLA, VST, INTC).
-- **December is for taxes and charity.** 50% of her sales and 57% of her gifts are in December.
-- Notable trades and the best public explanation:
+**What the record shows**
+- **86% of her buys came right after a public catalyst**: an earnings report, a crash, a stock split, an IPO, or big news. Examples: Apple the day after Buffett revealed his stake (2016-05-17); Facebook the day after its record crash (2018-07-27); Roblox on its listing day; NVDA the day after earnings (2023-11-22); Palo Alto the day after its 28% drop (2024-02-21); Intel the day after its blowout quarter (2026-07-24).
+- **Her calls are deep in-the-money LEAPs** (median stock-to-strike ratio about 1.7, roughly 1-year expiries). That is leveraged stock ownership, not a bet on a surprise.
+- **Sales are mostly for taxes and estate reasons.** 50% of her sales and 57% of her gifts happen in December. Visa sales trim the stake from Visa's 2008 IPO.
+- **12 of 42 buy decisions had a legislative or regulatory link.** Those linked buys did *worse*: **+0.4%** vs SPY over the next year, against **+20.9%** for buys with no link. The 5 where the link favored the trade (chip subsidies, the Pentagon cloud contract, EV credits, the Intel stake) averaged **-11%**. That is the opposite of what profiting from inside legislative knowledge would look like.
+- By catalyst type, one year vs SPY: right after earnings or a split announcement **+43%** (n = 6); dip buys +13% (n = 13); momentum +12% (n = 7); IPO-day buys -46% (n = 2). The samples are tiny.
 
-| Trade | Evidence available before it | Best explanation (confidence) | Counter-evidence |
+**The controversial trades, checked against what was public at the time**
+
+| Trade | What was public before | What came after | Read |
 |---|---|---|---|
-| TSLA calls, 2020-12-22 | Tesla joined the S&P 500 on 12-21, up 54% in 3 months | Momentum and index-inclusion hype (high) | Lost 57% by the time she sold |
-| MSFT/GOOGL calls, 2020-02-20 to 02-27 | Market peak, start of the COVID crash | Momentum (medium) | Bought at the top. Not consistent with foresight |
-| CRWD stock, 2020-09-03 | 2 days after strong earnings | Post-earnings momentum (medium) | |
-| NVDA calls, 2021-06-03 | 4-for-1 split announced 5-21, earnings 5-26 | Split and earnings momentum (high) | Lost 17% vs SPY over the next year |
-| NVDA stock + calls 2021-07; sale 2022-07-26 | Chip subsidy bill (CHIPS) in Congress; she sold 25,000 shares the day before the vote | Legislative exposure is plausible but unproven; she sold at a loss under public pressure (medium) | The sale lost money, the opposite of insider gain |
-| Dec 2021 calls on CRM, RBLX, MU, GOOG, DIS | Dip buys after Q4 drops (CRM -20% off its high) | Buying the dip in growth names (medium) | All lost 21-53% vs SPY in 2022 |
-| NVDA calls, 2023-11-22 | The day after earnings | Post-earnings AI momentum (high) | Best trade in the dataset (+159% vs SPY) |
-| PANW calls, 2024-02-12 and 02-21 | 02-21 was the day after the stock fell 28% on earnings | Momentum, then buying the dip (high) | |
-| AVGO calls, 2024-06-24 | Earnings and a 10-for-1 split announced 6-12 | Split and earnings momentum (high) | |
-| VST, TEM, AMZN, GOOGL, NVDA calls, 2025-01-14 | AI and power-for-data-centers theme, VST up 36% in 3 months | Theme momentum (medium) | VST lost 29% vs SPY |
-| INTC, UBER, BE, 2026 | INTC up 141% in 3 months; BE down 44% in a month, 4 days before earnings | Momentum (INTC), buying the dip (BE) (low: recent, too early to score) | |
+| SunEdison buy, 2014-10-24 | Solar growth story, TerraForm IPO | First Wind deal 24 days later (+29% that day); bankrupt 2016 | Lucky timing then a total loss (low confidence either way) |
+| Amazon calls, 2019-07-22 | House Judiciary antitrust probe of Big Tech; CEO hearing 07-16 | Probe ran through 2020 | Bought despite unfavorable legislative news |
+| Microsoft calls, Feb 2020 | Bought into the COVID crash | Army HoloLens contract ($21.9B) 2021-03-31, 12 days after exercise | Award was expected after the 2018 prototype deal; low confidence of a link |
+| Amazon calls, 2021-05-21 | Reports that the Pentagon was reconsidering JEDI | JEDI cancelled and Amazon brought into JWCC 07-06 | Partly public; medium |
+| GOOGL exercise and Big Tech calls, June 2021 | Six antitrust bills headed to markup | Judiciary passed them 06-24; never got a floor vote under Speaker Pelosi | Information cut against the trade; stalling is plausible but unproven |
+| NVDA calls 2021 and exercise 2022-06-17 | Chip subsidies (USICA passed the Senate 2021-06-08) were public | CHIPS Act passed 2022-07-27/28 | **She sold 25,000 NVDA at a $341k loss the day before the vote**, after public pressure |
+| GOOGL sales, Dec 2022 | Bloomberg reported in Aug 2022 that DOJ was "poised to sue" over ad tech | DOJ sued 2023-01-24 | Public, plus year-end tax-loss selling |
+| Visa sale, 2024-07-01 | Visa disclosed a DOJ debit probe in 2021 | DOJ sued 2024-09-24 | Public probe and a decade-long selling pattern |
+| PayPal sale, 2025-12-30 | Year-end | Fell to about $40 in Feb 2026 on guidance and a CEO change | Not foreseeable from public information; luck |
 
-**Do the why-features predict returns?** No. Among her buys, none of 1-, 3- or 12-month momentum, distance from the 52-week high, chip-sector momentum, days to or since earnings, or VIX had a significant link to the next year's excess return (every p > 0.2, n of about 40). Across 8,475 congress buys, pre-trade momentum had zero predictive power (rho 0.005). Per the kill rule, they are not used as signals.
+Sources checked: Fox News on SunEdison and First Wind; Fortune 2014-11-20 (Hertz CEO); Fool/Investing.com 2015-07-17 (Hertz restatement); Reuters 2016-01-07 (Apple under $100); Fortune 2016-05-16 (Buffett's Apple stake); TechCrunch 2018-03-23 (Dropbox IPO); Fool and Bloomberg 2018-07-26 (Facebook's crash); Fool 2018-10-24 (AT&T); Fortune 2019-06-10 (Tableau); Axios 2019-07-17 (Netflix); Boing Boing 2019-07-09 (Big Tech antitrust hearing); Fox Business (Microsoft IVAS; CrowdStrike); Variety/CNBC 2020-12-11 (Disney Investor Day); Bloomberg 2021-03-10 (Roblox listing); Reclaim The Net (JEDI/JWCC); Sludge/The Brick House (2021 antitrust bills); Free Beacon 2022-07-20 and Benzinga 2022-07-27 (NVDA and CHIPS); Bloomberg Law Aug 2022 and Just the News 2023-01-25 (Google ad-tech suit); Legal Insurrection 2024-09 (Visa); InvestorPlace (Broadcom split); AOL/Fox 2025-01 (pre-inauguration trades); IBTimes (PayPal); Bloomberg/Nasdaq 2026-05 (Intel and Apple foundry); Disclosed Capitol 2026-08-28 (Intel Q2); Sentisense/TIKR 2026-07 (Bloom Energy selloff); House Clerk PTR PDFs for every trade.
+
+**Do the why-features predict returns?** No. On price features among her buys (momentum, distance from high, earnings timing, VIX), every p-value was above 0.2. Across 8,475 congress buys, pre-trade momentum had zero predictive power (rho 0.005). The legislative link predicted *lower* returns. Per the kill rule, none are used as trading signals. Historical options-market activity (unusual call volume before her trades) could not be checked: there is no options data, so that stays to be determined.
 
 ## 7. Congress-wide (doc sections 12-13; 2023 to Jul 2026, 144 members, 893 tickers)
 
@@ -147,7 +151,7 @@ Senate buys did -0.4% at 3 months and House buys -2.0%. This window uses the old
 | Beats SPY after delays and costs? | On return yes; on drawdown no; on risk-adjusted terms it ties QQQ |
 | Best filtered strategy | None. The walk-forward pick failed validation |
 | Best bot | None for real money (see below) |
-| Why-model predictive value | None (all p > 0.2) |
+| Why-model predictive value | None. 86% of buys followed a public catalyst; buys with a legislative link did worse (+0.4% vs +20.9%) |
 | Walk-forward performance | Train +19.9%, validate -12.3%, test +29.9%: inconsistent |
 | Final verdict | **Fail.** The apparent Pelosi edge is mega-cap tech beta plus a few big AI-era winners |
 
