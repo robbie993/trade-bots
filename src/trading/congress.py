@@ -54,9 +54,15 @@ WINDOW = timedelta(days=3)
 #: Seconds between downloads. The dataset refreshes about every 20 hours.
 EVERY_S = 6 * 3600
 
-#: Stocks only: the dataset's code for a stock, and no code at all, which is
-#: how most Senate rows print a listed share. Options, bonds and funds are not.
+#: Stocks: the dataset's code for a stock, and no code at all, which is how
+#: most Senate rows print a listed share. Bonds and funds are not read.
 STOCK_CODES = (None, "ST")
+#: Options: only a purchase of calls is read, as a buy of the underlying. The
+#: Pelosi study (research/pelosi/REPORT.md) found members' call buys were the
+#: one congress slice with a positive tilt after filing (+5% vs SPY over six
+#: months, 2023-26, n=40, not yet significant); the idea lab scores it from here.
+#: Puts, written calls and option sales say too little about direction.
+OPTION_CODE = "OP"
 ACTIONS = {"purchase": 1, "sale": -1}
 SALE_WEIGHT = 0.5
 
@@ -90,6 +96,13 @@ def loudness(dollars: float) -> float:
     return FLOOR + (CEILING - FLOOR) * share
 
 
+def is_call_buy(r) -> bool:
+    """A disclosed purchase of call options, read as a buy of the stock."""
+    note = str(r.get("comment") or "").lower()
+    return (r.get("assetTypeCode") == OPTION_CODE and str(r.get("action") or "").lower() == "purchase"
+            and "call" in note and "put" not in note)
+
+
 def live_events(rows, now: datetime, window: timedelta = WINDOW) -> list:
     """The stock trades that became public within `window` before `now`.
 
@@ -102,7 +115,7 @@ def live_events(rows, now: datetime, window: timedelta = WINDOW) -> list:
         action = str(r.get("action") or "").lower()
         if not ticker or action not in ACTIONS:
             continue
-        if r.get("assetTypeCode") not in STOCK_CODES:
+        if r.get("assetTypeCode") not in STOCK_CODES and not is_call_buy(r):
             continue
         available = _when(r.get("availableAt"))
         if available is None or available > now or now - available > window:
@@ -150,9 +163,10 @@ def read_shard(raw: bytes) -> list:
     """A year's Parquet file as a list of dicts. Needs pyarrow."""
     import pyarrow.parquet as pq
 
-    table = pq.read_table(io.BytesIO(raw), columns=[
-        "ticker", "action", "assetTypeCode", "amountLow", "amountHigh", "availableAt",
-        "supersededAt", "displayName", "filerLast", "transactionDate"])
+    wanted = ["ticker", "action", "assetTypeCode", "amountLow", "amountHigh", "availableAt",
+              "supersededAt", "displayName", "filerLast", "transactionDate", "comment"]
+    have = set(pq.read_schema(io.BytesIO(raw)).names)
+    table = pq.read_table(io.BytesIO(raw), columns=[c for c in wanted if c in have])
     return table.to_pylist()
 
 
@@ -212,4 +226,4 @@ class CongressDesk:
         return notes
 
 
-__all__ = ["CongressDesk", "live_events", "loudness", "read_shard", "readings_from"]
+__all__ = ["CongressDesk", "is_call_buy", "live_events", "loudness", "read_shard", "readings_from"]

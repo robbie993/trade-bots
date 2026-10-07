@@ -30,11 +30,17 @@ def test_only_fresh_public_unamended_stock_trades_are_live():
         row("SOON", "purchase", 1001, 15000, NOW + timedelta(hours=1)),
         row("AMND", "purchase", 1001, 15000, FRESH, supersededAt=FRESH + timedelta(hours=1)),
         row("OPT", "purchase", 1001, 15000, FRESH, assetTypeCode="OP"),
+        row("CALL", "purchase", 15001, 50000, FRESH, assetTypeCode="OP",
+            comment="Purchased 20 call options with a strike price of $100 and an expiration date of 1/15/27."),
+        row("PUT", "purchase", 15001, 50000, FRESH, assetTypeCode="OP",
+            comment="Purchased 20 put options with a strike price of $100."),
+        row("SOLD", "sale", 15001, 50000, FRESH, assetTypeCode="OP",
+            comment="Sold 20 call options with a strike price of $100."),
         row(None, "purchase", 1001, 15000, FRESH),
         row("XCH", "exchange", 1001, 15000, FRESH),
         row("SEN", "sale", 1001, 15000, FRESH, assetTypeCode=None),
     ]
-    assert sorted(r["ticker"] for r in live_events(rows, NOW)) == ["HD", "SEN"]
+    assert sorted(r["ticker"] for r in live_events(rows, NOW)) == ["CALL", "HD", "SEN"]
 
 
 def test_buys_and_sales_net_with_sales_at_half_weight():
