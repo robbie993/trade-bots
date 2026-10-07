@@ -512,3 +512,43 @@ These rules already pass that bar on history, but only in-sample:
 - At 2x costs: 21.9%, Sharpe 1.05. At 5x costs: 20.7%, Sharpe 1.00.
 - By period: 2021-22 +12.5% (SPY +3.4%), 2023-26 +30.7% (SPY 22.3%, QQQ 33.0%).
 - The filter kept it invested 83% of the time.
+
+**Update 2026-10-07 22:31 UTC:** Robbie chose to run this as a paper firm in the daily village on his PC. Because the village caps a firm at 8 positions and 25% per name, it holds **the top 5 at 20% each** (equal weight, monthly, QQQ 200-day filter). That version: 26.0%/yr, Sharpe 1.03, max DD -30.2%, 2021-22 +7.1%. Bot `bots/big5_trend.py`, firm `firm_big5_trend` in `config/firm_config_daily.yaml`, draft PR #39 (not merged; the PC runs it from that branch).
+
+## 13. Hearings and laws vs her buys (`laws_hearings.py`)
+
+Data: 15,537 congressional hearings (391 with company witnesses) and 2,165 laws (113th-119th Congress), pulled on the PC. Only one law names a company directly, so laws are matched by sector (239 flagged tech).
+
+| Check | Her buys | Same stock, random days | Verdict |
+|---|---|---|---|
+| Company testified within 90 days of her trade | 22.0% | 19.6% | Same as chance |
+| Buys where a hearing is likelier than at random | 18 of 82 | | Same as chance |
+| Tech laws signed in the 90 days after a tech buy | 4.42 | 4.54 | Same as chance |
+
+- **1-year return vs SPY:** buys near a company hearing **+4.6%** (17 buys) vs her other buys +12.4% (44). Tech buys followed by a tech law +10.4% (44) vs +17.6% without (6, too few to read).
+- **Verdict:** her trades don't cluster around hearings or laws, and the ones that sit near them did worse, not better. This matches the committee test (section 11): no sign of trading on what Congress was about to do.
+
+## 14. Valuation and earnings filters on the most-traded rule (`fund_filters.py`, GPT steps 3-4)
+
+Pre-registered grid of 56 variants:
+- Pool: the 20 or 30 most traded. Hold 5 or 10, equal weight, monthly. Filter: none or QQQ 200-day.
+- Signals inside the pool: size (baseline), profitable only (positive trailing EPS), value (lowest trailing P/E), growth (trailing EPS growth vs a year ago), surprise (average EPS surprise over the last 2 reports), beat (beat estimates last report), and GARP (value plus growth).
+- Point in time: an earnings report counts from the session after it. EPS is yfinance's split-adjusted reported EPS, covering 98.5% of the pool's slots.
+
+**Result: no earnings or valuation filter improves the plain most-traded rule.** Each signal vs plain size at the same settings (8 pairs each):
+
+| Signal | Whole-period CAGR vs size | Pairs where it beats size (whole / test) |
+|---|---|---|
+| Profitable only | -0.6 pts | 4 of 8 / 6 of 8 |
+| Beat last estimate | -1.7 pts | 0 of 8 / 0 of 8 |
+| Growth | -7.0 pts | 0 of 8 / 0 of 8 |
+| Surprise (earnings drift) | -8.5 pts | 0 of 8 / 0 of 8 |
+| GARP | -13.6 pts | 0 of 8 / 0 of 8 |
+| Value (cheap P/E) | -22.3 pts | 0 of 8 / 0 of 8 |
+
+- **Cheap P/E is the worst idea here.** Among the biggest stocks, the cheap ones are the laggards (banks, oil, telecom); the expensive ones are the AI and cloud names that drove returns.
+- Surprise-chasing crashed in 2022 (-43% without the filter).
+- The train pick is again plain "5 most traded, no filter" (train Sharpe 1.27), which fails 2021-22 at -18.7%, as in section 12.
+- **One maybe:** "profitable only, 5 stocks, QQQ filter" made 27.7%/yr, Sharpe 1.10, max DD -25.4%, 2021-22 +12.0%. That is slightly better than the live Big-5 rule (26.0 / 1.03 / -30.2 / +7.1). It mainly drops money-losing names, such as early Tesla and the 2021 meme stocks. But across the 8 settings it won only half the time, so it's noise-level. **Big-5 Trend stays frozen as is.** Changing it now would be exactly the after-the-fact tuning the forward test is meant to avoid.
+
+**Survivorship caveat (applies to sections 12 and 14):** prices come from tickers some member traded and that Yahoo still prices. Former top names that were delisted or acquired (Twitter, Celgene, Activision, Allergan, Xilinx, Splunk) are missing, so backtest returns are likely overstated. The PC is looking for free delisted-company prices to rerun this. The forward test doesn't have this problem.

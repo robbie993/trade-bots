@@ -1,0 +1,34 @@
+{
+ "buys": 82,
+ "with_1y_return": 61,
+ "hearings": {
+  "share_of_buys_within_90d_of_company_hearing": 22.0,
+  "same_stock_random_days": 19.6,
+  "names_with_hearings": [
+   "AAPL",
+   "AMZN",
+   "GOOG",
+   "GOOGL",
+   "META",
+   "MSFT",
+   "MU",
+   "PANW",
+   "T"
+  ],
+  "x252_hearing_buys": 4.6,
+  "n_hearing": 17,
+  "x252_other_buys": 12.4,
+  "n_other": 44,
+  "buys_where_hearing_more_likely_than_random": "18 of 82"
+ },
+ "tech_laws": {
+  "tech_buys": 57,
+  "avg_tech_laws_signed_within_90d_after": 4.42,
+  "same_stock_random_days": 4.54,
+  "x252_buys_with_law_after": 10.4,
+  "n_with": 44,
+  "x252_buys_without": 17.6,
+  "n_without": 6,
+  "buys_with_more_laws_than_random": "25 of 57"
+ }
+}
