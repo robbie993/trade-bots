@@ -1,0 +1,311 @@
+{
+ "buys with committee data": 61428,
+ "members": 283,
+ "committee chair": {
+  "yes": {
+   "pub": {
+    "n": 13210,
+    "mean": -0.5,
+    "lo": -1.52,
+    "hi": 0.53,
+    "hit": 44.63
+   },
+   "trade": {
+    "n": 13285,
+    "mean": -0.46,
+    "lo": -1.34,
+    "hi": 0.43,
+    "hit": 46.64
+   }
+  },
+  "no": {
+   "pub": {
+    "n": 45039,
+    "mean": -0.79,
+    "lo": -1.25,
+    "hi": -0.32,
+    "hit": 45.47
+   },
+   "trade": {
+    "n": 45478,
+    "mean": -0.83,
+    "lo": -1.26,
+    "hi": -0.37,
+    "hit": 45.26
+   }
+  }
+ },
+ "ranking member": {
+  "yes": {
+   "pub": {
+    "n": 8117,
+    "mean": -1.62,
+    "lo": -3.09,
+    "hi": -0.07,
+    "hit": 41.83
+   },
+   "trade": {
+    "n": 8309,
+    "mean": -1.83,
+    "lo": -3.12,
+    "hi": -0.63,
+    "hit": 42.26
+   }
+  },
+  "no": {
+   "pub": {
+    "n": 50132,
+    "mean": -0.58,
+    "lo": -1.0,
+    "hi": -0.14,
+    "hit": 45.84
+   },
+   "trade": {
+    "n": 50454,
+    "mean": -0.57,
+    "lo": -0.98,
+    "hi": -0.13,
+    "hit": 46.12
+   }
+  }
+ },
+ "party leader": {
+  "yes": {
+   "pub": {
+    "n": 101,
+    "mean": 1.46,
+    "lo": -2.49,
+    "hi": 5.82,
+    "hit": 53.47
+   },
+   "trade": {
+    "n": 101,
+    "mean": 1.96,
+    "lo": -2.24,
+    "hi": 6.43,
+    "hit": 49.5
+   }
+  },
+  "no": {
+   "pub": {
+    "n": 58148,
+    "mean": -0.73,
+    "lo": -1.17,
+    "hi": -0.28,
+    "hit": 45.27
+   },
+   "trade": {
+    "n": 58662,
+    "mean": -0.75,
+    "lo": -1.16,
+    "hi": -0.32,
+    "hit": 45.56
+   }
+  }
+ },
+ "on a power committee": {
+  "yes": {
+   "pub": {
+    "n": 39078,
+    "mean": -0.76,
+    "lo": -1.25,
+    "hi": -0.26,
+    "hit": 45.71
+   },
+   "trade": {
+    "n": 39445,
+    "mean": -0.92,
+    "lo": -1.4,
+    "hi": -0.43,
+    "hit": 44.95
+   }
+  },
+  "no": {
+   "pub": {
+    "n": 19171,
+    "mean": -0.67,
+    "lo": -1.55,
+    "hi": 0.18,
+    "hit": 44.41
+   },
+   "trade": {
+    "n": 19318,
+    "mean": -0.39,
+    "lo": -1.14,
+    "hi": 0.4,
+    "hit": 46.84
+   }
+  }
+ },
+ "stock in their committee's industry": {
+  "yes": {
+   "pub": {
+    "n": 2561,
+    "mean": 2.37,
+    "lo": 1.13,
+    "hi": 3.92,
+    "hit": 51.46
+   },
+   "trade": {
+    "n": 2580,
+    "mean": 2.19,
+    "lo": 0.95,
+    "hi": 3.49,
+    "hit": 50.16
+   }
+  },
+  "no": {
+   "pub": {
+    "n": 55688,
+    "mean": -0.87,
+    "lo": -1.31,
+    "hi": -0.37,
+    "hit": 45.0
+   },
+   "trade": {
+    "n": 56183,
+    "mean": -0.88,
+    "lo": -1.3,
+    "hi": -0.47,
+    "hit": 45.36
+   }
+  }
+ },
+ "by sector, own committee vs not (trade timing)": {
+  "ag/food": {
+   "own committee": {
+    "n": 73,
+    "mean": -3.48,
+    "lo": -11.08,
+    "hi": 4.19,
+    "hit": 39.73
+   },
+   "other members": {
+    "n": 223,
+    "mean": -4.93,
+    "lo": -8.31,
+    "hi": -1.62,
+    "hit": 37.22
+   }
+  },
+  "banks": {
+   "own committee": {
+    "n": 115,
+    "mean": -1.6,
+    "lo": -7.62,
+    "hi": 4.24,
+    "hit": 47.83
+   },
+   "other members": {
+    "n": 1938,
+    "mean": -1.02,
+    "lo": -2.58,
+    "hi": 0.54,
+    "hit": 47.21
+   }
+  },
+  "defense": {
+   "own committee": {
+    "n": 209,
+    "mean": -3.24,
+    "lo": -6.79,
+    "hi": 0.25,
+    "hit": 38.76
+   },
+   "other members": {
+    "n": 438,
+    "mean": 2.08,
+    "lo": -0.26,
+    "hi": 4.3,
+    "hit": 56.62
+   }
+  },
+  "energy": {
+   "own committee": {
+    "n": 303,
+    "mean": -4.95,
+    "lo": -7.63,
+    "hi": -2.39,
+    "hit": 34.65
+   },
+   "other members": {
+    "n": 1652,
+    "mean": -3.47,
+    "lo": -5.47,
+    "hi": -1.36,
+    "hit": 38.98
+   }
+  },
+  "health": {
+   "own committee": {
+    "n": 886,
+    "mean": 0.21,
+    "lo": -1.17,
+    "hi": 1.71,
+    "hit": 50.56
+   },
+   "other members": {
+    "n": 2780,
+    "mean": -1.32,
+    "lo": -2.62,
+    "hi": 0.09,
+    "hit": 47.48
+   }
+  },
+  "tech": {
+   "own committee": {
+    "n": 753,
+    "mean": 12.1,
+    "lo": 8.99,
+    "hi": 15.35,
+    "hit": 64.81
+   },
+   "other members": {
+    "n": 4217,
+    "mean": 6.09,
+    "lo": 4.66,
+    "hi": 7.56,
+    "hit": 56.32
+   }
+  },
+  "telecom": {
+   "own committee": {
+    "n": 168,
+    "mean": -2.23,
+    "lo": -4.11,
+    "hi": -0.02,
+    "hit": 39.29
+   },
+   "other members": {
+    "n": 1235,
+    "mean": -4.27,
+    "lo": -5.45,
+    "hi": -3.03,
+    "hit": 34.41
+   }
+  },
+  "transport": {
+   "own committee": {
+    "n": 73,
+    "mean": -8.99,
+    "lo": -13.89,
+    "hi": -4.23,
+    "hit": 30.14
+   },
+   "other members": {
+    "n": 914,
+    "mean": -3.67,
+    "lo": -5.83,
+    "hi": -1.31,
+    "hit": 39.93
+   }
+  }
+ },
+ "same stock and quarter: own committee minus others": {
+  "cells": 1047,
+  "mean": 0.03,
+  "median": -0.15,
+  "t": 0.09,
+  "tech_only": 1.28
+ }
+}

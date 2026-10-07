@@ -382,3 +382,83 @@ Total return +1,112% (Dec 2014 to Oct 2026). CAGR 23.6%, volatility 28.1%, Sharp
 - The congress price file is from Yahoo; the Pelosi one also covers delisted names she traded via fixes in section 1.
 - Leaders' non-public information can't be tested. No claim is made either way beyond what public data shows.
 - Every result depends heavily on 2023-26, the AI rally.
+
+## 11. Round 3: testing every public route to an edge (`round3.py`)
+
+Robbie asked to try everything. Each test below looks for the fingerprint an information edge would leave in public data. Getting or using non-public information is illegal and is not attempted.
+
+### 11.1 Did she know earnings in advance?
+
+Next earnings report within 90 days after her trade, for the same tickers (Yahoo EPS history, 2013-2026):
+
+| | n | Beat estimates | Same stocks' normal beat rate | Stock move on the report vs SPY | Same stocks' normal move |
+|---|---|---|---|---|---|
+| After her buys (median 55 days before the report) | 66 | 85% | 80% | **-0.8%** | +0.7% |
+| After her sales (median 36 days before) | 47 | 79% | 79% | **+2.3%** | +0.7% |
+
+No. The stocks she bought reacted worse than normal to their next report, and the stocks she sold reacted better. An insider would show the opposite on both.
+
+### 11.2 Leak fingerprint: do her stocks jump right after she trades?
+
+Return vs SPY from the close before her trade day, minus the same stock on 80 random days:
+
+| | 1 day | 5 days | 20 days | n |
+|---|---|---|---|---|
+| Buys | -1.9% [-3.9, -0.3] | -0.2% | -1.6% | 73 |
+| Sales (sign flipped, so + would mean she sold before a drop) | -0.3% | -0.8% | -2.7% | 49 |
+
+- No jump. Her buys underperform random days in the first day (she buys on down days) and are flat after a month.
+- In the 20 days before a buy, her stocks had trailed SPY by 2.3% (random days: +3.5%). She buys dips.
+- Volume on her buy days is 1.3x normal (35% of days over 1.5x), which fits buying on news days that are already public. Her sale days have below-normal volume.
+
+### 11.3 Congress-wide: whose account, and leaders
+
+Stock buys, 6 months vs SPY (2014-2026):
+
+| Group | Copy at public date | At their own trade date | n |
+|---|---|---|---|
+| Spouse's account | -0.8% | -0.9% | 24,005 |
+| Member's own account | +0.2% | | 661 |
+| Joint | -0.1% | -0.1% | 9,027 |
+| Child's account | -1.3% | -1.6% | 10,974 |
+| Leaders who trade (Pelosi, Clark, Jeffries, Boehner) | -2.4% | +0.6% | 340 |
+| Everyone else | -0.8% | -0.8% | 59,092 |
+| Pelosi alone | +5.1% | +6.2% [+0.2, +13.3] | 55 |
+| Katherine Clark (Whip) | -3.6% | -0.2% | 270 |
+
+- Spouse accounts like the Pelosis' do no better than anyone else's.
+- The only leader with a positive record is Pelosi, and she's the big-tech story from section 10. Clark's leader-era trades lose to SPY.
+- Leaders' trades do 3 points better at their own trade date than at the public date (+0.6% vs -2.4%), while everyone else's don't change. That's a small hint that leaders' timing is worth something before it's public, but the confidence interval includes zero and it's mostly one member's 270 trades.
+
+### 11.4 Committee power and jurisdiction, all members (`committees_test.py`)
+
+Committee seats for every member from 2013 to 2026 (36,394 rows: Stewart committee data plus current rosters, gathered on the PC). There are 58,000+ stock buys by 283 members with seat data. The tables give 6-month return vs SPY, at the member's own trade date.
+
+| At the time of the buy, the member was... | Yes | No |
+|---|---|---|
+| A committee chair | -0.5% (13,285) | -0.8% |
+| A ranking member | -1.8% (8,309) | -0.6% |
+| A party leader | +2.0% [-2.2, +6.4] (101) | -0.8% |
+| On a power committee (Ways and Means, Energy and Commerce, Financial Services, Appropriations, Armed Services, Intelligence, Senate Finance, Banking, Commerce) | -0.9% | -0.4% |
+| **Buying a stock in an industry their committee oversees** | **+2.2% [+1.0, +3.5]** (2,580) | -0.9% |
+
+The last row looked like a lead, so I dug in:
+- By industry, the positive result is almost all tech: +12.1% for own-committee buyers vs +6.1% for other members. For defense, energy and transport, members buying under their own committee did *worse* (defense -3.2% vs +2.1%).
+- **Comparing the same stock in the same quarter, own-committee buyers did +0.03% better than other members (t = 0.1, 1,047 matched cells).** The apparent edge came from which tech stocks they held (more NVDA, AMZN and META) and when, not from knowing something other members didn't.
+- The busiest own-committee tech buyers were Michael McCaul (Foreign Affairs), Sheldon Whitehouse, Kurt Schrader, Don Beyer and Shelley Moore Capito.
+
+Pelosi herself held no committee seats as leader or Speaker, so this test mainly covers other members.
+
+### 11.5 More public channels tested on the PC (`research/pelosi-data`, `research/pelosi/channels/`, commit 2788749)
+
+Each one compared activity around her trades with that company's normal rate, and with 2,000 sets of random dates (same stocks, dates moved up to a year).
+
+| Channel | Data | Result |
+|---|---|---|
+| Federal contracts | 5,549 awards of $10M+, 2014-2026, 48 companies (USAspending) | No change in contract counts before or after her buys |
+| Company insiders (SEC Form 4) | 264,000 rows | Executives did not buy ahead of her. They sold more than usual (1.7x) in the 90 days before her buys, which fits her buying after run-ups |
+| Option volume (OCC) | Last 2 years only; no free older data | No unusual customer call buying in the 5 days before her 15 recent buys. 20% of her buy days had 1.5x normal call volume, vs 24% on ordinary days |
+| Public attention (Wikipedia page views; GDELT news was blocked) | Daily views | Attention spikes were 3x more common in the month *after* her buys, and they trace to her own disclosures (TEM and VST in Jan 2025). Excluding disclosure week, there's no effect. Her filings are the news |
+| Copy without NVDA | | 19.3%/yr, the same as QQQ, with more volatility and a -46% worst drop. 2024 alone was +156% because of NVDA |
+
+Still being gathered: lobbying filings, every law 2013-2026 and every hearing with witnesses.

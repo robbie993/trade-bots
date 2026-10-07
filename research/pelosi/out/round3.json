@@ -1,0 +1,262 @@
+{
+ "earnings_foreknowledge": {
+  "all reports, her tickers 2013-2026 (base rate)": {
+   "n": 1659,
+   "beat": 76.19,
+   "react_mean": 0.4,
+   "react_pos": 49.79
+  },
+  "next report after her buys (within 90 days)": {
+   "n": 66,
+   "beat": 84.85,
+   "same_tickers_base_beat": 79.97,
+   "react_mean": -0.8,
+   "same_tickers_base_react": 0.65,
+   "react_pos": 46.97,
+   "median_days_before": 55.0
+  },
+  "next report after her sells (within 90 days)": {
+   "n": 47,
+   "beat": 78.72,
+   "same_tickers_base_beat": 79.21,
+   "react_mean": 2.34,
+   "same_tickers_base_react": 0.68,
+   "react_pos": 68.09,
+   "median_days_before": 36.0
+  }
+ },
+ "leak_signature": {
+  "buy": {
+   "1 day(s) after, her date minus random days (informed direction +)": {
+    "n": 73,
+    "mean": -1.86,
+    "lo": -3.86,
+    "hi": -0.26,
+    "hit": 42.47
+   },
+   "5 day(s) after, her date minus random days (informed direction +)": {
+    "n": 73,
+    "mean": -0.24,
+    "lo": -2.72,
+    "hi": 2.36,
+    "hit": 47.95
+   },
+   "20 day(s) after, her date minus random days (informed direction +)": {
+    "n": 73,
+    "mean": -1.6,
+    "lo": -6.52,
+    "hi": 2.78,
+    "hit": 45.21
+   },
+   "raw after-return vs SPY": {
+    "1": -1.49,
+    "5": 0.72,
+    "20": 1.79
+   },
+   "20 days before her trade vs SPY": {
+    "hers": -2.31,
+    "random_days": 3.53
+   },
+   "volume on her trade day vs prior 60-day average": {
+    "median": 1.28,
+    "share_over_1_5x": 35.14
+   }
+  },
+  "sell": {
+   "1 day(s) after, her date minus random days (informed direction +)": {
+    "n": 49,
+    "mean": -0.27,
+    "lo": -0.91,
+    "hi": 0.41,
+    "hit": 44.9
+   },
+   "5 day(s) after, her date minus random days (informed direction +)": {
+    "n": 49,
+    "mean": -0.82,
+    "lo": -2.62,
+    "hi": 0.94,
+    "hit": 44.9
+   },
+   "20 day(s) after, her date minus random days (informed direction +)": {
+    "n": 49,
+    "mean": -2.72,
+    "lo": -6.9,
+    "hi": 0.82,
+    "hit": 46.94
+   },
+   "raw after-return vs SPY": {
+    "1": 0.3,
+    "5": 1.12,
+    "20": 3.07
+   },
+   "20 days before her trade vs SPY": {
+    "hers": -0.97,
+    "random_days": 0.46
+   },
+   "volume on her trade day vs prior 60-day average": {
+    "median": 0.75,
+    "share_over_1_5x": 4.08
+   }
+  }
+ },
+ "owner_6m_vs_spy": {
+  "dependent_child (pub timing)": {
+   "n": 10974,
+   "mean": -1.29,
+   "lo": -2.12,
+   "hi": -0.44,
+   "hit": 43.37
+  },
+  "joint (pub timing)": {
+   "n": 9027,
+   "mean": -0.07,
+   "lo": -0.96,
+   "hi": 0.85,
+   "hit": 46.75
+  },
+  "not_indicated (pub timing)": {
+   "n": 14765,
+   "mean": -0.95,
+   "lo": -1.56,
+   "hi": -0.33,
+   "hit": 45.01
+  },
+  "self (pub timing)": {
+   "n": 661,
+   "mean": 0.15,
+   "lo": -1.81,
+   "hi": 2.23,
+   "hit": 45.23
+  },
+  "spouse (pub timing)": {
+   "n": 24005,
+   "mean": -0.75,
+   "lo": -1.41,
+   "hi": -0.09,
+   "hit": 45.52
+  },
+  "dependent_child (trade timing)": {
+   "n": 11041,
+   "mean": -1.55,
+   "lo": -2.3,
+   "hi": -0.75,
+   "hit": 43.8
+  },
+  "joint (trade timing)": {
+   "n": 9072,
+   "mean": -0.08,
+   "lo": -0.95,
+   "hi": 0.73,
+   "hit": 46.68
+  },
+  "not_indicated (trade timing)": {
+   "n": 14837,
+   "mean": -0.35,
+   "lo": -0.92,
+   "hi": 0.24,
+   "hit": 46.07
+  },
+  "self (trade timing)": {
+   "n": 1150,
+   "mean": -2.76,
+   "lo": -4.58,
+   "hi": 1.02,
+   "hit": 41.22
+  },
+  "spouse (trade timing)": {
+   "n": 24190,
+   "mean": -0.94,
+   "lo": -1.54,
+   "hi": -0.28,
+   "hit": 45.51
+  }
+ },
+ "leaders_6m_vs_spy": {
+  "everyone else (pub timing)": {
+   "n": 59092,
+   "mean": -0.78,
+   "lo": -1.22,
+   "hi": -0.33,
+   "hit": 45.18
+  },
+  "leaders (pub timing)": {
+   "n": 340,
+   "mean": -2.35,
+   "lo": -4.1,
+   "hi": 0.32,
+   "hit": 44.41
+  },
+  "everyone else (trade timing)": {
+   "n": 59950,
+   "mean": -0.82,
+   "lo": -1.23,
+   "hi": -0.38,
+   "hit": 45.41
+  },
+  "leaders (trade timing)": {
+   "n": 340,
+   "mean": 0.63,
+   "lo": -1.9,
+   "hi": 3.02,
+   "hit": 49.41
+  }
+ },
+ "leaders_each_6m_vs_spy": {
+  "Hakeem S. Jeffries (pub)": {
+   "n": 7,
+   "mean": -7.16,
+   "lo": -8.35,
+   "hi": -0.03,
+   "hit": 14.29
+  },
+  "John A. Boehner (pub)": {
+   "n": 8,
+   "mean": -5.99,
+   "lo": -15.2,
+   "hi": 0.98,
+   "hit": 37.5
+  },
+  "Katherine M. Clark (pub)": {
+   "n": 270,
+   "mean": -3.64,
+   "lo": -5.84,
+   "hi": -1.58,
+   "hit": 41.11
+  },
+  "Nancy Pelosi (pub)": {
+   "n": 55,
+   "mean": 5.11,
+   "lo": -0.8,
+   "hi": 11.82,
+   "hit": 65.45
+  },
+  "Hakeem S. Jeffries (trade)": {
+   "n": 7,
+   "mean": -5.43,
+   "lo": -6.67,
+   "hi": 2.02,
+   "hit": 28.57
+  },
+  "John A. Boehner (trade)": {
+   "n": 8,
+   "mean": -5.29,
+   "lo": -15.43,
+   "hi": 2.64,
+   "hit": 25.0
+  },
+  "Katherine M. Clark (trade)": {
+   "n": 270,
+   "mean": -0.18,
+   "lo": -3.73,
+   "hi": 1.97,
+   "hit": 48.89
+  },
+  "Nancy Pelosi (trade)": {
+   "n": 55,
+   "mean": 6.24,
+   "lo": 0.17,
+   "hi": 13.26,
+   "hit": 58.18
+  }
+ }
+}
