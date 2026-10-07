@@ -351,6 +351,9 @@ Public rules only. At each month-end a rule picks 10 stocks from the 30 most-tra
 - **The timing:** 86% of her buys came right after public news, mostly earnings, dips, splits and IPOs (section 6). Her exact dates did no better than random days on the same stocks (section 10.3).
 - **Her power:** her copy only matched SPY during her four years as Speaker, the most powerful years she had. Trades linked to bills or regulators did worse (+0.4% vs +20.9%).
 - **Her edge:** a long-run, concentrated, leveraged bet on Bay Area mega-cap tech, held through the 2023-26 AI boom. Paul Pelosi is a San Francisco venture and real-estate investor, so these are the companies he has watched for decades.
+- **The way she buys options:** every call was in the money (median strike about 70% of the stock price), with about 12 months to expiry. That is a cheaper way to own the stock for a year. Someone trading on advance news would buy short-dated, out-of-the-money calls.
+- **When the gains come:** her stocks do about +1% vs SPY in the 20 days after she buys and about +14% at 12 months. That is a slow build, not a jump after news.
+- Source for the two points above: the PC's precursor study on branch `research/pelosi-data`, commit 1dab0a4, files in `research/pelosi/precursors/`. It ranked 500 large stocks at each buy and found that trading volume alone put her pick at a median rank of 13. Adding momentum, other members' trades, analyst upgrades or earnings dates did not do better.
 - Non-public information can't be tested with public data, and this project doesn't try to obtain it. Nothing in the public record shows that she used it.
 
 ### 10.9 Updated verdict
