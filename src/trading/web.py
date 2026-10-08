@@ -1946,6 +1946,9 @@ _CHAT_STYLE = (
     ".msg.village{align-self:flex-start;background:var(--card)}"
     ".msg .who{display:block;font-size:.75rem;color:var(--muted);margin-bottom:.15rem}"
     ".msg.wait{color:var(--muted);font-style:italic}"
+    ".order{margin-top:.5rem;padding:.5rem .6rem;border:1px dashed var(--line);"
+    "border-radius:10px;white-space:normal}"
+    ".order form{display:inline}"
     "#say{width:100%;min-height:4.5rem;padding:.6rem;font:inherit;border-radius:8px;"
     "border:1px solid var(--line);background:var(--bg);color:var(--fg)}"
     "</style>"
@@ -1960,9 +1963,10 @@ _CHAT_SCRIPT = """<script>
     var el=document.createElement('div');
     el.className='msg '+(m.role==='you'?'you':'village');
     el.innerHTML='<span class=who>'+(m.role==='you'?'You':'The village')+' \u00b7 '+
-      esc((m.created_at||'').slice(11,16))+' UTC</span>'+esc(m.text);
+      esc((m.created_at||'').slice(11,16))+' UTC</span>'+esc(m.text)+(m.orders_html||'');
     box.appendChild(el);
   }
+  var sig=box.dataset.orders||'';
   function thinking(on, note){
     var w=document.getElementById('wait');
     if(on&&!w){w=document.createElement('div');w.id='wait';w.className='msg village wait';
@@ -1974,6 +1978,8 @@ _CHAT_SCRIPT = """<script>
       .then(function(r){return r.json();}).then(function(d){
         (d.messages||[]).forEach(function(m){thinking(false);bubble(m);last=Math.max(last,m.id);});
         thinking(d.waiting, d.note||'The village is thinking\u2026');
+        if(d.orders_sig!==undefined&&d.orders_sig!==sig&&!say.value&&
+           document.activeElement!==say){location.reload();return;}
         if(d.messages&&d.messages.length){box.scrollTop=box.scrollHeight;}
         clearTimeout(timer); timer=setTimeout(poll, d.waiting?4000:20000);
       }).catch(function(){clearTimeout(timer); timer=setTimeout(poll,20000);});
@@ -2007,6 +2013,59 @@ def _chat_note(waiting: list) -> str:
     return "The village is thinking\u2026"
 
 
+_ORDER_STATUS = {
+    "proposed": ("warn", "waiting for your tap"),
+    "confirmed": ("warn", "confirmed"),
+    "sent": ("warn", "sent to your desk"),
+    "filled": ("good", "done"),
+    "blocked": ("bad", "not traded"),
+    "cancelled": ("muted", "cancelled"),
+    "expired": ("muted", "expired"),
+}
+
+
+def _orders_html(orders: list) -> str:
+    """The orders under one village reply, with Confirm and Cancel while they wait."""
+    from . import desk
+
+    out = []
+    for o in orders:
+        cls, label = _ORDER_STATUS.get(str(o["status"]), ("muted", str(o["status"])))
+        buttons = ""
+        if o["status"] == "proposed":
+            buttons = ("<br><form method=post action='/village/actions/order'>"
+                       f"<input type=hidden name=order value={int(o['id'])}>"
+                       "<input type=hidden name=do value=confirm>"
+                       "<button class=go>Confirm</button></form>"
+                       "<form method=post action='/village/actions/order'>"
+                       f"<input type=hidden name=order value={int(o['id'])}>"
+                       "<input type=hidden name=do value=cancel>"
+                       "<button>Cancel</button></form>")
+        elif o["status"] == "confirmed":
+            buttons = ("<br><form method=post action='/village/actions/order'>"
+                       f"<input type=hidden name=order value={int(o['id'])}>"
+                       "<input type=hidden name=do value=cancel>"
+                       "<button>Cancel</button></form>")
+        result = str(o.get("result") or "")
+        out.append(f"<div class=order><strong>Order #{int(o['id'])}: "
+                   f"{e(desk.describe(o))}</strong> on your paper desk<br>"
+                   f"<span class={cls}>{e(label)}</span>"
+                   + (f" <span class=muted>· {e(result[:200])}</span>" if result else "")
+                   + buttons + "</div>")
+    return "".join(out)
+
+
+def _orders_by_message(db) -> tuple:
+    from . import desk
+
+    rows = desk.orders(db, 80)
+    by: dict = {}
+    for o in reversed(rows):
+        by.setdefault(int(o.get("message_id") or 0), []).append(o)
+    sig = ",".join(f"{o['id']}:{o['status']}" for o in rows)
+    return by, sig
+
+
 @router.get("/village/talk", response_class=HTMLResponse)
 @router.get("/village/send", response_class=HTMLResponse)
 def send_page(request: Request) -> HTMLResponse:
@@ -2032,6 +2091,7 @@ def send_page(request: Request) -> HTMLResponse:
     try:
         messages = chat.history(db, 40)
         asking = chat.waiting(db)
+        by_message, orders_sig = _orders_by_message(db)
         rows = inbox.recent(db, 30)
         pending = inbox.waiting(db)
     finally:
@@ -2039,7 +2099,8 @@ def send_page(request: Request) -> HTMLResponse:
     bubbles = "".join(
         f"<div class='msg {'you' if m['role'] == 'you' else 'village'}'>"
         f"<span class=who>{'You' if m['role'] == 'you' else 'The village'} · "
-        f"{e(str(m.get('created_at') or '')[11:16])} UTC</span>{e(m['text'])}</div>"
+        f"{e(str(m.get('created_at') or '')[11:16])} UTC</span>{e(m['text'])}"
+        f"{_orders_html(by_message.get(int(m['id']), []))}</div>"
         for m in messages)
     failed = [m for m in messages if m["role"] == "you" and m.get("status") == "failed"]
     if failed:
@@ -2048,7 +2109,7 @@ def send_page(request: Request) -> HTMLResponse:
     last = max((int(m["id"]) for m in messages), default=0)
     talk = (
         _CHAT_STYLE +
-        f"<div class=card><div id=chat data-last={last}>"
+        f"<div class=card><div id=chat data-last={last} data-orders='{e(orders_sig)}'>"
         + (bubbles or "<p class=muted>Say hello.</p>") +
         "</div><form id=talk method=post action='/village/actions/chat' "
         "style='display:block;margin-top:.75rem'>"
@@ -2100,12 +2161,28 @@ def talk_messages(request: Request, after: int = 0) -> JSONResponse:
     try:
         rows = [m for m in chat.history(db, 60) if int(m["id"]) > after]
         asking = chat.waiting(db)
+        by_message, orders_sig = _orders_by_message(db)
     finally:
         db.close()
     return JSONResponse({
         "messages": [{"id": int(m["id"]), "role": m["role"], "text": m["text"],
-                      "created_at": m.get("created_at") or ""} for m in rows],
-        "waiting": bool(asking), "note": _chat_note(asking)})
+                      "created_at": m.get("created_at") or "",
+                      "orders_html": _orders_html(by_message.get(int(m["id"]), []))}
+                     for m in rows],
+        "waiting": bool(asking), "note": _chat_note(asking), "orders_sig": orders_sig})
+
+
+@router.post("/village/actions/order")
+def action_order(order: int = Form(...), do: str = Form(...)) -> RedirectResponse:
+    """Confirm or cancel an order the village wrote. Confirming is the operator's tap."""
+    from . import desk
+
+    db = _inbox_db()
+    try:
+        said = desk.confirm(db, order) if do == "confirm" else desk.cancel(db, order)
+    finally:
+        db.close()
+    return RedirectResponse(f"/village/talk?said={quote(said)}", status_code=303)
 
 
 @router.post("/village/actions/chat")

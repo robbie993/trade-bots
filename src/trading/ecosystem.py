@@ -810,6 +810,14 @@ class Ecosystem:
     # =====================================================================
     def tick(self, market: Optional[MarketData] = None) -> TickReport:
         report = TickReport(started_at=utcnow())
+        # The operator's desk trades what was asked for in the chat; its
+        # universe follows what it holds and has orders for (desk.py).
+        try:
+            from . import desk
+
+            desk.sync_universe(self.db)
+        except Exception:  # noqa: BLE001 - the desk is never a precondition
+            pass
         market = market or self.market()
         self.heart.new_session()
 

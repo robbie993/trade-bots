@@ -14,6 +14,26 @@
 # switch needs no other change.
 
 firms:
+  firm_operator_desk:
+    name: "Robbie's Desk"
+    asset_class: "Mixed"
+    # The operator's own paper desk: it trades only what the operator tells the
+    # village to in the chat and confirms with a tap (src/trading/desk.py). No
+    # strategy of its own, and none of the other firms trade on the chat.
+    strategy: "bot:bots/operator_desk.py"
+    venue: "paper"
+    # An order the operator asked for is sized by the operator, so the per-trade
+    # limit is wide; the position cap, cash floor, daily loss halt and the
+    # conscience still apply as they do to every firm.
+    risk_limit: 0.5
+    capital_allocation: 20000
+    # Grows each tick with what the desk holds and has orders for (desk.sync_universe).
+    universe: [SPY]
+    analysts: [technical]
+    genome_locked: true      # the operator decides; evolution leaves it alone
+    genome:
+      stop_loss_pct: 0
+
   firm_a_etf:
     name: "ETF Specialist"
     asset_class: "ETF"
