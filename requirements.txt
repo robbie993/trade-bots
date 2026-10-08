@@ -30,8 +30,9 @@ ccxt>=4.0.0
 # Platform connectors (src/agents/sources/) once you implement fetch_raw().
 requests>=2.28.0
 
-# The village chat answering on its own key, ANTHROPIC_API_KEY (src/trading/chat_api.py).
+# The village chat answering on its own keys, on the website (src/trading/chat_api.py).
 anthropic>=1.12.0
+openai>=3.0.0             # ChatGPT, and Gemini, DeepSeek and Groq through their OpenAI-style endpoints
 
 # Analysis and reporting only. Money arithmetic deliberately does NOT go
 # through these: every cash figure is a decimal.Decimal (see src/money.py),

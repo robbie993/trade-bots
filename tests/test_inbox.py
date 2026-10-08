@@ -285,3 +285,26 @@ def test_signed_in_the_village_can_be_talked_to(hosted):
     page = hosted.get("/village/talk")
     assert "Talk to the village" in page.text and "hello village" in page.text
     assert "thinking" in page.text
+
+
+def test_with_keys_the_page_offers_who_answers_and_says_who_did(hosted, monkeypatch):
+    access = importlib.import_module("src.access")
+    chat_api = importlib.import_module("src.trading.chat_api")
+    for b in chat_api.BRAINS:
+        monkeypatch.delenv(b.env, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(chat_api, "_ask", lambda brain, prompt: f"hi from {brain.name}")
+    hosted.post(access.UNLOCK_PATH, data={access.FIELD: TOKEN, "next": "/village/talk"},
+                follow_redirects=False)
+    page = hosted.get("/village/talk").text
+    assert "<option value=chatgpt>ChatGPT</option>" in page
+    assert "Claude on your PC" in page
+    hosted.post("/village/actions/chat", data={"text": "yo", "brain": "chatgpt"},
+                headers={"X-Requested-With": "fetch"})
+    import time
+    for _ in range(50):
+        got = hosted.get("/village/talk/messages?after=0").json()["messages"]
+        if len(got) == 2:
+            break
+        time.sleep(0.1)
+    assert got[-1]["text"] == "hi from ChatGPT" and got[-1]["by"] == "ChatGPT"

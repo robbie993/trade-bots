@@ -1951,6 +1951,8 @@ _CHAT_STYLE = (
     ".order form{display:inline}"
     "#say{width:100%;min-height:4.5rem;padding:.6rem;font:inherit;border-radius:8px;"
     "border:1px solid var(--line);background:var(--bg);color:var(--fg)}"
+    "#brain{padding:.45rem;font:inherit;border-radius:8px;border:1px solid var(--line);"
+    "background:var(--bg);color:var(--fg);margin-right:.5rem}"
     "</style>"
 )
 
@@ -1962,7 +1964,7 @@ _CHAT_SCRIPT = """<script>
   function bubble(m){
     var el=document.createElement('div');
     el.className='msg '+(m.role==='you'?'you':'village');
-    el.innerHTML='<span class=who>'+(m.role==='you'?'You':'The village')+' \u00b7 '+
+    el.innerHTML='<span class=who>'+(m.role==='you'?'You':'The village'+(m.by?' ('+esc(m.by)+')':''))+' \u00b7 '+
       esc((m.created_at||'').slice(11,16))+' UTC</span>'+esc(m.text)+(m.orders_html||'');
     box.appendChild(el);
   }
@@ -1987,6 +1989,8 @@ _CHAT_SCRIPT = """<script>
   form.addEventListener('submit',function(ev){
     ev.preventDefault(); var t=say.value.trim(); if(!t){return;}
     say.value=''; var body=new URLSearchParams(); body.set('text',t);
+    var pick=document.getElementById('brain');
+    if(pick){body.set('brain',pick.value);try{localStorage.setItem('brain',pick.value);}catch(e){}}
     fetch('/village/actions/chat',{method:'POST',credentials:'same-origin',
       headers:{'X-Requested-With':'fetch'},body:body}).then(function(){poll();});
   });
@@ -1994,9 +1998,48 @@ _CHAT_SCRIPT = """<script>
     if(ev.key==='Enter'&&!ev.shiftKey&&window.innerWidth>700){ev.preventDefault();
       form.requestSubmit();}
   });
+  var pick=document.getElementById('brain');
+  try{var kept=localStorage.getItem('brain');
+    if(pick&&kept&&pick.querySelector('option[value="'+kept+'"]')){pick.value=kept;}}catch(e){}
   box.scrollTop=box.scrollHeight; poll();
 })();
 </script>"""
+
+
+def _who_name(m: dict) -> str:
+    """Which brain wrote a village reply, by name ("" for the PC's older replies)."""
+    by = str(m.get("answered_by") or "")
+    if m.get("role") != "village" or " · " not in by:
+        return ""
+    return by.split(" · ", 1)[0]
+
+
+def _who(m: dict) -> str:
+    name = _who_name(m)
+    return f" ({e(name)})" if name else ""
+
+
+def _brain_picker() -> str:
+    """Who answers: Claude on the PC, and every brain with a key on this service."""
+    from . import chat, chat_api
+
+    brains = chat_api.available()
+    if not brains:
+        return ""
+    options = "".join(f"<option value={b.key}>{e(b.name)}</option>" for b in brains)
+    return ("<label class=muted>Who answers "
+            f"<select id=brain name=brain>{options}"
+            f"<option value={chat.PC}>Claude on your PC</option></select></label>")
+
+
+def _brain_note() -> str:
+    from . import chat_api
+
+    if chat_api.enabled():
+        return ("Pick who answers. If it can't, the next one does, and the reply says who. "
+                "Claude on your PC needs the PC on; after 3 minutes the others step in.")
+    return ("Answers come from Claude on your PC, so the PC has to be on. "
+            "Thinking it through can take a minute.")
 
 
 def _chat_note(waiting: list) -> str:
@@ -2102,7 +2145,7 @@ def send_page(request: Request) -> HTMLResponse:
         db.close()
     bubbles = "".join(
         f"<div class='msg {'you' if m['role'] == 'you' else 'village'}'>"
-        f"<span class=who>{'You' if m['role'] == 'you' else 'The village'} · "
+        f"<span class=who>{'You' if m['role'] == 'you' else 'The village' + _who(m)} · "
         f"{e(str(m.get('created_at') or '')[11:16])} UTC</span>{e(m['text'])}"
         f"{_orders_html(by_message.get(int(m['id']), []))}</div>"
         for m in messages)
@@ -2119,9 +2162,9 @@ def send_page(request: Request) -> HTMLResponse:
         "style='display:block;margin-top:.75rem'>"
         "<textarea id=say name=text maxlength=4000 "
         "placeholder='Ask the village anything'></textarea>"
+        + _brain_picker() +
         "<button class=go>Send</button></form>"
-        "<p class=muted>Answers come from Claude on your PC, so the PC has to be on. "
-        "Thinking it through can take a minute.</p></div>")
+        f"<p class=muted>{_brain_note()}</p></div>")
     form = (
         "<h2 id=send>Send it a video or file</h2>"
         "<p class=muted>A link to an Instagram reel, a TikTok, a post on X, a YouTube "
@@ -2174,6 +2217,7 @@ def talk_messages(request: Request, after: int = 0) -> JSONResponse:
         db.close()
     return JSONResponse({
         "messages": [{"id": int(m["id"]), "role": m["role"], "text": m["text"],
+                      "by": _who_name(m),
                       "created_at": m.get("created_at") or "",
                       "orders_html": _orders_html(by_message.get(int(m["id"]), []))}
                      for m in rows],
@@ -2194,20 +2238,20 @@ def action_order(order: int = Form(...), do: str = Form(...)) -> RedirectRespons
 
 
 @router.post("/village/actions/chat")
-def action_chat(request: Request, text: str = Form("")):
-    from . import chat
+def action_chat(request: Request, text: str = Form(""), brain: str = Form("")):
+    from . import chat, chat_api
 
+    if brain not in chat_api.BY_KEY and brain != chat.PC:
+        brain = ""
     db = _inbox_db()
     try:
-        row = chat.post(db, text)
+        row = chat.post(db, text, brain)
         said = ""
     except ValueError as exc:
         row, said = 0, str(exc)
     finally:
         db.close()
     if row:
-        from . import chat_api
-
         chat_api.answer_soon(Config().database_url)
     if request.headers.get("x-requested-with") == "fetch":
         return JSONResponse({"ok": bool(row), "id": row, "error": said})
