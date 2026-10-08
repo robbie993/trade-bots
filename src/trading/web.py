@@ -367,7 +367,9 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<form method=post action='/village/actions/apply-approvals'>"
         "<button>Carry out approved decisions</button></form>"
         "<a href='/village/flow'><button>Walk the village &rarr;</button></a>"
-        "<a href='/village/solar'><button>Solar system &rarr;</button></a>",
+        "<a href='/village/solar'><button>Solar system &rarr;</button></a>"
+        "<a href='/village/send'><button class=go>Send the village a video or file "
+        "&rarr;</button></a>",
     )
     if not reconciliation.ok:
         header += (
@@ -1857,6 +1859,186 @@ def action_season() -> RedirectResponse:
     finally:
         eco.db.close()
     return _back(said)
+
+
+# =========================================================================
+# send the village something: a link, a video, a file (src/trading/inbox.py)
+# =========================================================================
+def _inbox_db() -> Database:
+    return Database.from_url(Config().database_url)
+
+
+def _may_see_inbox(request: Request) -> bool:
+    """What was sent is the operator's own: shown only to a signed-in session.
+
+    The rest of Mission Control is a public mirror; a note typed on a phone, a
+    transcript of a private video or a document is not something to mirror.
+    """
+    from ..access import unlocked
+    from ..deploy import is_public
+
+    return not is_public() or unlocked(request)
+
+
+_STATUS = {
+    "queued": ("warn", "waiting for the PC"),
+    "reading": ("warn", "being watched / read now"),
+    "read": ("good", "read"),
+    "failed": ("bad", "could not read it"),
+}
+
+
+def _sent_card(r: dict) -> str:
+    cls, label = _STATUS.get(str(r.get("status")), ("muted", str(r.get("status"))))
+    if r.get("kind") == "link":
+        url = str(r.get("url") or "")
+        what = (f"{e(r.get('platform') or 'link')} link: "
+                f"<a href='{e(url)}' rel=noopener target=_blank>{e(url[:70])}</a>")
+    else:
+        size = int(r.get("size_bytes") or 0)
+        what = (f"{e(r.get('kind'))}: {e(r.get('filename') or '')} "
+                f"<span class=muted>({size / 1e6:,.1f} MB)</span>")
+    parts = [f"<p><strong>#{int(r['id'])}</strong> {what}<br>"
+             f"<span class={cls}>{e(label)}</span> "
+             f"<span class=muted>· sent {e(str(r.get('submitted_at') or '')[5:16].replace('T', ' '))} UTC"
+             + (f" · {e(r.get('heard_by'))}" if r.get("heard_by") else "") + "</span></p>"]
+    if r.get("note"):
+        parts.append(f"<p class=muted>Your note: {e(r['note'])}</p>")
+    if r.get("title") and r.get("kind") == "link":
+        parts.append(f"<p><em>{e(str(r['title'])[:300])}</em></p>")
+    if r.get("summary"):
+        parts.append(f"<p>{e(r['summary']).replace(chr(10), '<br>')}</p>")
+    calls = r.get("calls") or []
+    if calls:
+        rows = []
+        for c in calls:
+            up = int(c.get("direction") or 0) > 0
+            rows.append({
+                "call": f"<span class={'good' if up else 'warn'}>"
+                        f"{'buy' if up else 'sell'} {e(c.get('symbol'))}</span>",
+                "lab": "on paper" if c.get("in_lab") else "waiting",
+                "said": e(str(c.get("phrase") or "")[:80]),
+            })
+        parts.append("<p class=muted>Calls it makes, tested on paper in the idea lab "
+                     "against SPY. No firm trades on them.</p>" + _table(rows))
+    elif r.get("status") == "read":
+        parts.append("<p class=muted>No explicit buy or sell call in it.</p>")
+    text = str(r.get("text") or "")
+    if text:
+        parts.append(f"<details><summary>What it said ({len(text.split()):,} words)"
+                     f"</summary><p>{e(text)}</p></details>")
+    if r.get("error"):
+        parts.append(f"<p class=bad>{e(str(r['error'])[:300])}</p>")
+        if r.get("status") == "failed" and r.get("kind") == "link":
+            parts.append("<form method=post action='/village/actions/send-retry'>"
+                         f"<input type=hidden name=row value={int(r['id'])}>"
+                         "<button>Try again</button></form>")
+    return "<div class=card>" + "".join(parts) + "</div>"
+
+
+@router.get("/village/send", response_class=HTMLResponse)
+def send_page(request: Request) -> HTMLResponse:
+    from ..access import UNLOCK_PATH
+    from ..agents.web import page
+    from . import inbox
+
+    said = request.query_params.get("said", "")
+    head = ("<h1>Send the village something</h1>"
+            "<p class=muted>A link to an Instagram reel, a TikTok, a post on X, a YouTube "
+            "video, or a file: a video, a voice note, a screenshot, a PDF, a text file. "
+            "The village watches or reads it, keeps what was said, and tests any buy or "
+            "sell call in it on paper against SPY. Nothing sent here can place a trade."
+            "</p><p><a href='/village'>&larr; Mission Control</a></p>")
+    if said:
+        head += f"<div class=card><strong>{e(said)}</strong></div>"
+    if not _may_see_inbox(request):
+        return page("Send the village something", head + (
+            f"<div class=card><p><a class='btn go' href='{UNLOCK_PATH}?next=/village/send'>"
+            "Sign in</a> to send something or see what you sent.</p></div>"))
+    form = (
+        "<div class=card><form method=post action='/village/actions/send' "
+        "enctype='multipart/form-data' style='display:block'>"
+        "<p><label>Link<br><input name=link type=url inputmode=url "
+        "placeholder='https://www.instagram.com/reel/...' "
+        "style='width:100%;padding:.5rem;font:inherit'></label></p>"
+        "<p><label>or a file (video, audio, picture, PDF, text)<br>"
+        "<input name=files type=file multiple></label></p>"
+        "<p><label>Note (optional: why you sent it)<br>"
+        "<input name=note maxlength=500 style='width:100%;padding:.5rem;font:inherit'>"
+        "</label></p><button class=go>Send it</button></form>"
+        f"<p class=muted>Files up to {inbox.MAX_BYTES // (1024 * 1024)} MB. Links and videos "
+        "are watched on your PC, where the village browser is signed in; the PC "
+        "has to be on. Text files are read right away.</p></div>")
+    db = _inbox_db()
+    try:
+        rows = inbox.recent(db, 30)
+        pending = inbox.waiting(db)
+    finally:
+        db.close()
+    refresh = ("<script>setTimeout(function(){location.reload()},30000)</script>"
+               if pending else "")
+    listing = "".join(_sent_card(r) for r in rows) or "<p class=muted>Nothing sent yet.</p>"
+    return page("Send the village something",
+                head + form + "<h2>What you sent</h2>" + listing + refresh)
+
+
+def _back_to_send(message: str) -> RedirectResponse:
+    return RedirectResponse(f"/village/send?said={quote(message)}", status_code=303)
+
+
+@router.post("/village/actions/send")
+async def action_send(request: Request) -> RedirectResponse:
+    """Keep a link or files for the village to read. Reads nothing that can trade."""
+    from . import inbox
+
+    form = await request.form()
+    note = str(form.get("note") or "").strip()
+    link = str(form.get("link") or "").strip()
+    uploads = [f for f in form.getlist("files")
+               if hasattr(f, "read") and getattr(f, "filename", "")]
+    if not link and not uploads:
+        return _back_to_send("Paste a link or pick a file first.")
+    said = []
+    db = _inbox_db()
+    try:
+        if link:
+            try:
+                row = inbox.submit_link(db, link, note)
+                said.append(f"#{row} link kept; the PC will watch it on its next pass")
+            except inbox.Refused as exc:
+                said.append(str(exc))
+        for f in uploads:
+            name = getattr(f, "filename", "") or "file"
+            data = await f.read(inbox.MAX_BYTES + 1)
+            try:
+                row = inbox.submit_file(db, name, getattr(f, "content_type", "") or "",
+                                        data, note)
+            except inbox.Refused as exc:
+                said.append(str(exc))
+                continue
+            got = db.query_one("SELECT status, calls FROM inbox WHERE id = ?", (row,)) or {}
+            if got.get("status") == "read":
+                n = len(json.loads(got.get("calls") or "[]"))
+                said.append(f"#{row} {name} read: {n} call(s) found")
+            else:
+                said.append(f"#{row} {name} kept; the PC will watch or read it next")
+    except Exception as exc:  # noqa: BLE001
+        said.append(f"could not keep that: {str(exc)[:160]}")
+    finally:
+        db.close()
+    return _back_to_send(" · ".join(said))
+
+
+@router.post("/village/actions/send-retry")
+def action_send_retry(row: int = Form(...)) -> RedirectResponse:
+    from . import inbox
+
+    db = _inbox_db()
+    try:
+        inbox.retry(db, row)
+    finally:
+        db.close()
+    return _back_to_send(f"#{row} will be tried again")
 
 
 @router.post("/village/actions/court-submit")
