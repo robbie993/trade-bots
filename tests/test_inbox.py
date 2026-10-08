@@ -159,7 +159,10 @@ TOKEN = "a-long-enough-token-for-real-use"
 def hosted(tmp_path, firms_yaml, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from src import access, deploy
+    # import_module, not `from src import ...`: tests/test_asgi.py drops src.*
+    # from sys.modules, and a stale package attribute cannot be reloaded.
+    access = importlib.import_module("src.access")
+    deploy = importlib.import_module("src.deploy")
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'd.db'}")
     monkeypatch.setenv("TRADE_FIRMS_CONFIG", str(firms_yaml))
@@ -172,10 +175,9 @@ def hosted(tmp_path, firms_yaml, monkeypatch):
     monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
     monkeypatch.setenv("MVV_GATE_TOKEN", TOKEN)
     access.reset_attempts()
-    import src.agents.web as web
-
+    web = importlib.import_module("src.agents.web")
     importlib.reload(deploy)
-    importlib.reload(web)
+    web = importlib.reload(web)
     yield TestClient(web.app, raise_server_exceptions=False)
     monkeypatch.delenv("RAILWAY_ENVIRONMENT", raising=False)
     monkeypatch.delenv("MVV_GATE_TOKEN", raising=False)
@@ -195,7 +197,7 @@ def test_the_page_shows_nothing_sent_until_signed_in(hosted):
 
 
 def test_signed_in_a_link_and_a_file_can_be_sent(hosted):
-    from src import access
+    access = importlib.import_module("src.access")
 
     hosted.post(access.UNLOCK_PATH, data={access.FIELD: TOKEN, "next": "/village/send"},
                 follow_redirects=False)
