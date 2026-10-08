@@ -2003,8 +2003,12 @@ def _chat_note(waiting: list) -> str:
     """What to say while a question waits: thinking, or the PC seems to be off."""
     from ..db.connection import to_datetime, utcnow
 
+    from . import chat_api
+
     if not waiting:
         return ""
+    if chat_api.enabled():
+        return "The village is thinking\u2026"
     oldest = to_datetime(waiting[0].get("created_at"))
     if waiting[0].get("status") == "waiting" and oldest is not None \
             and (utcnow() - oldest).total_seconds() > 360:
@@ -2161,6 +2165,10 @@ def talk_messages(request: Request, after: int = 0) -> JSONResponse:
     try:
         rows = [m for m in chat.history(db, 60) if int(m["id"]) > after]
         asking = chat.waiting(db)
+        if any(q.get("status") == "waiting" for q in asking):
+            from . import chat_api
+
+            chat_api.answer_soon(Config().database_url, wait=False)
         by_message, orders_sig = _orders_by_message(db)
     finally:
         db.close()
@@ -2197,6 +2205,10 @@ def action_chat(request: Request, text: str = Form("")):
         row, said = 0, str(exc)
     finally:
         db.close()
+    if row:
+        from . import chat_api
+
+        chat_api.answer_soon(Config().database_url)
     if request.headers.get("x-requested-with") == "fetch":
         return JSONResponse({"ok": bool(row), "id": row, "error": said})
     return RedirectResponse("/village/talk" + (f"?said={quote(said)}" if said else ""),
