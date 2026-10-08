@@ -552,3 +552,19 @@ Pre-registered grid of 56 variants:
 - **One maybe:** "profitable only, 5 stocks, QQQ filter" made 27.7%/yr, Sharpe 1.10, max DD -25.4%, 2021-22 +12.0%. That is slightly better than the live Big-5 rule (26.0 / 1.03 / -30.2 / +7.1). It mainly drops money-losing names, such as early Tesla and the 2021 meme stocks. But across the 8 settings it won only half the time, so it's noise-level. **Big-5 Trend stays frozen as is.** Changing it now would be exactly the after-the-fact tuning the forward test is meant to avoid.
 
 **Survivorship caveat (applies to sections 12 and 14):** prices come from tickers some member traded and that Yahoo still prices. Former top names that were delisted or acquired (Twitter, Celgene, Activision, Allergan, Xilinx, Splunk) are missing, so backtest returns are likely overstated. The PC is looking for free delisted-company prices to rerun this. The forward test doesn't have this problem.
+
+## 15. Survivorship fixed: dead stocks added back (`survivor_fix.py`)
+
+The PC recovered daily prices for 191 delisted stocks from Alpaca, 2016 to their delisting, plus 34 renamed tickers from Yahoo (PC commits 4cc61f5 and 562ad3f, `research/pelosi/delisted/NOTES.md`). 20 dead companies had been in the top 100 by dollar volume at some point: Twitter, Celgene, Allergan, Activision, Time Warner, Yahoo and others. Duplicate old tickers whose successors already carry the full history (ANTM, UTX, DWDP, VRX) are left out.
+
+**Result: the bias was tiny for this rule.** Same rules, old universe → fixed universe:
+
+| Version | Whole period CAGR | 2016-26 | 2021-22 | 2023-26 | Sharpe | Max DD |
+|---|---|---|---|---|---|---|
+| 5 most traded + QQQ filter (live Big-5 rule) | 26.0 → 26.0 | 28.5 → 28.5 | 7.1 → 7.1 | 38.6 → 38.6 | 1.03 → 1.03 | -30.2 → -30.2 |
+| 10 most traded + QQQ filter | 23.8 → 24.2 | 26.1 → 26.5 | 9.4 → 9.4 | 34.5 → 34.5 | 1.02 → 1.03 | -31.1 → -31.1 |
+| 10 most traded, inverse-vol + QQQ filter | 22.4 → 22.5 | 24.8 → 25.0 | 12.5 → 12.5 | 30.7 → 30.7 | 1.06 → 1.07 | -29.5 → -29.5 |
+| SPY / QQQ (2016-26) | | 15.2 / 20.5 | | | | |
+
+- **Why nothing moved:** the dead giants never ranked in the top 5. Twitter's best was 21st and Celgene's 28th. Only Allergan made the top 10, for 3 months, and it did slightly better than what it replaced. The 5 to 10 most-traded US stocks are the mega-caps (Apple, Microsoft, Nvidia, Amazon, Tesla, Meta), and none of those died.
+- **What this does not fix:** stocks that died in 2014-15, since Alpaca starts in 2016. It also does not remove the hindsight in the QQQ filter (section 12). The forward paper test is still the real judge.

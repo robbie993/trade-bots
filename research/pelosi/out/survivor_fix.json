@@ -1,0 +1,590 @@
+{
+ "survivors only (old)": {
+  "5 equal none": {
+   "2014-15": {
+    "cagr": 16.4,
+    "sharpe": 0.81,
+    "maxdd": -16.0
+   },
+   "train": {
+    "cagr": 35.4,
+    "sharpe": 1.27,
+    "maxdd": -31.7
+   },
+   "validate": {
+    "cagr": -18.7,
+    "sharpe": -0.35,
+    "maxdd": -50.9
+   },
+   "test": {
+    "cagr": 59.6,
+    "sharpe": 1.56,
+    "maxdd": -35.6
+   },
+   "2016-26": {
+    "cagr": 32.6,
+    "sharpe": 1.04,
+    "maxdd": -51.5
+   },
+   "all": {
+    "cagr": 30.7,
+    "sharpe": 1.02,
+    "maxdd": -51.5
+   }
+  },
+  "5 equal QQQ 200d": {
+   "2014-15": {
+    "cagr": 6.5,
+    "sharpe": 0.43,
+    "maxdd": -16.0
+   },
+   "train": {
+    "cagr": 25.1,
+    "sharpe": 1.06,
+    "maxdd": -30.2
+   },
+   "validate": {
+    "cagr": 7.1,
+    "sharpe": 0.42,
+    "maxdd": -24.1
+   },
+   "test": {
+    "cagr": 38.6,
+    "sharpe": 1.23,
+    "maxdd": -28.2
+   },
+   "2016-26": {
+    "cagr": 28.5,
+    "sharpe": 1.08,
+    "maxdd": -30.2
+   },
+   "all": {
+    "cagr": 26.0,
+    "sharpe": 1.03,
+    "maxdd": -30.2
+   }
+  },
+  "5 invvol none": {
+   "2014-15": {
+    "cagr": 15.7,
+    "sharpe": 0.81,
+    "maxdd": -16.4
+   },
+   "train": {
+    "cagr": 32.7,
+    "sharpe": 1.24,
+    "maxdd": -31.4
+   },
+   "validate": {
+    "cagr": -13.7,
+    "sharpe": -0.25,
+    "maxdd": -47.7
+   },
+   "test": {
+    "cagr": 47.9,
+    "sharpe": 1.56,
+    "maxdd": -31.2
+   },
+   "2016-26": {
+    "cagr": 28.9,
+    "sharpe": 1.04,
+    "maxdd": -48.4
+   },
+   "all": {
+    "cagr": 27.4,
+    "sharpe": 1.01,
+    "maxdd": -48.4
+   }
+  },
+  "5 invvol QQQ 200d": {
+   "2014-15": {
+    "cagr": 4.8,
+    "sharpe": 0.35,
+    "maxdd": -16.4
+   },
+   "train": {
+    "cagr": 23.1,
+    "sharpe": 1.03,
+    "maxdd": -26.9
+   },
+   "validate": {
+    "cagr": 11.8,
+    "sharpe": 0.71,
+    "maxdd": -18.9
+   },
+   "test": {
+    "cagr": 31.6,
+    "sharpe": 1.25,
+    "maxdd": -22.2
+   },
+   "2016-26": {
+    "cagr": 26.0,
+    "sharpe": 1.13,
+    "maxdd": -26.9
+   },
+   "all": {
+    "cagr": 23.6,
+    "sharpe": 1.06,
+    "maxdd": -26.9
+   }
+  },
+  "10 equal none": {
+   "2014-15": {
+    "cagr": 18.7,
+    "sharpe": 0.99,
+    "maxdd": -13.5
+   },
+   "train": {
+    "cagr": 31.3,
+    "sharpe": 1.19,
+    "maxdd": -31.2
+   },
+   "validate": {
+    "cagr": -15.3,
+    "sharpe": -0.3,
+    "maxdd": -51.3
+   },
+   "test": {
+    "cagr": 58.7,
+    "sharpe": 1.67,
+    "maxdd": -29.3
+   },
+   "2016-26": {
+    "cagr": 30.9,
+    "sharpe": 1.05,
+    "maxdd": -51.3
+   },
+   "all": {
+    "cagr": 29.4,
+    "sharpe": 1.03,
+    "maxdd": -51.3
+   }
+  },
+  "10 equal QQQ 200d": {
+   "2014-15": {
+    "cagr": 6.1,
+    "sharpe": 0.43,
+    "maxdd": -13.5
+   },
+   "train": {
+    "cagr": 22.5,
+    "sharpe": 1.0,
+    "maxdd": -31.1
+   },
+   "validate": {
+    "cagr": 9.4,
+    "sharpe": 0.56,
+    "maxdd": -24.0
+   },
+   "test": {
+    "cagr": 34.5,
+    "sharpe": 1.22,
+    "maxdd": -22.3
+   },
+   "2016-26": {
+    "cagr": 26.1,
+    "sharpe": 1.07,
+    "maxdd": -31.1
+   },
+   "all": {
+    "cagr": 23.8,
+    "sharpe": 1.02,
+    "maxdd": -31.1
+   }
+  },
+  "10 invvol none": {
+   "2014-15": {
+    "cagr": 15.8,
+    "sharpe": 0.9,
+    "maxdd": -13.7
+   },
+   "train": {
+    "cagr": 29.4,
+    "sharpe": 1.19,
+    "maxdd": -30.0
+   },
+   "validate": {
+    "cagr": -12.3,
+    "sharpe": -0.24,
+    "maxdd": -47.4
+   },
+   "test": {
+    "cagr": 49.8,
+    "sharpe": 1.72,
+    "maxdd": -27.2
+   },
+   "2016-26": {
+    "cagr": 28.2,
+    "sharpe": 1.06,
+    "maxdd": -47.4
+   },
+   "all": {
+    "cagr": 26.7,
+    "sharpe": 1.04,
+    "maxdd": -47.4
+   }
+  },
+  "10 invvol QQQ 200d": {
+   "2014-15": {
+    "cagr": 3.0,
+    "sharpe": 0.27,
+    "maxdd": -13.7
+   },
+   "train": {
+    "cagr": 21.0,
+    "sharpe": 0.99,
+    "maxdd": -29.5
+   },
+   "validate": {
+    "cagr": 12.5,
+    "sharpe": 0.77,
+    "maxdd": -18.3
+   },
+   "test": {
+    "cagr": 30.7,
+    "sharpe": 1.31,
+    "maxdd": -20.7
+   },
+   "2016-26": {
+    "cagr": 24.8,
+    "sharpe": 1.14,
+    "maxdd": -29.5
+   },
+   "all": {
+    "cagr": 22.4,
+    "sharpe": 1.06,
+    "maxdd": -29.5
+   }
+  },
+  "_delisted_names_picked_in_top10_months": {},
+  "_stocks_in_universe": 2558
+ },
+ "with delisted + renamed (fixed)": {
+  "5 equal none": {
+   "2014-15": {
+    "cagr": 16.4,
+    "sharpe": 0.81,
+    "maxdd": -16.0
+   },
+   "train": {
+    "cagr": 35.4,
+    "sharpe": 1.27,
+    "maxdd": -31.7
+   },
+   "validate": {
+    "cagr": -18.7,
+    "sharpe": -0.35,
+    "maxdd": -50.9
+   },
+   "test": {
+    "cagr": 59.6,
+    "sharpe": 1.56,
+    "maxdd": -35.6
+   },
+   "2016-26": {
+    "cagr": 32.6,
+    "sharpe": 1.04,
+    "maxdd": -51.5
+   },
+   "all": {
+    "cagr": 30.7,
+    "sharpe": 1.02,
+    "maxdd": -51.5
+   }
+  },
+  "5 equal QQQ 200d": {
+   "2014-15": {
+    "cagr": 6.5,
+    "sharpe": 0.43,
+    "maxdd": -16.0
+   },
+   "train": {
+    "cagr": 25.1,
+    "sharpe": 1.06,
+    "maxdd": -30.2
+   },
+   "validate": {
+    "cagr": 7.1,
+    "sharpe": 0.42,
+    "maxdd": -24.1
+   },
+   "test": {
+    "cagr": 38.6,
+    "sharpe": 1.23,
+    "maxdd": -28.2
+   },
+   "2016-26": {
+    "cagr": 28.5,
+    "sharpe": 1.08,
+    "maxdd": -30.2
+   },
+   "all": {
+    "cagr": 26.0,
+    "sharpe": 1.03,
+    "maxdd": -30.2
+   }
+  },
+  "5 invvol none": {
+   "2014-15": {
+    "cagr": 15.7,
+    "sharpe": 0.81,
+    "maxdd": -16.4
+   },
+   "train": {
+    "cagr": 32.7,
+    "sharpe": 1.24,
+    "maxdd": -31.4
+   },
+   "validate": {
+    "cagr": -13.7,
+    "sharpe": -0.25,
+    "maxdd": -47.7
+   },
+   "test": {
+    "cagr": 47.9,
+    "sharpe": 1.56,
+    "maxdd": -31.2
+   },
+   "2016-26": {
+    "cagr": 28.9,
+    "sharpe": 1.04,
+    "maxdd": -48.4
+   },
+   "all": {
+    "cagr": 27.4,
+    "sharpe": 1.01,
+    "maxdd": -48.4
+   }
+  },
+  "5 invvol QQQ 200d": {
+   "2014-15": {
+    "cagr": 4.8,
+    "sharpe": 0.35,
+    "maxdd": -16.4
+   },
+   "train": {
+    "cagr": 23.1,
+    "sharpe": 1.03,
+    "maxdd": -26.9
+   },
+   "validate": {
+    "cagr": 11.8,
+    "sharpe": 0.71,
+    "maxdd": -18.9
+   },
+   "test": {
+    "cagr": 31.6,
+    "sharpe": 1.25,
+    "maxdd": -22.2
+   },
+   "2016-26": {
+    "cagr": 26.0,
+    "sharpe": 1.13,
+    "maxdd": -26.9
+   },
+   "all": {
+    "cagr": 23.6,
+    "sharpe": 1.06,
+    "maxdd": -26.9
+   }
+  },
+  "10 equal none": {
+   "2014-15": {
+    "cagr": 18.7,
+    "sharpe": 0.99,
+    "maxdd": -13.5
+   },
+   "train": {
+    "cagr": 32.2,
+    "sharpe": 1.22,
+    "maxdd": -31.2
+   },
+   "validate": {
+    "cagr": -15.3,
+    "sharpe": -0.3,
+    "maxdd": -51.3
+   },
+   "test": {
+    "cagr": 58.7,
+    "sharpe": 1.67,
+    "maxdd": -29.3
+   },
+   "2016-26": {
+    "cagr": 31.4,
+    "sharpe": 1.07,
+    "maxdd": -51.3
+   },
+   "all": {
+    "cagr": 29.8,
+    "sharpe": 1.05,
+    "maxdd": -51.3
+   }
+  },
+  "10 equal QQQ 200d": {
+   "2014-15": {
+    "cagr": 6.1,
+    "sharpe": 0.43,
+    "maxdd": -13.5
+   },
+   "train": {
+    "cagr": 23.2,
+    "sharpe": 1.03,
+    "maxdd": -31.1
+   },
+   "validate": {
+    "cagr": 9.4,
+    "sharpe": 0.56,
+    "maxdd": -24.0
+   },
+   "test": {
+    "cagr": 34.5,
+    "sharpe": 1.22,
+    "maxdd": -22.3
+   },
+   "2016-26": {
+    "cagr": 26.5,
+    "sharpe": 1.09,
+    "maxdd": -31.1
+   },
+   "all": {
+    "cagr": 24.2,
+    "sharpe": 1.03,
+    "maxdd": -31.1
+   }
+  },
+  "10 invvol none": {
+   "2014-15": {
+    "cagr": 15.8,
+    "sharpe": 0.9,
+    "maxdd": -13.7
+   },
+   "train": {
+    "cagr": 29.8,
+    "sharpe": 1.2,
+    "maxdd": -30.0
+   },
+   "validate": {
+    "cagr": -12.3,
+    "sharpe": -0.24,
+    "maxdd": -47.4
+   },
+   "test": {
+    "cagr": 49.8,
+    "sharpe": 1.72,
+    "maxdd": -27.2
+   },
+   "2016-26": {
+    "cagr": 28.4,
+    "sharpe": 1.07,
+    "maxdd": -47.4
+   },
+   "all": {
+    "cagr": 26.9,
+    "sharpe": 1.04,
+    "maxdd": -47.4
+   }
+  },
+  "10 invvol QQQ 200d": {
+   "2014-15": {
+    "cagr": 3.0,
+    "sharpe": 0.27,
+    "maxdd": -13.7
+   },
+   "train": {
+    "cagr": 21.2,
+    "sharpe": 1.0,
+    "maxdd": -29.5
+   },
+   "validate": {
+    "cagr": 12.5,
+    "sharpe": 0.77,
+    "maxdd": -18.3
+   },
+   "test": {
+    "cagr": 30.7,
+    "sharpe": 1.31,
+    "maxdd": -20.7
+   },
+   "2016-26": {
+    "cagr": 25.0,
+    "sharpe": 1.14,
+    "maxdd": -29.5
+   },
+   "all": {
+    "cagr": 22.5,
+    "sharpe": 1.07,
+    "maxdd": -29.5
+   }
+  },
+  "_delisted_names_picked_in_top10_months": {
+   "AGN": 3
+  },
+  "_stocks_in_universe": 2736
+ },
+ "benchmarks": {
+  "SPY": {
+   "2014-15": {
+    "cagr": 1.6,
+    "sharpe": 0.18,
+    "maxdd": -11.9
+   },
+   "train": {
+    "cagr": 12.6,
+    "sharpe": 0.74,
+    "maxdd": -33.7
+   },
+   "validate": {
+    "cagr": 3.4,
+    "sharpe": 0.27,
+    "maxdd": -24.5
+   },
+   "test": {
+    "cagr": 22.3,
+    "sharpe": 1.43,
+    "maxdd": -18.8
+   },
+   "2016-26": {
+    "cagr": 15.2,
+    "sharpe": 0.89,
+    "maxdd": -33.7
+   },
+   "all": {
+    "cagr": 13.7,
+    "sharpe": 0.82,
+    "maxdd": -33.7
+   }
+  },
+  "QQQ": {
+   "2014-15": {
+    "cagr": 7.6,
+    "sharpe": 0.5,
+    "maxdd": -13.9
+   },
+   "train": {
+    "cagr": 20.9,
+    "sharpe": 1.0,
+    "maxdd": -28.6
+   },
+   "validate": {
+    "cagr": -6.7,
+    "sharpe": -0.13,
+    "maxdd": -35.1
+   },
+   "test": {
+    "cagr": 33.0,
+    "sharpe": 1.53,
+    "maxdd": -22.8
+   },
+   "2016-26": {
+    "cagr": 20.5,
+    "sharpe": 0.95,
+    "maxdd": -35.1
+   },
+   "all": {
+    "cagr": 19.0,
+    "sharpe": 0.91,
+    "maxdd": -35.1
+   }
+  }
+ }
+}
