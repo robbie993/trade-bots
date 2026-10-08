@@ -257,7 +257,7 @@ def test_the_prompt_carries_the_village_and_the_conversation(db):
     assert "buy AAPL" in text
     assert "OPERATOR: hi" in text and "VILLAGE: Hello Robbie." in text
     assert text.rstrip().endswith("OPERATOR: what did I send?\nVILLAGE:")
-    assert "cannot place or cancel trades" in text
+    assert "You are the Village" in text and "approve anything" in text
     assert q
 
 

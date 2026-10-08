@@ -43,6 +43,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
@@ -191,6 +192,8 @@ def read_link(row: dict, page_box: dict) -> dict:
             video = video_watch.transcript(m.group(1))
             return {"title": f"{video['channel']}: {video['title']}", "text": video["text"],
                     "heard_by": f"YouTube {video.get('heard_by', '')}".strip()}
+    if urlparse(url).path.lower().endswith(".pdf"):
+        return read_pdf_link(url)
     page, ctx = _page(page_box)
     from scripts import insta_watch
 
@@ -215,6 +218,22 @@ def read_link(row: dict, page_box: dict) -> dict:
         print(f"    no audio ({str(exc)[:100]}); keeping the text")
     text = f"{caption}\n\nSaid in the video: {heard}" if heard else caption
     return {"title": title[:500], "text": text[:inbox.TEXT_CHARS], "heard_by": how}
+
+
+def read_pdf_link(url: str) -> dict:
+    """A link straight to a PDF: download it, and have Claude read it like an upload."""
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310 - the operator's link
+        data = r.read(inbox.MAX_BYTES + 1)
+    if len(data) > inbox.MAX_BYTES:
+        raise RuntimeError("that PDF is bigger than the village keeps")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "sent.pdf"
+        path.write_bytes(data)
+        return {"text": look(path, "pdf"), "title": Path(urlparse(url).path).name,
+                "heard_by": "downloaded and read by Claude on the PC"}
 
 
 class Wall(RuntimeError):

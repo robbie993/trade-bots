@@ -152,8 +152,9 @@ def test_postgres_migrations_match_the_sqlite_ones():
     # 030 the scanners' calls the sandbox's idea lab tested on paper,
     # 031 the trending meme launches the Pump.fun lab bought on paper,
     # 032 the links and files the operator sent the village by hand,
-    # 033 what the operator and the village said to each other.
-    assert len(pg_files) == 33
+    # 033 what the operator and the village said to each other,
+    # 034 the orders the operator gave it for their own paper desk.
+    assert len(pg_files) == 34
 
     for name in pg_files:
         pg = tables((MIGRATIONS / name).read_text())
