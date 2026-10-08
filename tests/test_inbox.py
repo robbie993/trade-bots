@@ -285,3 +285,18 @@ def test_signed_in_the_village_can_be_talked_to(hosted):
     page = hosted.get("/village/talk")
     assert "Talk to the village" in page.text and "hello village" in page.text
     assert "thinking" in page.text
+
+
+def test_the_talk_page_lets_you_pick_who_you_talk_to(hosted):
+    access = importlib.import_module("src.access")
+
+    hosted.post(access.UNLOCK_PATH, data={access.FIELD: TOKEN, "next": "/village/talk"},
+                follow_redirects=False)
+    page = hosted.get("/village/talk").text
+    assert "<option value='council'>The Council</option>" in page
+    hosted.post("/village/actions/chat", data={"text": "how are we doing", "to": "council"},
+                headers={"X-Requested-With": "fetch"})
+    hosted.post("/village/actions/chat", data={"text": "hi", "to": "nobody_real"},
+                headers={"X-Requested-With": "fetch"})
+    got = hosted.get("/village/talk/messages?after=0").json()["messages"]
+    assert [m["to"] for m in got] == ["the Council", ""]

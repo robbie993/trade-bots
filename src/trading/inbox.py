@@ -209,15 +209,38 @@ def claim(db, kinds=None) -> Optional[dict]:
 
 def finish(db, row_id: int, text: str = "", title: str = "", summary: str = "",
            heard_by: str = "", symbols=None, note: str = "") -> list:
-    """Record what was read and drop the file. Returns the calls found."""
+    """Record what was read and drop the file. Returns the calls found.
+
+    Any IDEA lines in the summary (see scripts/inbox_watch.summarise) are taken
+    out of it and handed to the village (`learn`).
+    """
     text = " ".join((text or "").split())
     calls = calls_for(f"{note}. {title}. {text}", symbols)
     db.update("inbox", row_id, {
         "status": "read", "text": text[:TEXT_CHARS], "title": (title or "")[:500],
-        "summary": (summary or "")[:4000], "heard_by": (heard_by or "")[:200],
+        "heard_by": (heard_by or "")[:200],
         "calls": json.dumps(calls), "read_at": utcnow_iso(), "body": None, "error": "",
     })
+    learn(db, row_id, summary)
     return calls
+
+
+def learn(db, row_id: int, summary: str) -> list:
+    """Keep a send's summary, and give each idea in it to the village. Returns the ideas."""
+    from . import ideas
+
+    clean, found = ideas.parse(summary or "")
+    for idea in found:
+        try:
+            ideas.give(db, idea["idea"], idea["to"], origin=f"something you sent (#{row_id})")
+        except Exception:  # noqa: BLE001 - the summary is kept either way
+            pass
+    if found:
+        clean += "\n\nIdeas passed to the village:\n" + "\n".join(
+            f"\u2022 {i['idea']} ({'the firms' if i['to'] in ('firms', 'all') else i['to']})"
+            for i in found)
+    db.update("inbox", row_id, {"summary": clean[:4000]})
+    return found
 
 
 def fail(db, row_id: int, error: str, retry: bool = True) -> None:
@@ -343,6 +366,6 @@ def _pending(db, now) -> list:
     return out
 
 
-__all__ = ["PUBLISHER", "Refused", "calls_for", "claim", "fail", "finish", "kind_of",
+__all__ = ["PUBLISHER", "Refused", "calls_for", "claim", "fail", "finish", "kind_of", "learn",
            "lab_calls", "mark_entered", "platform_of", "recent", "retry",
            "submit_file", "submit_link", "waiting"]

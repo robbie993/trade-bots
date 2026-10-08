@@ -1951,6 +1951,8 @@ _CHAT_STYLE = (
     ".order form{display:inline}"
     "#say{width:100%;min-height:4.5rem;padding:.6rem;font:inherit;border-radius:8px;"
     "border:1px solid var(--line);background:var(--bg);color:var(--fg)}"
+    "#to{padding:.45rem;font:inherit;border-radius:8px;border:1px solid var(--line);"
+    "background:var(--bg);color:var(--fg);margin-right:.5rem}"
     "</style>"
 )
 
@@ -1962,7 +1964,7 @@ _CHAT_SCRIPT = """<script>
   function bubble(m){
     var el=document.createElement('div');
     el.className='msg '+(m.role==='you'?'you':'village');
-    el.innerHTML='<span class=who>'+(m.role==='you'?'You':'The village')+' \u00b7 '+
+    el.innerHTML='<span class=who>'+(m.role==='you'?'You'+(m.to?' to '+esc(m.to):''):'The village')+' \u00b7 '+
       esc((m.created_at||'').slice(11,16))+' UTC</span>'+esc(m.text)+(m.orders_html||'');
     box.appendChild(el);
   }
@@ -1987,6 +1989,7 @@ _CHAT_SCRIPT = """<script>
   form.addEventListener('submit',function(ev){
     ev.preventDefault(); var t=say.value.trim(); if(!t){return;}
     say.value=''; var body=new URLSearchParams(); body.set('text',t);
+    var to=document.getElementById('to'); if(to){body.set('to',to.value);}
     fetch('/village/actions/chat',{method:'POST',credentials:'same-origin',
       headers:{'X-Requested-With':'fetch'},body:body}).then(function(){poll();});
   });
@@ -1997,6 +2000,56 @@ _CHAT_SCRIPT = """<script>
   box.scrollTop=box.scrollHeight; poll();
 })();
 </script>"""
+
+
+def _to_name(m: dict) -> str:
+    from . import chat
+
+    part = chat.talking_to(m)
+    return chat.part_name(part).replace("the firm ", "") if part else ""
+
+
+def _from_label(m: dict) -> str:
+    if m["role"] != "you":
+        return "The village"
+    to = _to_name(m)
+    return "You" + (f" to {e(to)}" if to else "")
+
+
+def _talkable_firms(db) -> list:
+    try:
+        return [r["firm_key"] for r in db.query(
+            "SELECT firm_key FROM firms WHERE status IN ('active', 'paused') ORDER BY id")]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _to_picker(firms: list) -> str:
+    from . import chat
+
+    options = "".join(f"<option value='{e(k)}'>{e(v[0].upper() + v[1:])}</option>"
+                      for k, v in chat.PARTS.items())
+    options += "".join(f"<option value='{e(k)}'>Firm: {e(k)}</option>" for k in firms)
+    return (f"<p style='margin:0 0 .4rem'><label class=muted>Talking to "
+            f"<select id=to name=to>{options}</select></label></p>")
+
+
+def _ideas_html(given: list) -> str:
+    """The ideas the operator has given, and where each went."""
+    if not given:
+        return ""
+    rows = []
+    for g in given:
+        d = g.get("detail") or {}
+        firms = d.get("firms") or []
+        went = (", ".join(firms[:4]) + (" +" + str(len(firms) - 4) if len(firms) > 4 else "")
+                if firms else "research review")
+        rows.append({"idea": e(str(g.get("title") or "")[:160]), "went to": e(went),
+                     "from": e(str(d.get("origin") or "")), "when":
+                     e(str(g.get("last_seen") or "")[5:16].replace("T", " "))})
+    return ("<h2>Ideas you've given the village</h2><p class=muted>Firms test any change "
+            "an idea leads to on past prices; only a winner reaches the Council. Ask the "
+            "Mind what became of one.</p><div class=card>" + _table(rows) + "</div>")
 
 
 def _chat_note(waiting: list) -> str:
@@ -2071,7 +2124,7 @@ def _orders_by_message(db) -> tuple:
 def send_page(request: Request) -> HTMLResponse:
     from ..access import UNLOCK_PATH
     from ..agents.web import page
-    from . import chat, inbox
+    from . import chat, ideas, inbox
 
     said = request.query_params.get("said", "")
     head = ("<h1>Talk to the village</h1>"
@@ -2091,6 +2144,8 @@ def send_page(request: Request) -> HTMLResponse:
     try:
         messages = chat.history(db, 40)
         asking = chat.waiting(db)
+        firms = _talkable_firms(db)
+        given = ideas.recent(db, 8)
         by_message, orders_sig = _orders_by_message(db)
         rows = inbox.recent(db, 30)
         pending = inbox.waiting(db)
@@ -2098,7 +2153,7 @@ def send_page(request: Request) -> HTMLResponse:
         db.close()
     bubbles = "".join(
         f"<div class='msg {'you' if m['role'] == 'you' else 'village'}'>"
-        f"<span class=who>{'You' if m['role'] == 'you' else 'The village'} · "
+        f"<span class=who>{_from_label(m)} · "
         f"{e(str(m.get('created_at') or '')[11:16])} UTC</span>{e(m['text'])}"
         f"{_orders_html(by_message.get(int(m['id']), []))}</div>"
         for m in messages)
@@ -2113,11 +2168,15 @@ def send_page(request: Request) -> HTMLResponse:
         + (bubbles or "<p class=muted>Say hello.</p>") +
         "</div><form id=talk method=post action='/village/actions/chat' "
         "style='display:block;margin-top:.75rem'>"
+        + _to_picker(firms) +
         "<textarea id=say name=text maxlength=4000 "
         "placeholder='Ask the village anything'></textarea>"
         "<button class=go>Send</button></form>"
-        "<p class=muted>Answers come from Claude on your PC, so the PC has to be on. "
-        "Thinking it through can take a minute.</p></div>")
+        "<p class=muted>Talk to the whole village, the Council, the Mind or one firm. "
+        "Give it ideas or advice and it passes them to the part that can use them: a firm "
+        "tests any change on past prices before the Council decides. Answers come from "
+        "Claude on your PC, so the PC has to be on; thinking it through can take a "
+        "minute.</p></div>" + _ideas_html(given))
     form = (
         "<h2 id=send>Send it a video or file</h2>"
         "<p class=muted>A link to an Instagram reel, a TikTok, a post on X, a YouTube "
@@ -2166,6 +2225,7 @@ def talk_messages(request: Request, after: int = 0) -> JSONResponse:
         db.close()
     return JSONResponse({
         "messages": [{"id": int(m["id"]), "role": m["role"], "text": m["text"],
+                      "to": _to_name(m),
                       "created_at": m.get("created_at") or "",
                       "orders_html": _orders_html(by_message.get(int(m["id"]), []))}
                      for m in rows],
@@ -2186,12 +2246,16 @@ def action_order(order: int = Form(...), do: str = Form(...)) -> RedirectRespons
 
 
 @router.post("/village/actions/chat")
-def action_chat(request: Request, text: str = Form("")):
+def action_chat(request: Request, text: str = Form(""), to: str = Form("")):
     from . import chat
 
+    to = to.strip()[:80]
     db = _inbox_db()
     try:
-        row = chat.post(db, text)
+        if to and to not in chat.PARTS and not db.query_one(
+                "SELECT id FROM firms WHERE firm_key = ?", (to,)):
+            to = ""
+        row = chat.post(db, text, to)
         said = ""
     except ValueError as exc:
         row, said = 0, str(exc)
