@@ -41,8 +41,9 @@ from ..money import D
 MAX_CHANGES = 4
 
 #: Topics whose answers a firm follows up on. The research review and a
-#: proposal question itself are not advice to one firm's genome.
-FOLLOW_UP = ("heir", "quiet", "review", "estate")
+#: proposal question itself are not advice to one firm's genome; an idea the
+#: operator gave a firm (`ideas.py`) is.
+FOLLOW_UP = ("heir", "quiet", "review", "estate", "operator")
 
 
 def genes_for(firm) -> dict:

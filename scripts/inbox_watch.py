@@ -141,13 +141,27 @@ def claude(prompt: str, cwd: str, tools_off: str = NO_TOOLS, model: str = "",
 
 
 def summarise(title: str, text: str, note: str) -> str:
-    """A few plain sentences on what was said. Empty if Claude is not there."""
+    """A few plain sentences on what was said, then any ideas for the village.
+
+    The operator sends things for two reasons: a tip, and an idea that could make
+    the village better (a strategy, a risk rule, a tool, an AI-agent setup, a way
+    to cut costs). The summary covers both, and ends with the ideas as IDEA lines
+    that `inbox.finish` hands on (ideas.py). Empty if Claude is not there.
+    """
     if not (text or title).strip():
         return ""
-    prompt = (GUARD + "In under 120 words, plain English: what is this about, which "
-              "stocks or coins does it name and what does it claim about them, and is "
-              "any claim something that could be checked? Do not give advice. If it "
-              "is not about markets, say so in one line.\n\n"
+    prompt = (GUARD + "The operator of an AI paper-trading village sent this, either "
+              "for a tip or because it could make the village better. In under 150 "
+              "words, plain English: what is this about, which stocks or coins does "
+              "it name and what does it claim about them, and is any claim something "
+              "that could be checked? Then: what could the village learn or use from "
+              "it (a trading idea, a risk rule, a tool or data source, a way to run AI "
+              "agents or cut their cost, something to avoid)? Even if it is not about "
+              "markets, say what in it could help. After the summary, write each "
+              "useful idea on its own line exactly like\n"
+              'IDEA: {"to": "firms", "idea": "the idea in plain words"}\n'
+              'with "to" "firms" for how the trading firms trade, or "village" for '
+              "anything else. No IDEA lines if nothing in it would help.\n\n"
               + (f"Operator's note: {note}\n" if note else "")
               + f"Title/caption: {title[:1000]}\n\n<content>\n{text[:15000]}\n</content>")
     with tempfile.TemporaryDirectory() as scratch:
@@ -337,6 +351,47 @@ def _locked() -> bool:
     return False
 
 
+#: The branch Railway deploys. The PC keeps its checkout on it, fast-forwarded.
+BRANCH = "claude/ai-village-trading-build-m4bg19"
+UPDATED = REPO / "data" / "inbox_watch.updated"
+UPDATE_EVERY_S = 10 * 60
+
+
+def self_update() -> None:
+    """Fast-forward the PC's checkout to what Railway runs, at most every ten minutes.
+
+    The chat's answers and the readers run here, so a change merged for the
+    website would otherwise wait until someone pulls on the PC by hand (the
+    operator is often away from it). Only a clean checkout on `BRANCH` is
+    touched, and only by fast-forward: local work is never overwritten. The
+    new code runs from the next run on.
+    """
+    try:
+        if time.time() - UPDATED.stat().st_mtime < UPDATE_EVERY_S:
+            return
+    except OSError:
+        pass
+    UPDATED.parent.mkdir(parents=True, exist_ok=True)
+    UPDATED.touch()
+
+    def git(*a):
+        return subprocess.run(["git", *a], cwd=REPO, capture_output=True, text=True,
+                              timeout=120)
+
+    try:
+        branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        dirty = git("status", "--porcelain", "--untracked-files=no").stdout.strip()
+        if branch != BRANCH or dirty:
+            return
+        before = git("rev-parse", "HEAD").stdout.strip()
+        git("pull", "--ff-only", "--quiet", "origin", BRANCH)
+        after = git("rev-parse", "HEAD").stdout.strip()
+        if after and after != before:
+            print(f"updated the PC checkout {before[:8]} -> {after[:8]}")
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"could not update the checkout: {str(exc)[:120]}")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -344,6 +399,8 @@ def main(argv=None) -> int:
     ap.add_argument("--database-url", default="")
     ap.add_argument("--once", action="store_true", help="read one thing and stop")
     ap.add_argument("--no-summary", action="store_true")
+    ap.add_argument("--no-update", action="store_true",
+                    help="do not fast-forward the checkout first")
     args = ap.parse_args(argv)
     if not (args.to_railway or args.database_url):
         ap.error("say where the inbox is: --to-railway or --database-url")
@@ -357,6 +414,8 @@ def main(argv=None) -> int:
 
         url = railway_database_url()
     db = Database.from_url(url)
+    if not args.no_update and args.to_railway:
+        self_update()
     if _locked():
         print("another inbox run is going; leaving it")
         db.close()
@@ -371,6 +430,8 @@ def main(argv=None) -> int:
                 symbols = symbols or video_watch.universe()
                 read_sends(db, box, symbols, 1 if args.once else PER_RUN, args)
                 answer_chat(db)
+            if not args.no_summary:
+                relearn(db, 1)
             if time.time() >= until:
                 break
             LOCK.touch()
@@ -383,6 +444,35 @@ def main(argv=None) -> int:
             pass
         db.close()
     return 0
+
+
+#: Sends already given a second read (see `relearn`), so a failure is not retried
+#: every minute.
+RELEARNED = REPO / "data" / "inbox_relearned.json"
+
+
+def relearn(db, limit: int = 2) -> int:
+    """Read again sends read before ideas were kept: no summary, or one that
+    only said "not about markets". Their text is still in the ledger."""
+    try:
+        done = set(json.loads(RELEARNED.read_text()))
+    except (OSError, ValueError):
+        done = set()
+    n = 0
+    for row in db.query("SELECT id, title, text, note, summary FROM inbox WHERE status = 'read' "
+                        "AND (summary IS NULL OR summary = '' OR summary LIKE ?) "
+                        "ORDER BY id", ("%not about markets%",)):
+        if n >= limit or row["id"] in done:
+            continue
+        done.add(row["id"])
+        RELEARNED.parent.mkdir(parents=True, exist_ok=True)
+        RELEARNED.write_text(json.dumps(sorted(done)))
+        summary = summarise(row.get("title") or "", row.get("text") or "", row.get("note") or "")
+        if summary:
+            inbox.learn(db, row["id"], summary)
+            print(f"#{row['id']} read again for ideas")
+        n += 1
+    return n
 
 
 def read_sends(db, box: dict, symbols, limit: int, args) -> None:

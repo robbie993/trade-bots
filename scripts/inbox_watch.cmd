@@ -1,5 +1,6 @@
 @echo off
-rem Run by Windows Task Scheduler on the operator's PC every 5 minutes.
+rem Run by Windows Task Scheduler on the operator's PC every minute.
+rem Also keeps this checkout fast-forwarded to what Railway runs (see self_update).
 rem Watches and reads what was sent to the village at /village/send.
 rem Quiet when nothing is waiting, so the log only grows when something was sent.
 cd /d "%~dp0.."

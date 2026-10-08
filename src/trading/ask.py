@@ -356,6 +356,16 @@ def _research_review(eco, now: datetime) -> list:
                           "stars_or_likes": r.get("score"),
                           "about": (r.get("title") or "")[:200],
                           "detail": r.get("detail")})
+    # Ideas the operator gave the village as a whole, in the chat or in
+    # something they sent (ideas.py). They asked for these to be used, so they
+    # come first and need no topic tag.
+    from . import ideas
+
+    for r in intel.recent(eco.db, ideas.SOURCE, limit=10):
+        d = r.get("detail") or {}
+        if d.get("went_to") == "village":
+            finds.append({"source": "operator_idea", "name": (r.get("title") or "")[:200],
+                          "idea": (r.get("title") or "")[:600], "origin": d.get("origin")})
     # Ideas the social and video watchers tagged (strategies, AI agents,
     # village-like systems): not calls, so they never vote, but worth a look.
     # A video comes with the start of what is said in it, not just its caption.
@@ -391,7 +401,9 @@ def _research_review(eco, now: datetime) -> list:
             "These are the newest GitHub repositories, Hugging Face models and datasets, "
             "and posts and videos about trading strategies, AI agents (Jarvis-style "
             "assistants, trading bots) and multi-agent systems like this village, that "
-            "the village's scouts found. For each, is it worth testing here, "
+            "the village's scouts found, and ideas the operator gave the village "
+            "(source operator_idea: take those seriously first and say how the "
+            "village could use or test each one). For each, is it worth testing here, "
             "and if so what exactly would we test and how would we know it worked? "
             "Flag anything that looks like a scam, a malware lure, or survivorship-"
             "biased backtesting. For papers, also say whether it is peer-reviewed or "
