@@ -10,3 +10,4 @@ set TRADE_DATA_SOURCE=alpaca,yahoo
 if not exist logs-daily mkdir logs-daily
 echo ==== %date% %time% >> logs-daily\tick.log
 "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" -m src.cli trade tick --database-url sqlite:///data/mvv_daily.db >> logs-daily\tick.log 2>&1
+"%LOCALAPPDATA%\Programs\Python\Python313\python.exe" scripts\notify_fills.py --db data/mvv_daily.db >> logs-daily\tick.log 2>&1
