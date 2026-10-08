@@ -2061,8 +2061,8 @@ def _chat_note(waiting: list) -> str:
     oldest = to_datetime(waiting[0].get("created_at"))
     if waiting[0].get("status") == "waiting" and oldest is not None \
             and (utcnow() - oldest).total_seconds() > 360:
-        return ("Still waiting. The village answers from your PC, which looks off or "
-                "asleep; it will answer as soon as the PC is back.")
+        return ("Still waiting. The village answers from your PC, which is either busy "
+                "reading something you sent or off; it will answer as soon as it can.")
     return "The village is thinking\u2026"
 
 
