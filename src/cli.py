@@ -689,6 +689,12 @@ def cmd_serve(args) -> int:  # pragma: no cover - long-running server
         return 1
 
     config, _ = _context(args)
+    # The web app builds its own config from the environment, so a
+    # --database-url given here has to travel as DATABASE_URL or the page
+    # quietly reads the default database instead of the one printed below.
+    import os
+
+    os.environ["DATABASE_URL"] = config.database_url
     print(f"Approval gate    http://{args.host}:{args.port}/")
     print(f"Mission Control  http://{args.host}:{args.port}/village")
     print(f"  (db: {config.database_url})")

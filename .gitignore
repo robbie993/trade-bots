@@ -26,6 +26,8 @@ data/*.db-wal
 data/*.db-shm
 .DS_Store
 data/notifications.log
+data/ntfy_topic.txt
+data/notify_state.json
 data/metrics.json
 data/products.json
 
