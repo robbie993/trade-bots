@@ -568,3 +568,21 @@ The PC recovered daily prices for 191 delisted stocks from Alpaca, 2016 to their
 
 - **Why nothing moved:** the dead giants never ranked in the top 5. Twitter's best was 21st and Celgene's 28th. Only Allergan made the top 10, for 3 months, and it did slightly better than what it replaced. The 5 to 10 most-traded US stocks are the mega-caps (Apple, Microsoft, Nvidia, Amazon, Tesla, Meta), and none of those died.
 - **What this does not fix:** stocks that died in 2014-15, since Alpaca starts in 2016. It also does not remove the hindsight in the QQQ filter (section 12). The forward paper test is still the real judge.
+
+## 16. Lobbying, and every channel side by side (PC tests, research/pelosi-data fb7440f, `channels/NOTES.md`)
+
+Lobbying data: 42,544 Senate lobbying filings, 2014-2026, for 107 of her companies; 37% name a specific bill. Each channel is tested against the stock's own base rate and against 2,000 placebo dates.
+
+| Channel | Before her buys | After her buys | Around her sales |
+|---|---|---|---|
+| Lobbying (filings, dollars, bill-specific) | normal (0.8-0.9x) | normal | 1.3-1.6x, **both before and after** (p 0.01-0.08) |
+| Federal contracts $10M+ | normal | normal | 2.9x before (7 stocks) |
+| Insider open-market buys | normal | normal | normal |
+| Insider sales | 1.7x (both follow run-ups) | 1.4x (not significant) | fewer |
+| Unusual call buying (last 2 years only) | 20% vs 24% base | | none |
+| Wikipedia attention | 1.4x (not significant) | 3.1x, **gone once her disclosure week is removed** | fewer |
+| Hearings and laws (section 13) | same as random days | | |
+
+The results around her sales are symmetric (before and after), weak against the local placebo, and come from about 40 tests. They reflect when her sales fell (big-tech antitrust years with heavy lobbying), not timing.
+
+**Final verdict across all public routes:** nothing public moved ahead of her buys. Her results come from holding mega-cap tech, mostly Nvidia, plus some stock-picking. The one real, copyable piece is the public "most-traded stocks + QQQ trend" rule (sections 12, 14, 15), now running forward as the Big-5 Trend paper firm. A side effect worth knowing: small names jump when her filings become public (+5% vs SPY next day, Tempus +35%; megacaps +1.1%). That is a reaction to her disclosure, not an information edge.
