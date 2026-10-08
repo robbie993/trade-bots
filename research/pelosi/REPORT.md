@@ -586,3 +586,28 @@ Lobbying data: 42,544 Senate lobbying filings, 2014-2026, for 107 of her compani
 The results around her sales are symmetric (before and after), weak against the local placebo, and come from about 40 tests. They reflect when her sales fell (big-tech antitrust years with heavy lobbying), not timing.
 
 **Final verdict across all public routes:** nothing public moved ahead of her buys. Her results come from holding mega-cap tech, mostly Nvidia, plus some stock-picking. The one real, copyable piece is the public "most-traded stocks + QQQ trend" rule (sections 12, 14, 15), now running forward as the Big-5 Trend paper firm. A side effect worth knowing: small names jump when her filings become public (+5% vs SPY next day, Tempus +35%; megacaps +1.1%). That is a reaction to her disclosure, not an information edge.
+
+## 17. Is the QQQ 200-day filter fitted to 2022? (`regime_test.py`, GPT follow-up)
+
+GPT's ask: freeze Big-5 Trend as is, and test a regime filter that was published before 2022, so it could not have been picked because it fixed 2022. Same 2014-2026 data with dead stocks added back (section 15), equal-weight top 5 or top 10 by dollar volume, monthly, 10 bps per trade, T-bills (BIL) when out.
+
+| Filter, top 5 | All years %/yr | 2021-22 %/yr | Sharpe | Worst drop |
+|---|---|---|---|---|
+| QQQ 200-day (ours, frozen) | 25.5 | +7.7 | 1.05 | -19.6% |
+| Faber 10-month average on QQQ (Faber 2007) | 24.6 | +7.7 | 1.03 | -19.6% |
+| Absolute momentum, QQQ 12m vs T-bills (Antonacci 2012) | 27.2 | -1.1 | 1.02 | -25.9% |
+| Absolute momentum, SPY 12m vs T-bills | 21.1 | -1.3 | 0.88 | -29.9% |
+| Faber 10-month average on SPY | 18.6 | -14.1 | 0.79 | -43.3% |
+| No filter | 30.1 | -18.0 | 1.02 | -48.3% |
+| SPY / QQQ buy and hold | 13.6 / 18.8 | +2.6 / -7.3 | 0.94 / 1.03 | -23.9% / -32.6% |
+
+Top 10 shows the same pattern (ours 23.7 / +9.7 / 1.12; Faber QQQ 22.7 / +9.7 / 1.08).
+
+Placebo: sliding our in/out sequence to 131 other start points, the real timing beats 99.2% of them in 2021-22 and 91.6% on Sharpe, but only 60.3% on all-year return.
+
+What it means:
+- A rule published in 2007 gives almost exactly our result, so the 200-day choice was not tuned to 2022.
+- The filter does its job (bear-market protection, drawdown cut from -48% to -20%). It does not add return; no filter earned more over the whole period.
+- The gauge has to be QQQ. The same rules on SPY fail in 2022. Choosing QQQ over SPY could itself be hindsight; this test can't rule that out.
+- Still untested: the 2000-02 and 2008 crashes. That needs older prices, which only the PC can download (Yahoo is blocked from the cloud).
+- Big-5 Trend stays frozen. The variants above are research only.
