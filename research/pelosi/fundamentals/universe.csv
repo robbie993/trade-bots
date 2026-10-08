@@ -1,325 +1,345 @@
-ticker,quoteType,name,cik,sec_title,is_fund
-AAL,EQUITY,American Airlines Group Inc.,6201.0,American Airlines Group Inc.,False
-AAPL,EQUITY,Apple Inc.,320193.0,Apple Inc.,False
-ABBV,EQUITY,AbbVie Inc.,1551152.0,AbbVie Inc.,False
-ABNB,EQUITY,"Airbnb, Inc.",1559720.0,"Airbnb, Inc.",False
-ABT,EQUITY,Abbott Laboratories,1800.0,ABBOTT LABORATORIES,False
-ACN,EQUITY,Accenture plc,1467373.0,Accenture plc,False
-ADBE,EQUITY,Adobe Inc.,796343.0,ADOBE INC.,False
-ADI,EQUITY,"Analog Devices, Inc.",6281.0,ANALOG DEVICES INC,False
-ADP,EQUITY,"Automatic Data Processing, Inc.",8670.0,AUTOMATIC DATA PROCESSING INC,False
-AFRM,EQUITY,"Affirm Holdings, Inc.",1820953.0,"Affirm Holdings, Inc.",False
-AGG,ETF,iShares Core U.S. Aggregate Bond ETF,,,True
-AI,EQUITY,"C3.ai, Inc.",1577526.0,"C3.ai, Inc.",False
-AIG,EQUITY,"American International Group, Inc.",5272.0,"AMERICAN INTERNATIONAL GROUP, INC.",False
-ALAB,EQUITY,"Astera Labs, Inc.",1736297.0,"Astera Labs, Inc.",False
-AMAT,EQUITY,"Applied Materials, Inc.",6951.0,APPLIED MATERIALS INC /DE,False
-AMBA,EQUITY,"Ambarella, Inc.",1280263.0,AMBARELLA INC,False
-AMC,EQUITY,"AMC Entertainment Holdings, Inc.",1411579.0,"AMC ENTERTAINMENT HOLDINGS, INC.",False
-AMD,EQUITY,"Advanced Micro Devices, Inc.",2488.0,ADVANCED MICRO DEVICES INC,False
-AMGN,EQUITY,Amgen Inc.,318154.0,AMGEN INC,False
-AMZN,EQUITY,"Amazon.com, Inc.",1018724.0,AMAZON COM INC,False
-ANET,EQUITY,"Arista Networks, Inc.",1596532.0,"Arista Networks, Inc.",False
-APH,EQUITY,Amphenol Corporation,820313.0,AMPHENOL CORP /DE/,False
-APO,EQUITY,"Apollo Global Management, Inc.",1858681.0,"Apollo Global Management, Inc.",False
-APP,EQUITY,AppLovin Corporation,1751008.0,AppLovin Corp,False
-ARKK,ETF,ARK Innovation ETF,,,True
-ARM,EQUITY,Arm Holdings plc,1973239.0,ARM HOLDINGS PLC /UK,False
-ASML,EQUITY,ASML Holding N.V.,937966.0,ASML HOLDING NV,False
-AVGO,EQUITY,Broadcom Inc.,1730168.0,Broadcom Inc.,False
-AXP,EQUITY,American Express Company,4962.0,AMERICAN EXPRESS CO,False
-AZN,EQUITY,AstraZeneca PLC,901832.0,ASTRAZENECA PLC,False
-BA,EQUITY,The Boeing Company,12927.0,BOEING CO,False
-BABA,EQUITY,Alibaba Group Holding Limited,1577552.0,Alibaba Group Holding Ltd,False
-BAC,EQUITY,Bank of America Corporation,70858.0,BANK OF AMERICA CORP /DE/,False
-BAX,EQUITY,Baxter International Inc.,10456.0,BAXTER INTERNATIONAL INC,False
-BE,EQUITY,Bloom Energy Corporation,1664703.0,Bloom Energy Corp,False
-BHC,EQUITY,Bausch Health Companies Inc.,885590.0,Bausch Health Companies Inc.,False
-BIDU,EQUITY,"Baidu, Inc.",1329099.0,"Baidu, Inc.",False
-BIIB,EQUITY,Biogen Inc.,875045.0,BIOGEN INC.,False
-BIL,ETF,State Street SPDR Bloomberg 1-3 Month T-Bill ETF,,,True
-BKNG,EQUITY,Booking Holdings Inc.,1075531.0,Booking Holdings Inc.,False
-BKR,EQUITY,Baker Hughes Company,1701605.0,Baker Hughes Co,False
-BMNR,EQUITY,"Bitmine Immersion Technologies, Inc.",1829311.0,"BITMINE IMMERSION TECHNOLOGIES, INC.",False
-BMY,EQUITY,Bristol-Myers Squibb Company,14272.0,BRISTOL MYERS SQUIBB CO,False
-BNTX,EQUITY,BioNTech SE,1776985.0,BioNTech SE,False
-BRK-A,EQUITY,Berkshire Hathaway Inc.,1067983.0,BERKSHIRE HATHAWAY INC,False
-BRK-B,EQUITY,Berkshire Hathaway Inc.,1067983.0,BERKSHIRE HATHAWAY INC,False
-BTI,EQUITY,British American Tobacco p.l.c.,1303523.0,British American Tobacco p.l.c.,False
-BX,EQUITY,Blackstone Inc.,1393818.0,Blackstone Inc.,False
-BYND,EQUITY,"Beyond Meat, Inc.",1655210.0,"BEYOND MEAT, INC.",False
-C,EQUITY,Citigroup Inc.,831001.0,CITIGROUP INC,False
-CAT,EQUITY,Caterpillar Inc.,18230.0,CATERPILLAR INC,False
-CCL,EQUITY,Carnival Corporation Ltd.,815097.0,Carnival Corp Ltd.,False
-CEG,EQUITY,Constellation Energy Corporation,1868275.0,Constellation Energy Corp,False
-CGC,EQUITY,Canopy Growth Corporation,1737927.0,Canopy Growth Corp,False
-CHTR,EQUITY,"Charter Communications, Inc.",1091667.0,"CHARTER COMMUNICATIONS, INC. /MO/",False
-CI,EQUITY,The Cigna Group,1739940.0,Cigna Group,False
-CMCSA,EQUITY,Comcast Corporation,1166691.0,COMCAST CORP,False
-CMG,EQUITY,"Chipotle Mexican Grill, Inc.",1058090.0,CHIPOTLE MEXICAN GRILL INC,False
-CMI,EQUITY,Cummins Inc.,26172.0,CUMMINS INC,False
-CNC,EQUITY,Centene Corporation,1071739.0,CENTENE CORP,False
-COHR,EQUITY,Coherent Corp.,820318.0,COHERENT CORP.,False
-COIN,EQUITY,"Coinbase Global, Inc.",1679788.0,"Coinbase Global, Inc.",False
-COP,EQUITY,ConocoPhillips,1163165.0,CONOCOPHILLIPS,False
-COST,EQUITY,Costco Wholesale Corporation,909832.0,COSTCO WHOLESALE CORP /NEW,False
-CPRI,EQUITY,Capri Holdings Limited,1530721.0,Capri Holdings Ltd,False
-CRCL,EQUITY,Circle Internet Group,1876042.0,"Circle Internet Group, Inc.",False
-CRDO,EQUITY,Credo Technology Group Holding Ltd,1807794.0,Credo Technology Group Holding Ltd,False
-CRM,EQUITY,"Salesforce, Inc.",1108524.0,"Salesforce, Inc.",False
-CRWD,EQUITY,"CrowdStrike Holdings, Inc.",1535527.0,"CrowdStrike Holdings, Inc.",False
-CRWV,EQUITY,"CoreWeave, Inc.",1769628.0,"CoreWeave, Inc.",False
-CSCO,EQUITY,"Cisco Systems, Inc.",858877.0,"CISCO SYSTEMS, INC.",False
-CSX,EQUITY,CSX Corporation,277948.0,CSX CORP,False
-CVNA,EQUITY,Carvana Co.,1690820.0,CARVANA CO.,False
-CVS,EQUITY,CVS Health Corporation,64803.0,CVS HEALTH Corp,False
-CVX,EQUITY,Chevron Corporation,93410.0,CHEVRON CORP,False
-DAL,EQUITY,"Delta Air Lines, Inc.",27904.0,"DELTA AIR LINES, INC.",False
-DASH,EQUITY,"DoorDash, Inc.",1792789.0,"DoorDash, Inc.",False
-DD,EQUITY,"DuPont de Nemours, Inc.",1666700.0,"DuPont de Nemours, Inc.",False
-DDD,EQUITY,3D Systems Corporation,910638.0,3D SYSTEMS CORP,False
-DE,EQUITY,Deere & Company,315189.0,DEERE & CO,False
-DELL,EQUITY,Dell Technologies Inc.,1571996.0,Dell Technologies Inc.,False
-DG,EQUITY,Dollar General Corporation,29534.0,DOLLAR GENERAL CORP,False
-DHR,EQUITY,Danaher Corporation,313616.0,DANAHER CORP /DE/,False
-DIA,ETF,State Street SPDR Dow Jones Industrial Average ETF Trust,1041130.0,SPDR DOW JONES INDUSTRIAL AVERAGE ETF TRUST,True
-DIS,EQUITY,The Walt Disney Company,1744489.0,Walt Disney Co,False
-DJT,EQUITY,Trump Media & Technology Group Corp.,1849635.0,Trump Media & Technology Group Corp.,False
-DKNG,EQUITY,DraftKings Inc.,1883685.0,DraftKings Inc.,False
-DOCU,EQUITY,"DocuSign, Inc.",1261333.0,"DOCUSIGN, INC.",False
-DVN,EQUITY,Devon Energy Corporation,1090012.0,DEVON ENERGY CORP/DE,False
-EBAY,EQUITY,eBay Inc.,1065088.0,EBAY INC,False
-ECL,EQUITY,Ecolab Inc.,31462.0,ECOLAB INC.,False
-EEM,ETF,iShares MSCI Emerging Markets ETF,,,True
-EFA,ETF,iShares MSCI EAFE ETF,,,True
-EFX,EQUITY,Equifax Inc.,33185.0,EQUIFAX INC,False
-ELV,EQUITY,"Elevance Health, Inc.",1156039.0,"Elevance Health, Inc.",False
-EMB,ETF,iShares J.P. Morgan USD Emerging Markets Bond ETF,,,True
-ENPH,EQUITY,"Enphase Energy, Inc.",1463101.0,"Enphase Energy, Inc.",False
-EOG,EQUITY,"EOG Resources, Inc.",821189.0,EOG RESOURCES INC,False
-ETN,EQUITY,Eaton Corporation plc,1551182.0,Eaton Corp plc,False
-EWJ,ETF,iShares MSCI Japan ETF,,,True
-EWY,ETF,iShares MSCI South Korea ETF,,,True
-F,EQUITY,Ford Motor Company,37996.0,FORD MOTOR CO,False
-FAS,ETF,Direxion Daily Financial Bull 3X Shares,,,True
-FCX,EQUITY,Freeport-McMoRan Inc.,831259.0,FREEPORT-MCMORAN INC,False
-FDX,EQUITY,FedEx Corporation,1048911.0,FEDEX CORP,False
-FIS,EQUITY,"Fidelity National Information Services, Inc.",1136893.0,"Fidelity National Information Services, Inc.",False
-FISV,EQUITY,"Fiserv, Inc.",798354.0,FISERV INC,False
-FSLY,EQUITY,"Fastly, Inc.",1517413.0,"Fastly, Inc.",False
-FTV,EQUITY,Fortive Corporation,1659166.0,Fortive Corp,False
-FUBO,EQUITY,FuboTV Inc.,1484769.0,FuboTV Inc.,False
-FXI,ETF,iShares China Large-Cap ETF,,,True
-GBTC,ETF,Grayscale Bitcoin Trust ETF,1588489.0,Grayscale Bitcoin Trust ETF,True
-GDX,ETF,VanEck Gold Miners ETF,,,True
-GDXJ,ETF,VanEck Junior Gold Miners ETF,,,True
-GE,EQUITY,GE Aerospace,40545.0,GENERAL ELECTRIC CO,False
-GEV,EQUITY,GE Vernova Inc.,1996810.0,GE Vernova Inc.,False
-GILD,EQUITY,"Gilead Sciences, Inc.",882095.0,"GILEAD SCIENCES, INC.",False
-GLD,ETF,SPDR Gold Shares,1222333.0,SPDR GOLD TRUST,True
-GLW,EQUITY,Corning Incorporated,24741.0,CORNING INC /NY,False
-GM,EQUITY,General Motors Company,1467858.0,General Motors Co,False
-GME,EQUITY,GameStop Corp.,1326380.0,GameStop Corp.,False
-GOOG,EQUITY,Alphabet Inc.,1652044.0,Alphabet Inc.,False
-GOOGL,EQUITY,Alphabet Inc.,1652044.0,Alphabet Inc.,False
-GPRO,EQUITY,"GoPro, Inc.",1500435.0,"GoPro, Inc.",False
-GS,EQUITY,"The Goldman Sachs Group, Inc.",886982.0,GOLDMAN SACHS GROUP INC,False
-HAL,EQUITY,Halliburton Company,45012.0,HALLIBURTON CO,False
-HD,EQUITY,"The Home Depot, Inc.",354950.0,"HOME DEPOT, INC.",False
-HEDJ,ETF,WisdomTree Europe Hedged Equity Fund,,,True
-HIMS,EQUITY,"Hims & Hers Health, Inc.",1773751.0,"Hims & Hers Health, Inc.",False
-HON,EQUITY,Honeywell International Inc.,773840.0,HONEYWELL INTERNATIONAL INC,False
-HOOD,EQUITY,"Robinhood Markets, Inc.",1783879.0,"Robinhood Markets, Inc.",False
-HPQ,EQUITY,HP Inc.,47217.0,HP INC,False
-HUM,EQUITY,Humana Inc.,49071.0,HUMANA INC,False
-HYG,ETF,iShares iBoxx $ High Yield Corporate Bond ETF,,,True
-IAU,ETF,iShares Gold Trust,1278680.0,ISHARES GOLD TRUST,True
-IBB,ETF,iShares Biotechnology ETF,,,True
-IBIT,ETF,iShares Bitcoin Trust ETF,1980994.0,iShares Bitcoin Trust ETF,True
-IBM,EQUITY,International Business Machines Corporation,51143.0,INTERNATIONAL BUSINESS MACHINES CORP,False
-IEF,ETF,iShares 7-10 Year Treasury Bond ETF,,,True
-IEFA,ETF,iShares Core MSCI EAFE ETF,,,True
-IEMG,ETF,iShares Core MSCI Emerging Markets ETF,,,True
-IGV,ETF,iShares Expanded Tech-Software Sector ETF,,,True
-ILMN,EQUITY,"Illumina, Inc.",1110803.0,"ILLUMINA, INC.",False
-INO,EQUITY,"Inovio Pharmaceuticals, Inc.",1055726.0,"INOVIO PHARMACEUTICALS, INC.",False
-INTC,EQUITY,Intel Corporation,50863.0,INTEL CORP,False
-INTU,EQUITY,Intuit Inc.,896878.0,INTUIT INC.,False
-IONQ,EQUITY,"IonQ, Inc.",1824920.0,"IonQ, Inc.",False
-IREN,EQUITY,IREN Limited,1878848.0,IREN Ltd,False
-ISRG,EQUITY,"Intuitive Surgical, Inc.",1035267.0,INTUITIVE SURGICAL INC,False
-IVV,ETF,iShares Core S&P 500 ETF,,,True
-IWD,ETF,iShares Russell 1000 Value ETF,,,True
-IWM,ETF,iShares Russell 2000 ETF,,,True
-IYR,ETF,iShares U.S. Real Estate ETF,,,True
-JD,EQUITY,"JD.com, Inc.",1549802.0,"JD.com, Inc.",False
-JNJ,EQUITY,Johnson & Johnson,200406.0,JOHNSON & JOHNSON,False
-JNK,ETF,State Street SPDR Bloomberg High Yield Bond ETF,,,True
-JNUG,ETF,Direxion Daily Junior Gold Miners Index Bull 2X Shares,,,True
-JPM,EQUITY,JPMorgan Chase & Co.,19617.0,JPMORGAN CHASE & CO,False
-KLAC,EQUITY,KLA Corporation,319201.0,KLA CORP,False
-KMI,EQUITY,"Kinder Morgan, Inc.",1506307.0,"KINDER MORGAN, INC.",False
-KO,EQUITY,The Coca-Cola Company,21344.0,COCA COLA CO,False
-KRE,ETF,State Street SPDR S&P Regional Banking ETF,,,True
-KVUE,EQUITY,Kenvue Inc.,1944048.0,Kenvue Inc.,False
-KWEB,ETF,KraneShares CSI China Internet ETF,,,True
-LCID,EQUITY,"Lucid Group, Inc.",1811210.0,"Lucid Group, Inc.",False
-LI,EQUITY,Li Auto Inc.,1791706.0,Li Auto Inc.,False
-LIN,EQUITY,Linde plc,1707925.0,LINDE PLC,False
-LITE,EQUITY,Lumentum Holdings Inc.,1633978.0,Lumentum Holdings Inc.,False
-LLY,EQUITY,Eli Lilly and Company,59478.0,ELI LILLY & Co,False
-LMT,EQUITY,Lockheed Martin Corporation,936468.0,LOCKHEED MARTIN CORP,False
-LOW,EQUITY,"Lowe's Companies, Inc.",60667.0,LOWES COMPANIES INC,False
-LQD,ETF,iShares iBoxx $ Investment Grade Corporate Bond ETF,,,True
-LRCX,EQUITY,Lam Research Corporation,707549.0,LAM RESEARCH CORP,False
-LULU,EQUITY,lululemon athletica inc.,1397187.0,lululemon athletica inc.,False
-LUV,EQUITY,Southwest Airlines Co.,92380.0,SOUTHWEST AIRLINES CO,False
-LVS,EQUITY,Las Vegas Sands Corp.,1300514.0,LAS VEGAS SANDS CORP,False
-LYB,EQUITY,LyondellBasell Industries N.V.,1489393.0,LyondellBasell Industries N.V.,False
-MA,EQUITY,Mastercard Incorporated,1141391.0,Mastercard Inc,False
-MCD,EQUITY,McDonald's Corporation,63908.0,MCDONALDS CORP,False
-MCK,EQUITY,McKesson Corporation,927653.0,MCKESSON CORP,False
-MDLZ,EQUITY,"Mondelez International, Inc.",1103982.0,"Mondelez International, Inc.",False
-MDT,EQUITY,Medtronic plc,1613103.0,Medtronic plc,False
-MDY,ETF,State Street SPDR S&P MIDCAP 400 ETF Trust,936958.0,SPDR S&P MIDCAP 400 ETF TRUST,True
-MELI,EQUITY,"MercadoLibre, Inc.",1099590.0,MERCADOLIBRE INC,False
-MET,EQUITY,"MetLife, Inc.",1099219.0,METLIFE INC,False
-META,EQUITY,"Meta Platforms, Inc.",1326801.0,"Meta Platforms, Inc.",False
-MMM,EQUITY,3M Company,66740.0,3M CO,False
-MO,EQUITY,"Altria Group, Inc.",764180.0,"ALTRIA GROUP, INC.",False
-MPC,EQUITY,Marathon Petroleum Corporation,1510295.0,Marathon Petroleum Corp,False
-MRK,EQUITY,"Merck & Co., Inc.",310158.0,"Merck & Co., Inc.",False
-MRNA,EQUITY,"Moderna, Inc.",1682852.0,"Moderna, Inc.",False
-MRVL,EQUITY,"Marvell Technology, Inc.",1835632.0,"Marvell Technology, Inc.",False
-MS,EQUITY,Morgan Stanley,895421.0,MORGAN STANLEY,False
-MSFT,EQUITY,Microsoft Corporation,789019.0,MICROSOFT CORP,False
-MSTR,EQUITY,Strategy Inc,1050446.0,Strategy Inc,False
-MU,EQUITY,"Micron Technology, Inc.",723125.0,MICRON TECHNOLOGY INC,False
-MUB,ETF,iShares National Muni Bond ETF,,,True
-NBIS,EQUITY,Nebius Group N.V.,1513845.0,Nebius Group N.V.,False
-NCLH,EQUITY,Norwegian Cruise Line Holdings Ltd.,1513761.0,Norwegian Cruise Line Holdings Ltd.,False
-NEE,EQUITY,"NextEra Energy, Inc.",753308.0,NEXTERA ENERGY INC,False
-NFLX,EQUITY,"Netflix, Inc.",1065280.0,NETFLIX INC,False
-NIO,EQUITY,NIO Inc.,1736541.0,NIO Inc.,False
-NKE,EQUITY,"NIKE, Inc.",320187.0,"NIKE, Inc.",False
-NOK,EQUITY,Nokia Oyj,924613.0,NOKIA CORP,False
-NOW,EQUITY,"ServiceNow, Inc.",1373715.0,"ServiceNow, Inc.",False
-NTES,EQUITY,"NetEase, Inc.",1110646.0,"NetEase, Inc.",False
-NVAX,EQUITY,"Novavax, Inc.",1000694.0,NOVAVAX INC,False
-NVDA,EQUITY,NVIDIA Corporation,1045810.0,NVIDIA CORP,False
-NXPI,EQUITY,NXP Semiconductors N.V.,1413447.0,NXP Semiconductors N.V.,False
-OIH,ETF,VanEck Oil Services ETF,,,True
-OPEN,EQUITY,Opendoor Technologies Inc.,1801169.0,Opendoor Technologies Inc.,False
-ORCL,EQUITY,Oracle Corporation,1341439.0,ORACLE CORP,False
-ORLY,EQUITY,"O'Reilly Automotive, Inc.",898173.0,O REILLY AUTOMOTIVE INC,False
-OXY,EQUITY,Occidental Petroleum Corporation,797468.0,OCCIDENTAL PETROLEUM CORP /DE/,False
-PANW,EQUITY,"Palo Alto Networks, Inc.",1327567.0,Palo Alto Networks Inc,False
-PBR,EQUITY,Petróleo Brasileiro S.A. - Petrobras,1119639.0,PETROBRAS - PETROLEO BRASILEIRO SA,False
-PDD,EQUITY,PDD Holdings Inc.,1737806.0,PDD Holdings Inc.,False
-PEP,EQUITY,"PepsiCo, Inc.",77476.0,PEPSICO INC,False
-PFE,EQUITY,Pfizer Inc.,78003.0,PFIZER INC,False
-PG,EQUITY,The Procter & Gamble Company,80424.0,PROCTER & GAMBLE Co,False
-PINS,EQUITY,"Pinterest, Inc.",1506293.0,"PINTEREST, INC.",False
-PLTR,EQUITY,Palantir Technologies Inc.,1321655.0,Palantir Technologies Inc.,False
-PLUG,EQUITY,Plug Power Inc.,1093691.0,PLUG POWER INC,False
-PM,EQUITY,Philip Morris International Inc.,1413329.0,Philip Morris International Inc.,False
-PRGO,EQUITY,Perrigo Company plc,1585364.0,PERRIGO Co plc,False
-PSKY,EQUITY,Skydance Corporation,2041610.0,Paramount Skydance Corp,False
-PTON,EQUITY,"Peloton Interactive, Inc.",1639825.0,"PELOTON INTERACTIVE, INC.",False
-PYPL,EQUITY,"PayPal Holdings, Inc.",1633917.0,"PayPal Holdings, Inc.",False
-QCOM,EQUITY,QUALCOMM Incorporated,804328.0,QUALCOMM INC/DE,False
-QQQ,ETF,Invesco QQQ Trust,,,True
-QQQM,ETF,Invesco NASDAQ 100 ETF,,,True
-QS,EQUITY,QuantumScape Corporation,1811414.0,QuantumScape Corp,False
-RBLX,EQUITY,Roblox Corporation,1315098.0,Roblox Corp,False
-RCL,EQUITY,Royal Caribbean Cruises Ltd.,884887.0,ROYAL CARIBBEAN CRUISES LTD,False
-RDDT,EQUITY,"Reddit, Inc.",1713445.0,"Reddit, Inc.",False
-REGN,EQUITY,"Regeneron Pharmaceuticals, Inc.",872589.0,"REGENERON PHARMACEUTICALS, INC.",False
-RGTI,EQUITY,"Rigetti Computing, Inc.",1838359.0,"Rigetti Computing, Inc.",False
-RIVN,EQUITY,"Rivian Automotive, Inc.",1874178.0,"Rivian Automotive, Inc. / DE",False
-ROKU,EQUITY,"Roku, Inc.",1428439.0,"ROKU, INC",False
-RSP,ETF,Invesco S&P 500 Equal Weight ETF,,,True
-RTX,EQUITY,RTX Corporation,101829.0,RTX Corp,False
-SBUX,EQUITY,Starbucks Corporation,829224.0,STARBUCKS CORP,False
-SCHW,EQUITY,The Charles Schwab Corporation,316709.0,SCHWAB CHARLES CORP,False
-SE,EQUITY,Sea Limited,1703399.0,Sea Ltd,False
-SGOV,ETF,iShares 0-3 Month Treasury Bond ETF,,,True
-SHOP,EQUITY,Shopify Inc.,1594805.0,SHOPIFY INC.,False
-SKHY,EQUITY,SK hynix Inc.,2120882.0,SK hynix Inc.,False
-SLB,EQUITY,SLB N.V.,87347.0,SLB LIMITED/NV,False
-SLV,ETF,iShares Silver Trust,1330568.0,iShares Silver Trust,True
-SMCI,EQUITY,"Super Micro Computer, Inc.",1375365.0,"Super Micro Computer, Inc.",False
-SNAP,EQUITY,Snap Inc.,1564408.0,Snap Inc,False
-SNDK,EQUITY,Sandisk Corporation,2023554.0,Sandisk Corp,False
-SNOW,EQUITY,Snowflake Inc.,1640147.0,Snowflake Inc.,False
-SNPS,EQUITY,"Synopsys, Inc.",883241.0,SYNOPSYS INC,False
-SOFI,EQUITY,"SoFi Technologies, Inc.",1818874.0,"SoFi Technologies, Inc.",False
-SOUN,EQUITY,"SoundHound AI, Inc.",1840856.0,"SOUNDHOUND AI, INC.",False
-SPCE,EQUITY,"Virgin Galactic Holdings, Inc.",1706946.0,"Virgin Galactic Holdings, Inc",False
-SPCX,EQUITY,Space Exploration Technologies Corp.,1181412.0,SPACE EXPLORATION TECHNOLOGIES CORP,False
-SPGI,EQUITY,S&P Global Inc.,64040.0,S&P Global Inc.,False
-SPOT,EQUITY,Spotify Technology S.A.,1639920.0,Spotify Technology S.A.,False
-SPY,ETF,State Street SPDR S&P 500 ETF Trust,884394.0,SPDR S&P 500 ETF TRUST,True
-STX,EQUITY,Seagate Technology Holdings plc,1137789.0,Seagate Technology Holdings plc,False
-STZ,EQUITY,"Constellation Brands, Inc.",16918.0,"CONSTELLATION BRANDS, INC.",False
-SVXY,ETF,ProShares Short VIX Short-Term Futures ETF,1415311.0,ProShares Trust II,True
-SWKS,EQUITY,"Skyworks Solutions, Inc.",4127.0,"SKYWORKS SOLUTIONS, INC.",False
-SYF,EQUITY,Synchrony Financial,1601712.0,Synchrony Financial,False
-T,EQUITY,AT&T Inc.,732717.0,AT&T INC.,False
-TDOC,EQUITY,"Teladoc Health, Inc.",1477449.0,"Teladoc Health, Inc.",False
-TER,EQUITY,"Teradyne, Inc.",97210.0,"TERADYNE, INC",False
-TEVA,EQUITY,Teva Pharmaceutical Industries Limited,818686.0,TEVA PHARMACEUTICAL INDUSTRIES LTD,False
-TGT,EQUITY,Target Corporation,27419.0,TARGET CORP,False
-TLRY,EQUITY,"Tilray Brands, Inc.",1731348.0,"Tilray Brands, Inc.",False
-TLT,ETF,iShares 20+ Year Treasury Bond ETF,,,True
-TMO,EQUITY,Thermo Fisher Scientific Inc.,97745.0,THERMO FISHER SCIENTIFIC INC.,False
-TMUS,EQUITY,"T-Mobile US, Inc.",1283699.0,"T-Mobile US, Inc.",False
-TNA,ETF,Direxion Daily Small Cap Bull 3X Shares,,,True
-TQQQ,ETF,ProShares UltraPro QQQ,,,True
-TSLA,EQUITY,"Tesla, Inc.",1318605.0,"Tesla, Inc.",False
-TSM,EQUITY,Taiwan Semiconductor Manufacturing Company Limited,1046179.0,TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD,False
-TTD,EQUITY,"The Trade Desk, Inc.",1671933.0,"Trade Desk, Inc.",False
-TWLO,EQUITY,Twilio Inc.,1447669.0,TWILIO INC,False
-TXN,EQUITY,Texas Instruments Incorporated,97476.0,TEXAS INSTRUMENTS INC,False
-TZA,ETF,Direxion Daily Small Cap Bear 3X Shares,,,True
-UAL,EQUITY,"United Airlines Holdings, Inc.",100517.0,"United Airlines Holdings, Inc.",False
-UBER,EQUITY,"Uber Technologies, Inc.",1543151.0,"Uber Technologies, Inc",False
-UNH,EQUITY,UnitedHealth Group Incorporated,731766.0,UNITEDHEALTH GROUP INC,False
-UNP,EQUITY,Union Pacific Corporation,100885.0,UNION PACIFIC CORP,False
-UPS,EQUITY,"United Parcel Service, Inc.",1090727.0,UNITED PARCEL SERVICE INC,False
-UPST,EQUITY,"Upstart Holdings, Inc.",1647639.0,"Upstart Holdings, Inc.",False
-USO,ETF,"United States Oil Fund, LP",1327068.0,"United States Oil Fund, LP",True
-UVXY,ETF,ProShares Ultra VIX Short-Term Futures ETF,1415311.0,ProShares Trust II,True
-V,EQUITY,Visa Inc.,1403161.0,VISA INC.,False
-VEA,ETF,Vanguard FTSE Developed Markets Index Fund ETF Shares,,,True
-VLO,EQUITY,Valero Energy Corporation,1035002.0,VALERO ENERGY CORP/TX,False
-VNQ,ETF,Vanguard Real Estate Index Fund ETF Shares,,,True
-VOD,EQUITY,Vodafone Group Public Limited Company,839923.0,VODAFONE GROUP PUBLIC LTD CO,False
-VOO,ETF,Vanguard S&P 500 ETF,,,True
-VRT,EQUITY,Vertiv Holdings Co,1674101.0,Vertiv Holdings Co,False
-VST,EQUITY,Vistra Corp.,1692819.0,Vistra Corp.,False
-VTI,ETF,Vanguard Morningstar Total Stock Market ETF,,,True
-VTRS,EQUITY,Viatris Inc.,1792044.0,Viatris Inc,False
-VWO,ETF,Vanguard FTSE Emerging Markets Index Fund ETF Shares,,,True
-VXX,ETF,iPath Series B S&P 500 VIX Short-Term Futures ETN,312070.0,BARCLAYS BANK PLC,True
-VZ,EQUITY,Verizon Communications Inc.,732712.0,VERIZON COMMUNICATIONS INC,False
-W,EQUITY,Wayfair Inc.,1616707.0,Wayfair Inc.,False
-WDC,EQUITY,Western Digital Corporation,106040.0,WESTERN DIGITAL CORP,False
-WFC,EQUITY,Wells Fargo & Company,72971.0,WELLS FARGO & COMPANY/MN,False
-WMB,EQUITY,"The Williams Companies, Inc.",107263.0,"WILLIAMS COMPANIES, INC.",False
-WMT,EQUITY,Walmart Inc.,104169.0,Walmart Inc.,False
-WYNN,EQUITY,"Wynn Resorts, Limited",1174922.0,WYNN RESORTS LTD,False
-XBI,ETF,State Street SPDR S&P Biotech ETF,,,True
-XLB,ETF,State Street Materials Select Sector SPDR ETF,,,True
-XLE,ETF,State Street Energy Select Sector SPDR ETF,,,True
-XLF,ETF,State Street Financial Select Sector SPDR ETF,,,True
-XLI,ETF,State Street Industrial Select Sector SPDR ETF,,,True
-XLK,ETF,State Street Technology Select Sector SPDR ETF,,,True
-XLP,ETF,State Street Consumer Staples Select Sector SPDR ETF,,,True
-XLU,ETF,State Street Utilities Select Sector SPDR ETF,,,True
-XLV,ETF,State Street Health Care Select Sector SPDR ETF,,,True
-XLY,ETF,State Street Consumer Discretionary Select Sector SPDR ETF,,,True
-XOM,EQUITY,ExxonMobil Holdings Corporation,2115436.0,ExxonMobil Holdings Corp,False
-XYZ,EQUITY,"Block, Inc.",1512673.0,"Block, Inc.",False
-YELP,EQUITY,Yelp Inc.,1345016.0,YELP INC,False
-ZM,EQUITY,"Zoom Communications, Inc.",1585521.0,"Zoom Communications, Inc.",False
+ticker,quoteType,name,cik,sec_title,is_fund,ever_top100,delisted,price_source
+AAL,EQUITY,American Airlines Group Inc.,6201.0,American Airlines Group Inc.,False,True,False,yahoo
+AAPL,EQUITY,Apple Inc.,320193.0,Apple Inc.,False,True,False,yahoo
+ABBV,EQUITY,AbbVie Inc.,1551152.0,AbbVie Inc.,False,True,False,yahoo
+ABNB,EQUITY,"Airbnb, Inc.",1559720.0,"Airbnb, Inc.",False,True,False,yahoo
+ABT,EQUITY,Abbott Laboratories,1800.0,ABBOTT LABORATORIES,False,True,False,yahoo
+ACN,EQUITY,Accenture plc,1467373.0,Accenture plc,False,True,False,yahoo
+ADBE,EQUITY,Adobe Inc.,796343.0,ADOBE INC.,False,True,False,yahoo
+ADI,EQUITY,"Analog Devices, Inc.",6281.0,ANALOG DEVICES INC,False,True,False,yahoo
+ADP,EQUITY,"Automatic Data Processing, Inc.",8670.0,AUTOMATIC DATA PROCESSING INC,False,True,False,yahoo
+AFRM,EQUITY,"Affirm Holdings, Inc.",1820953.0,"Affirm Holdings, Inc.",False,True,False,yahoo
+AGG,ETF,iShares Core U.S. Aggregate Bond ETF,,,True,True,False,yahoo
+AI,EQUITY,"C3.ai, Inc.",1577526.0,"C3.ai, Inc.",False,True,False,yahoo
+AIG,EQUITY,"American International Group, Inc.",5272.0,"AMERICAN INTERNATIONAL GROUP, INC.",False,True,False,yahoo
+ALAB,EQUITY,"Astera Labs, Inc.",1736297.0,"Astera Labs, Inc.",False,True,False,yahoo
+AMAT,EQUITY,"Applied Materials, Inc.",6951.0,APPLIED MATERIALS INC /DE,False,True,False,yahoo
+AMBA,EQUITY,"Ambarella, Inc.",1280263.0,AMBARELLA INC,False,True,False,yahoo
+AMC,EQUITY,"AMC Entertainment Holdings, Inc.",1411579.0,"AMC ENTERTAINMENT HOLDINGS, INC.",False,True,False,yahoo
+AMD,EQUITY,"Advanced Micro Devices, Inc.",2488.0,ADVANCED MICRO DEVICES INC,False,True,False,yahoo
+AMGN,EQUITY,Amgen Inc.,318154.0,AMGEN INC,False,True,False,yahoo
+AMZN,EQUITY,"Amazon.com, Inc.",1018724.0,AMAZON COM INC,False,True,False,yahoo
+ANET,EQUITY,"Arista Networks, Inc.",1596532.0,"Arista Networks, Inc.",False,True,False,yahoo
+APH,EQUITY,Amphenol Corporation,820313.0,AMPHENOL CORP /DE/,False,True,False,yahoo
+APO,EQUITY,"Apollo Global Management, Inc.",1858681.0,"Apollo Global Management, Inc.",False,True,False,yahoo
+APP,EQUITY,AppLovin Corporation,1751008.0,AppLovin Corp,False,True,False,yahoo
+ARKK,ETF,ARK Innovation ETF,,,True,True,False,yahoo
+ARM,EQUITY,Arm Holdings plc,1973239.0,ARM HOLDINGS PLC /UK,False,True,False,yahoo
+ASML,EQUITY,ASML Holding N.V.,937966.0,ASML HOLDING NV,False,True,False,yahoo
+AVGO,EQUITY,Broadcom Inc.,1730168.0,Broadcom Inc.,False,True,False,yahoo
+AXP,EQUITY,American Express Company,4962.0,AMERICAN EXPRESS CO,False,True,False,yahoo
+AZN,EQUITY,AstraZeneca PLC,901832.0,ASTRAZENECA PLC,False,True,False,yahoo
+BA,EQUITY,The Boeing Company,12927.0,BOEING CO,False,True,False,yahoo
+BABA,EQUITY,Alibaba Group Holding Limited,1577552.0,Alibaba Group Holding Ltd,False,True,False,yahoo
+BAC,EQUITY,Bank of America Corporation,70858.0,BANK OF AMERICA CORP /DE/,False,True,False,yahoo
+BAX,EQUITY,Baxter International Inc.,10456.0,BAXTER INTERNATIONAL INC,False,True,False,yahoo
+BE,EQUITY,Bloom Energy Corporation,1664703.0,Bloom Energy Corp,False,True,False,yahoo
+BHC,EQUITY,Bausch Health Companies Inc.,885590.0,Bausch Health Companies Inc.,False,True,False,yahoo
+BIDU,EQUITY,"Baidu, Inc.",1329099.0,"Baidu, Inc.",False,True,False,yahoo
+BIIB,EQUITY,Biogen Inc.,875045.0,BIOGEN INC.,False,True,False,yahoo
+BIL,ETF,State Street SPDR Bloomberg 1-3 Month T-Bill ETF,,,True,True,False,yahoo
+BKNG,EQUITY,Booking Holdings Inc.,1075531.0,Booking Holdings Inc.,False,True,False,yahoo
+BKR,EQUITY,Baker Hughes Company,1701605.0,Baker Hughes Co,False,True,False,yahoo
+BMNR,EQUITY,"Bitmine Immersion Technologies, Inc.",1829311.0,"BITMINE IMMERSION TECHNOLOGIES, INC.",False,True,False,yahoo
+BMY,EQUITY,Bristol-Myers Squibb Company,14272.0,BRISTOL MYERS SQUIBB CO,False,True,False,yahoo
+BNTX,EQUITY,BioNTech SE,1776985.0,BioNTech SE,False,True,False,yahoo
+BRK-A,EQUITY,Berkshire Hathaway Inc.,1067983.0,BERKSHIRE HATHAWAY INC,False,True,False,yahoo
+BRK-B,EQUITY,Berkshire Hathaway Inc.,1067983.0,BERKSHIRE HATHAWAY INC,False,True,False,yahoo
+BTI,EQUITY,British American Tobacco p.l.c.,1303523.0,British American Tobacco p.l.c.,False,True,False,yahoo
+BX,EQUITY,Blackstone Inc.,1393818.0,Blackstone Inc.,False,True,False,yahoo
+BYND,EQUITY,"Beyond Meat, Inc.",1655210.0,"BEYOND MEAT, INC.",False,True,False,yahoo
+C,EQUITY,Citigroup Inc.,831001.0,CITIGROUP INC,False,True,False,yahoo
+CAT,EQUITY,Caterpillar Inc.,18230.0,CATERPILLAR INC,False,True,False,yahoo
+CCL,EQUITY,Carnival Corporation Ltd.,815097.0,Carnival Corp Ltd.,False,True,False,yahoo
+CEG,EQUITY,Constellation Energy Corporation,1868275.0,Constellation Energy Corp,False,True,False,yahoo
+CGC,EQUITY,Canopy Growth Corporation,1737927.0,Canopy Growth Corp,False,True,False,yahoo
+CHTR,EQUITY,"Charter Communications, Inc.",1091667.0,"CHARTER COMMUNICATIONS, INC. /MO/",False,True,False,yahoo
+CI,EQUITY,The Cigna Group,1739940.0,Cigna Group,False,True,False,yahoo
+CMCSA,EQUITY,Comcast Corporation,1166691.0,COMCAST CORP,False,True,False,yahoo
+CMG,EQUITY,"Chipotle Mexican Grill, Inc.",1058090.0,CHIPOTLE MEXICAN GRILL INC,False,True,False,yahoo
+CMI,EQUITY,Cummins Inc.,26172.0,CUMMINS INC,False,True,False,yahoo
+CNC,EQUITY,Centene Corporation,1071739.0,CENTENE CORP,False,True,False,yahoo
+COHR,EQUITY,Coherent Corp.,820318.0,COHERENT CORP.,False,True,False,yahoo
+COIN,EQUITY,"Coinbase Global, Inc.",1679788.0,"Coinbase Global, Inc.",False,True,False,yahoo
+COP,EQUITY,ConocoPhillips,1163165.0,CONOCOPHILLIPS,False,True,False,yahoo
+COST,EQUITY,Costco Wholesale Corporation,909832.0,COSTCO WHOLESALE CORP /NEW,False,True,False,yahoo
+CPRI,EQUITY,Capri Holdings Limited,1530721.0,Capri Holdings Ltd,False,True,False,yahoo
+CRCL,EQUITY,Circle Internet Group,1876042.0,"Circle Internet Group, Inc.",False,True,False,yahoo
+CRDO,EQUITY,Credo Technology Group Holding Ltd,1807794.0,Credo Technology Group Holding Ltd,False,True,False,yahoo
+CRM,EQUITY,"Salesforce, Inc.",1108524.0,"Salesforce, Inc.",False,True,False,yahoo
+CRWD,EQUITY,"CrowdStrike Holdings, Inc.",1535527.0,"CrowdStrike Holdings, Inc.",False,True,False,yahoo
+CRWV,EQUITY,"CoreWeave, Inc.",1769628.0,"CoreWeave, Inc.",False,True,False,yahoo
+CSCO,EQUITY,"Cisco Systems, Inc.",858877.0,"CISCO SYSTEMS, INC.",False,True,False,yahoo
+CSX,EQUITY,CSX Corporation,277948.0,CSX CORP,False,True,False,yahoo
+CVNA,EQUITY,Carvana Co.,1690820.0,CARVANA CO.,False,True,False,yahoo
+CVS,EQUITY,CVS Health Corporation,64803.0,CVS HEALTH Corp,False,True,False,yahoo
+CVX,EQUITY,Chevron Corporation,93410.0,CHEVRON CORP,False,True,False,yahoo
+DAL,EQUITY,"Delta Air Lines, Inc.",27904.0,"DELTA AIR LINES, INC.",False,True,False,yahoo
+DASH,EQUITY,"DoorDash, Inc.",1792789.0,"DoorDash, Inc.",False,True,False,yahoo
+DD,EQUITY,"DuPont de Nemours, Inc.",1666700.0,"DuPont de Nemours, Inc.",False,True,False,yahoo
+DDD,EQUITY,3D Systems Corporation,910638.0,3D SYSTEMS CORP,False,True,False,yahoo
+DE,EQUITY,Deere & Company,315189.0,DEERE & CO,False,True,False,yahoo
+DELL,EQUITY,Dell Technologies Inc.,1571996.0,Dell Technologies Inc.,False,True,False,yahoo
+DG,EQUITY,Dollar General Corporation,29534.0,DOLLAR GENERAL CORP,False,True,False,yahoo
+DHR,EQUITY,Danaher Corporation,313616.0,DANAHER CORP /DE/,False,True,False,yahoo
+DIA,ETF,State Street SPDR Dow Jones Industrial Average ETF Trust,1041130.0,SPDR DOW JONES INDUSTRIAL AVERAGE ETF TRUST,True,True,False,yahoo
+DIS,EQUITY,The Walt Disney Company,1744489.0,Walt Disney Co,False,True,False,yahoo
+DJT,EQUITY,Trump Media & Technology Group Corp.,1849635.0,Trump Media & Technology Group Corp.,False,True,False,yahoo
+DKNG,EQUITY,DraftKings Inc.,1883685.0,DraftKings Inc.,False,True,False,yahoo
+DOCU,EQUITY,"DocuSign, Inc.",1261333.0,"DOCUSIGN, INC.",False,True,False,yahoo
+DVN,EQUITY,Devon Energy Corporation,1090012.0,DEVON ENERGY CORP/DE,False,True,False,yahoo
+EBAY,EQUITY,eBay Inc.,1065088.0,EBAY INC,False,True,False,yahoo
+ECL,EQUITY,Ecolab Inc.,31462.0,ECOLAB INC.,False,True,False,yahoo
+EEM,ETF,iShares MSCI Emerging Markets ETF,,,True,True,False,yahoo
+EFA,ETF,iShares MSCI EAFE ETF,,,True,True,False,yahoo
+EFX,EQUITY,Equifax Inc.,33185.0,EQUIFAX INC,False,True,False,yahoo
+ELV,EQUITY,"Elevance Health, Inc.",1156039.0,"Elevance Health, Inc.",False,True,False,yahoo
+EMB,ETF,iShares J.P. Morgan USD Emerging Markets Bond ETF,,,True,True,False,yahoo
+ENPH,EQUITY,"Enphase Energy, Inc.",1463101.0,"Enphase Energy, Inc.",False,True,False,yahoo
+EOG,EQUITY,"EOG Resources, Inc.",821189.0,EOG RESOURCES INC,False,True,False,yahoo
+ETN,EQUITY,Eaton Corporation plc,1551182.0,Eaton Corp plc,False,True,False,yahoo
+EWJ,ETF,iShares MSCI Japan ETF,,,True,True,False,yahoo
+EWY,ETF,iShares MSCI South Korea ETF,,,True,True,False,yahoo
+F,EQUITY,Ford Motor Company,37996.0,FORD MOTOR CO,False,True,False,yahoo
+FAS,ETF,Direxion Daily Financial Bull 3X Shares,,,True,True,False,yahoo
+FCX,EQUITY,Freeport-McMoRan Inc.,831259.0,FREEPORT-MCMORAN INC,False,True,False,yahoo
+FDX,EQUITY,FedEx Corporation,1048911.0,FEDEX CORP,False,True,False,yahoo
+FIS,EQUITY,"Fidelity National Information Services, Inc.",1136893.0,"Fidelity National Information Services, Inc.",False,True,False,yahoo
+FISV,EQUITY,"Fiserv, Inc.",798354.0,FISERV INC,False,True,False,yahoo
+FSLY,EQUITY,"Fastly, Inc.",1517413.0,"Fastly, Inc.",False,True,False,yahoo
+FTV,EQUITY,Fortive Corporation,1659166.0,Fortive Corp,False,True,False,yahoo
+FUBO,EQUITY,FuboTV Inc.,1484769.0,FuboTV Inc.,False,True,False,yahoo
+FXI,ETF,iShares China Large-Cap ETF,,,True,True,False,yahoo
+GBTC,ETF,Grayscale Bitcoin Trust ETF,1588489.0,Grayscale Bitcoin Trust ETF,True,True,False,yahoo
+GDX,ETF,VanEck Gold Miners ETF,,,True,True,False,yahoo
+GDXJ,ETF,VanEck Junior Gold Miners ETF,,,True,True,False,yahoo
+GE,EQUITY,GE Aerospace,40545.0,GENERAL ELECTRIC CO,False,True,False,yahoo
+GEV,EQUITY,GE Vernova Inc.,1996810.0,GE Vernova Inc.,False,True,False,yahoo
+GILD,EQUITY,"Gilead Sciences, Inc.",882095.0,"GILEAD SCIENCES, INC.",False,True,False,yahoo
+GLD,ETF,SPDR Gold Shares,1222333.0,SPDR GOLD TRUST,True,True,False,yahoo
+GLW,EQUITY,Corning Incorporated,24741.0,CORNING INC /NY,False,True,False,yahoo
+GM,EQUITY,General Motors Company,1467858.0,General Motors Co,False,True,False,yahoo
+GME,EQUITY,GameStop Corp.,1326380.0,GameStop Corp.,False,True,False,yahoo
+GOOG,EQUITY,Alphabet Inc.,1652044.0,Alphabet Inc.,False,True,False,yahoo
+GOOGL,EQUITY,Alphabet Inc.,1652044.0,Alphabet Inc.,False,True,False,yahoo
+GPRO,EQUITY,"GoPro, Inc.",1500435.0,"GoPro, Inc.",False,True,False,yahoo
+GS,EQUITY,"The Goldman Sachs Group, Inc.",886982.0,GOLDMAN SACHS GROUP INC,False,True,False,yahoo
+HAL,EQUITY,Halliburton Company,45012.0,HALLIBURTON CO,False,True,False,yahoo
+HD,EQUITY,"The Home Depot, Inc.",354950.0,"HOME DEPOT, INC.",False,True,False,yahoo
+HEDJ,ETF,WisdomTree Europe Hedged Equity Fund,,,True,True,False,yahoo
+HIMS,EQUITY,"Hims & Hers Health, Inc.",1773751.0,"Hims & Hers Health, Inc.",False,True,False,yahoo
+HON,EQUITY,Honeywell International Inc.,773840.0,HONEYWELL INTERNATIONAL INC,False,True,False,yahoo
+HOOD,EQUITY,"Robinhood Markets, Inc.",1783879.0,"Robinhood Markets, Inc.",False,True,False,yahoo
+HPQ,EQUITY,HP Inc.,47217.0,HP INC,False,True,False,yahoo
+HUM,EQUITY,Humana Inc.,49071.0,HUMANA INC,False,True,False,yahoo
+HYG,ETF,iShares iBoxx $ High Yield Corporate Bond ETF,,,True,True,False,yahoo
+IAU,ETF,iShares Gold Trust,1278680.0,ISHARES GOLD TRUST,True,True,False,yahoo
+IBB,ETF,iShares Biotechnology ETF,,,True,True,False,yahoo
+IBIT,ETF,iShares Bitcoin Trust ETF,1980994.0,iShares Bitcoin Trust ETF,True,True,False,yahoo
+IBM,EQUITY,International Business Machines Corporation,51143.0,INTERNATIONAL BUSINESS MACHINES CORP,False,True,False,yahoo
+IEF,ETF,iShares 7-10 Year Treasury Bond ETF,,,True,True,False,yahoo
+IEFA,ETF,iShares Core MSCI EAFE ETF,,,True,True,False,yahoo
+IEMG,ETF,iShares Core MSCI Emerging Markets ETF,,,True,True,False,yahoo
+IGV,ETF,iShares Expanded Tech-Software Sector ETF,,,True,True,False,yahoo
+ILMN,EQUITY,"Illumina, Inc.",1110803.0,"ILLUMINA, INC.",False,True,False,yahoo
+INO,EQUITY,"Inovio Pharmaceuticals, Inc.",1055726.0,"INOVIO PHARMACEUTICALS, INC.",False,True,False,yahoo
+INTC,EQUITY,Intel Corporation,50863.0,INTEL CORP,False,True,False,yahoo
+INTU,EQUITY,Intuit Inc.,896878.0,INTUIT INC.,False,True,False,yahoo
+IONQ,EQUITY,"IonQ, Inc.",1824920.0,"IonQ, Inc.",False,True,False,yahoo
+IREN,EQUITY,IREN Limited,1878848.0,IREN Ltd,False,True,False,yahoo
+ISRG,EQUITY,"Intuitive Surgical, Inc.",1035267.0,INTUITIVE SURGICAL INC,False,True,False,yahoo
+IVV,ETF,iShares Core S&P 500 ETF,,,True,True,False,yahoo
+IWD,ETF,iShares Russell 1000 Value ETF,,,True,False,False,yahoo
+IWM,ETF,iShares Russell 2000 ETF,,,True,True,False,yahoo
+IYR,ETF,iShares U.S. Real Estate ETF,,,True,True,False,yahoo
+JD,EQUITY,"JD.com, Inc.",1549802.0,"JD.com, Inc.",False,True,False,yahoo
+JNJ,EQUITY,Johnson & Johnson,200406.0,JOHNSON & JOHNSON,False,True,False,yahoo
+JNK,ETF,State Street SPDR Bloomberg High Yield Bond ETF,,,True,True,False,yahoo
+JNUG,ETF,Direxion Daily Junior Gold Miners Index Bull 2X Shares,,,True,True,False,yahoo
+JPM,EQUITY,JPMorgan Chase & Co.,19617.0,JPMORGAN CHASE & CO,False,True,False,yahoo
+KLAC,EQUITY,KLA Corporation,319201.0,KLA CORP,False,True,False,yahoo
+KMI,EQUITY,"Kinder Morgan, Inc.",1506307.0,"KINDER MORGAN, INC.",False,True,False,yahoo
+KO,EQUITY,The Coca-Cola Company,21344.0,COCA COLA CO,False,True,False,yahoo
+KRE,ETF,State Street SPDR S&P Regional Banking ETF,,,True,True,False,yahoo
+KVUE,EQUITY,Kenvue Inc.,1944048.0,Kenvue Inc.,False,True,False,yahoo
+KWEB,ETF,KraneShares CSI China Internet ETF,,,True,True,False,yahoo
+LCID,EQUITY,"Lucid Group, Inc.",1811210.0,"Lucid Group, Inc.",False,True,False,yahoo
+LI,EQUITY,Li Auto Inc.,1791706.0,Li Auto Inc.,False,True,False,yahoo
+LIN,EQUITY,Linde plc,1707925.0,LINDE PLC,False,True,False,yahoo
+LITE,EQUITY,Lumentum Holdings Inc.,1633978.0,Lumentum Holdings Inc.,False,True,False,yahoo
+LLY,EQUITY,Eli Lilly and Company,59478.0,ELI LILLY & Co,False,True,False,yahoo
+LMT,EQUITY,Lockheed Martin Corporation,936468.0,LOCKHEED MARTIN CORP,False,True,False,yahoo
+LOW,EQUITY,"Lowe's Companies, Inc.",60667.0,LOWES COMPANIES INC,False,True,False,yahoo
+LQD,ETF,iShares iBoxx $ Investment Grade Corporate Bond ETF,,,True,True,False,yahoo
+LRCX,EQUITY,Lam Research Corporation,707549.0,LAM RESEARCH CORP,False,True,False,yahoo
+LULU,EQUITY,lululemon athletica inc.,1397187.0,lululemon athletica inc.,False,True,False,yahoo
+LUV,EQUITY,Southwest Airlines Co.,92380.0,SOUTHWEST AIRLINES CO,False,True,False,yahoo
+LVS,EQUITY,Las Vegas Sands Corp.,1300514.0,LAS VEGAS SANDS CORP,False,True,False,yahoo
+LYB,EQUITY,LyondellBasell Industries N.V.,1489393.0,LyondellBasell Industries N.V.,False,True,False,yahoo
+MA,EQUITY,Mastercard Incorporated,1141391.0,Mastercard Inc,False,True,False,yahoo
+MCD,EQUITY,McDonald's Corporation,63908.0,MCDONALDS CORP,False,True,False,yahoo
+MCK,EQUITY,McKesson Corporation,927653.0,MCKESSON CORP,False,True,False,yahoo
+MDLZ,EQUITY,"Mondelez International, Inc.",1103982.0,"Mondelez International, Inc.",False,True,False,yahoo
+MDT,EQUITY,Medtronic plc,1613103.0,Medtronic plc,False,True,False,yahoo
+MDY,ETF,State Street SPDR S&P MIDCAP 400 ETF Trust,936958.0,SPDR S&P MIDCAP 400 ETF TRUST,True,True,False,yahoo
+MELI,EQUITY,"MercadoLibre, Inc.",1099590.0,MERCADOLIBRE INC,False,True,False,yahoo
+MET,EQUITY,"MetLife, Inc.",1099219.0,METLIFE INC,False,True,False,yahoo
+META,EQUITY,"Meta Platforms, Inc.",1326801.0,"Meta Platforms, Inc.",False,True,False,yahoo
+MMM,EQUITY,3M Company,66740.0,3M CO,False,True,False,yahoo
+MO,EQUITY,"Altria Group, Inc.",764180.0,"ALTRIA GROUP, INC.",False,True,False,yahoo
+MPC,EQUITY,Marathon Petroleum Corporation,1510295.0,Marathon Petroleum Corp,False,True,False,yahoo
+MRK,EQUITY,"Merck & Co., Inc.",310158.0,"Merck & Co., Inc.",False,True,False,yahoo
+MRNA,EQUITY,"Moderna, Inc.",1682852.0,"Moderna, Inc.",False,True,False,yahoo
+MRVL,EQUITY,"Marvell Technology, Inc.",1835632.0,"Marvell Technology, Inc.",False,True,False,yahoo
+MS,EQUITY,Morgan Stanley,895421.0,MORGAN STANLEY,False,True,False,yahoo
+MSFT,EQUITY,Microsoft Corporation,789019.0,MICROSOFT CORP,False,True,False,yahoo
+MSTR,EQUITY,Strategy Inc,1050446.0,Strategy Inc,False,True,False,yahoo
+MU,EQUITY,"Micron Technology, Inc.",723125.0,MICRON TECHNOLOGY INC,False,True,False,yahoo
+MUB,ETF,iShares National Muni Bond ETF,,,True,True,False,yahoo
+NBIS,EQUITY,Nebius Group N.V.,1513845.0,Nebius Group N.V.,False,True,False,yahoo
+NCLH,EQUITY,Norwegian Cruise Line Holdings Ltd.,1513761.0,Norwegian Cruise Line Holdings Ltd.,False,True,False,yahoo
+NEE,EQUITY,"NextEra Energy, Inc.",753308.0,NEXTERA ENERGY INC,False,True,False,yahoo
+NFLX,EQUITY,"Netflix, Inc.",1065280.0,NETFLIX INC,False,True,False,yahoo
+NIO,EQUITY,NIO Inc.,1736541.0,NIO Inc.,False,True,False,yahoo
+NKE,EQUITY,"NIKE, Inc.",320187.0,"NIKE, Inc.",False,True,False,yahoo
+NOK,EQUITY,Nokia Oyj,924613.0,NOKIA CORP,False,True,False,yahoo
+NOW,EQUITY,"ServiceNow, Inc.",1373715.0,"ServiceNow, Inc.",False,True,False,yahoo
+NTES,EQUITY,"NetEase, Inc.",1110646.0,"NetEase, Inc.",False,True,False,yahoo
+NVAX,EQUITY,"Novavax, Inc.",1000694.0,NOVAVAX INC,False,True,False,yahoo
+NVDA,EQUITY,NVIDIA Corporation,1045810.0,NVIDIA CORP,False,True,False,yahoo
+NXPI,EQUITY,NXP Semiconductors N.V.,1413447.0,NXP Semiconductors N.V.,False,True,False,yahoo
+OIH,ETF,VanEck Oil Services ETF,,,True,True,False,yahoo
+OPEN,EQUITY,Opendoor Technologies Inc.,1801169.0,Opendoor Technologies Inc.,False,True,False,yahoo
+ORCL,EQUITY,Oracle Corporation,1341439.0,ORACLE CORP,False,True,False,yahoo
+ORLY,EQUITY,"O'Reilly Automotive, Inc.",898173.0,O REILLY AUTOMOTIVE INC,False,False,False,yahoo
+OXY,EQUITY,Occidental Petroleum Corporation,797468.0,OCCIDENTAL PETROLEUM CORP /DE/,False,True,False,yahoo
+PANW,EQUITY,"Palo Alto Networks, Inc.",1327567.0,Palo Alto Networks Inc,False,True,False,yahoo
+PBR,EQUITY,Petróleo Brasileiro S.A. - Petrobras,1119639.0,PETROBRAS - PETROLEO BRASILEIRO SA,False,True,False,yahoo
+PDD,EQUITY,PDD Holdings Inc.,1737806.0,PDD Holdings Inc.,False,True,False,yahoo
+PEP,EQUITY,"PepsiCo, Inc.",77476.0,PEPSICO INC,False,True,False,yahoo
+PFE,EQUITY,Pfizer Inc.,78003.0,PFIZER INC,False,True,False,yahoo
+PG,EQUITY,The Procter & Gamble Company,80424.0,PROCTER & GAMBLE Co,False,True,False,yahoo
+PINS,EQUITY,"Pinterest, Inc.",1506293.0,"PINTEREST, INC.",False,True,False,yahoo
+PLTR,EQUITY,Palantir Technologies Inc.,1321655.0,Palantir Technologies Inc.,False,True,False,yahoo
+PLUG,EQUITY,Plug Power Inc.,1093691.0,PLUG POWER INC,False,True,False,yahoo
+PM,EQUITY,Philip Morris International Inc.,1413329.0,Philip Morris International Inc.,False,True,False,yahoo
+PRGO,EQUITY,Perrigo Company plc,1585364.0,PERRIGO Co plc,False,True,False,yahoo
+PSKY,EQUITY,Skydance Corporation,2041610.0,Paramount Skydance Corp,False,True,False,yahoo
+PTON,EQUITY,"Peloton Interactive, Inc.",1639825.0,"PELOTON INTERACTIVE, INC.",False,True,False,yahoo
+PYPL,EQUITY,"PayPal Holdings, Inc.",1633917.0,"PayPal Holdings, Inc.",False,True,False,yahoo
+QCOM,EQUITY,QUALCOMM Incorporated,804328.0,QUALCOMM INC/DE,False,True,False,yahoo
+QQQ,ETF,Invesco QQQ Trust,,,True,True,False,yahoo
+QQQM,ETF,Invesco NASDAQ 100 ETF,,,True,True,False,yahoo
+QS,EQUITY,QuantumScape Corporation,1811414.0,QuantumScape Corp,False,True,False,yahoo
+RBLX,EQUITY,Roblox Corporation,1315098.0,Roblox Corp,False,True,False,yahoo
+RCL,EQUITY,Royal Caribbean Cruises Ltd.,884887.0,ROYAL CARIBBEAN CRUISES LTD,False,True,False,yahoo
+RDDT,EQUITY,"Reddit, Inc.",1713445.0,"Reddit, Inc.",False,True,False,yahoo
+REGN,EQUITY,"Regeneron Pharmaceuticals, Inc.",872589.0,"REGENERON PHARMACEUTICALS, INC.",False,True,False,yahoo
+RGTI,EQUITY,"Rigetti Computing, Inc.",1838359.0,"Rigetti Computing, Inc.",False,True,False,yahoo
+RIVN,EQUITY,"Rivian Automotive, Inc.",1874178.0,"Rivian Automotive, Inc. / DE",False,True,False,yahoo
+ROKU,EQUITY,"Roku, Inc.",1428439.0,"ROKU, INC",False,True,False,yahoo
+RSP,ETF,Invesco S&P 500 Equal Weight ETF,,,True,True,False,yahoo
+RTX,EQUITY,RTX Corporation,101829.0,RTX Corp,False,True,False,yahoo
+SBUX,EQUITY,Starbucks Corporation,829224.0,STARBUCKS CORP,False,True,False,yahoo
+SCHW,EQUITY,The Charles Schwab Corporation,316709.0,SCHWAB CHARLES CORP,False,True,False,yahoo
+SE,EQUITY,Sea Limited,1703399.0,Sea Ltd,False,True,False,yahoo
+SGOV,ETF,iShares 0-3 Month Treasury Bond ETF,,,True,True,False,yahoo
+SHOP,EQUITY,Shopify Inc.,1594805.0,SHOPIFY INC.,False,True,False,yahoo
+SKHY,EQUITY,SK hynix Inc.,2120882.0,SK hynix Inc.,False,True,False,yahoo
+SLB,EQUITY,SLB N.V.,87347.0,SLB LIMITED/NV,False,True,False,yahoo
+SLV,ETF,iShares Silver Trust,1330568.0,iShares Silver Trust,True,True,False,yahoo
+SMCI,EQUITY,"Super Micro Computer, Inc.",1375365.0,"Super Micro Computer, Inc.",False,True,False,yahoo
+SNAP,EQUITY,Snap Inc.,1564408.0,Snap Inc,False,True,False,yahoo
+SNDK,EQUITY,Sandisk Corporation,2023554.0,Sandisk Corp,False,True,False,yahoo
+SNOW,EQUITY,Snowflake Inc.,1640147.0,Snowflake Inc.,False,True,False,yahoo
+SNPS,EQUITY,"Synopsys, Inc.",883241.0,SYNOPSYS INC,False,True,False,yahoo
+SOFI,EQUITY,"SoFi Technologies, Inc.",1818874.0,"SoFi Technologies, Inc.",False,True,False,yahoo
+SOUN,EQUITY,"SoundHound AI, Inc.",1840856.0,"SOUNDHOUND AI, INC.",False,True,False,yahoo
+SPCE,EQUITY,"Virgin Galactic Holdings, Inc.",1706946.0,"Virgin Galactic Holdings, Inc",False,True,False,yahoo
+SPCX,EQUITY,Space Exploration Technologies Corp.,1181412.0,SPACE EXPLORATION TECHNOLOGIES CORP,False,True,False,yahoo
+SPGI,EQUITY,S&P Global Inc.,64040.0,S&P Global Inc.,False,True,False,yahoo
+SPOT,EQUITY,Spotify Technology S.A.,1639920.0,Spotify Technology S.A.,False,True,False,yahoo
+SPY,ETF,State Street SPDR S&P 500 ETF Trust,884394.0,SPDR S&P 500 ETF TRUST,True,True,False,yahoo
+STX,EQUITY,Seagate Technology Holdings plc,1137789.0,Seagate Technology Holdings plc,False,True,False,yahoo
+STZ,EQUITY,"Constellation Brands, Inc.",16918.0,"CONSTELLATION BRANDS, INC.",False,True,False,yahoo
+SVXY,ETF,ProShares Short VIX Short-Term Futures ETF,1415311.0,ProShares Trust II,True,True,False,yahoo
+SWKS,EQUITY,"Skyworks Solutions, Inc.",4127.0,"SKYWORKS SOLUTIONS, INC.",False,True,False,yahoo
+SYF,EQUITY,Synchrony Financial,1601712.0,Synchrony Financial,False,True,False,yahoo
+T,EQUITY,AT&T Inc.,732717.0,AT&T INC.,False,True,False,yahoo
+TDOC,EQUITY,"Teladoc Health, Inc.",1477449.0,"Teladoc Health, Inc.",False,True,False,yahoo
+TER,EQUITY,"Teradyne, Inc.",97210.0,"TERADYNE, INC",False,True,False,yahoo
+TEVA,EQUITY,Teva Pharmaceutical Industries Limited,818686.0,TEVA PHARMACEUTICAL INDUSTRIES LTD,False,True,False,yahoo
+TGT,EQUITY,Target Corporation,27419.0,TARGET CORP,False,True,False,yahoo
+TLRY,EQUITY,"Tilray Brands, Inc.",1731348.0,"Tilray Brands, Inc.",False,True,False,yahoo
+TLT,ETF,iShares 20+ Year Treasury Bond ETF,,,True,True,False,yahoo
+TMO,EQUITY,Thermo Fisher Scientific Inc.,97745.0,THERMO FISHER SCIENTIFIC INC.,False,True,False,yahoo
+TMUS,EQUITY,"T-Mobile US, Inc.",1283699.0,"T-Mobile US, Inc.",False,True,False,yahoo
+TNA,ETF,Direxion Daily Small Cap Bull 3X Shares,,,True,True,False,yahoo
+TQQQ,ETF,ProShares UltraPro QQQ,,,True,True,False,yahoo
+TSLA,EQUITY,"Tesla, Inc.",1318605.0,"Tesla, Inc.",False,True,False,yahoo
+TSM,EQUITY,Taiwan Semiconductor Manufacturing Company Limited,1046179.0,TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD,False,True,False,yahoo
+TTD,EQUITY,"The Trade Desk, Inc.",1671933.0,"Trade Desk, Inc.",False,True,False,yahoo
+TWLO,EQUITY,Twilio Inc.,1447669.0,TWILIO INC,False,True,False,yahoo
+TXN,EQUITY,Texas Instruments Incorporated,97476.0,TEXAS INSTRUMENTS INC,False,True,False,yahoo
+TZA,ETF,Direxion Daily Small Cap Bear 3X Shares,,,True,True,False,yahoo
+UAL,EQUITY,"United Airlines Holdings, Inc.",100517.0,"United Airlines Holdings, Inc.",False,True,False,yahoo
+UBER,EQUITY,"Uber Technologies, Inc.",1543151.0,"Uber Technologies, Inc",False,True,False,yahoo
+UNH,EQUITY,UnitedHealth Group Incorporated,731766.0,UNITEDHEALTH GROUP INC,False,True,False,yahoo
+UNP,EQUITY,Union Pacific Corporation,100885.0,UNION PACIFIC CORP,False,True,False,yahoo
+UPS,EQUITY,"United Parcel Service, Inc.",1090727.0,UNITED PARCEL SERVICE INC,False,True,False,yahoo
+UPST,EQUITY,"Upstart Holdings, Inc.",1647639.0,"Upstart Holdings, Inc.",False,True,False,yahoo
+USO,ETF,"United States Oil Fund, LP",1327068.0,"United States Oil Fund, LP",True,True,False,yahoo
+UVXY,ETF,ProShares Ultra VIX Short-Term Futures ETF,1415311.0,ProShares Trust II,True,True,False,yahoo
+V,EQUITY,Visa Inc.,1403161.0,VISA INC.,False,True,False,yahoo
+VEA,ETF,Vanguard FTSE Developed Markets Index Fund ETF Shares,,,True,True,False,yahoo
+VLO,EQUITY,Valero Energy Corporation,1035002.0,VALERO ENERGY CORP/TX,False,True,False,yahoo
+VNQ,ETF,Vanguard Real Estate Index Fund ETF Shares,,,True,True,False,yahoo
+VOD,EQUITY,Vodafone Group Public Limited Company,839923.0,VODAFONE GROUP PUBLIC LTD CO,False,True,False,yahoo
+VOO,ETF,Vanguard S&P 500 ETF,,,True,True,False,yahoo
+VRT,EQUITY,Vertiv Holdings Co,1674101.0,Vertiv Holdings Co,False,True,False,yahoo
+VST,EQUITY,Vistra Corp.,1692819.0,Vistra Corp.,False,True,False,yahoo
+VTI,ETF,Vanguard Morningstar Total Stock Market ETF,,,True,True,False,yahoo
+VTRS,EQUITY,Viatris Inc.,1792044.0,Viatris Inc,False,True,False,yahoo
+VWO,ETF,Vanguard FTSE Emerging Markets Index Fund ETF Shares,,,True,True,False,yahoo
+VXX,ETF,iPath Series B S&P 500 VIX Short-Term Futures ETN,312070.0,BARCLAYS BANK PLC,True,True,False,yahoo
+VZ,EQUITY,Verizon Communications Inc.,732712.0,VERIZON COMMUNICATIONS INC,False,True,False,yahoo
+W,EQUITY,Wayfair Inc.,1616707.0,Wayfair Inc.,False,True,False,yahoo
+WDC,EQUITY,Western Digital Corporation,106040.0,WESTERN DIGITAL CORP,False,True,False,yahoo
+WFC,EQUITY,Wells Fargo & Company,72971.0,WELLS FARGO & COMPANY/MN,False,True,False,yahoo
+WMB,EQUITY,"The Williams Companies, Inc.",107263.0,"WILLIAMS COMPANIES, INC.",False,True,False,yahoo
+WMT,EQUITY,Walmart Inc.,104169.0,Walmart Inc.,False,True,False,yahoo
+WYNN,EQUITY,"Wynn Resorts, Limited",1174922.0,WYNN RESORTS LTD,False,True,False,yahoo
+XBI,ETF,State Street SPDR S&P Biotech ETF,,,True,True,False,yahoo
+XLB,ETF,State Street Materials Select Sector SPDR ETF,,,True,True,False,yahoo
+XLE,ETF,State Street Energy Select Sector SPDR ETF,,,True,True,False,yahoo
+XLF,ETF,State Street Financial Select Sector SPDR ETF,,,True,True,False,yahoo
+XLI,ETF,State Street Industrial Select Sector SPDR ETF,,,True,True,False,yahoo
+XLK,ETF,State Street Technology Select Sector SPDR ETF,,,True,True,False,yahoo
+XLP,ETF,State Street Consumer Staples Select Sector SPDR ETF,,,True,True,False,yahoo
+XLU,ETF,State Street Utilities Select Sector SPDR ETF,,,True,True,False,yahoo
+XLV,ETF,State Street Health Care Select Sector SPDR ETF,,,True,True,False,yahoo
+XLY,ETF,State Street Consumer Discretionary Select Sector SPDR ETF,,,True,True,False,yahoo
+XOM,EQUITY,ExxonMobil Holdings Corporation,2115436.0,ExxonMobil Holdings Corp,False,True,False,yahoo
+XYZ,EQUITY,"Block, Inc.",1512673.0,"Block, Inc.",False,True,False,yahoo
+YELP,EQUITY,Yelp Inc.,1345016.0,YELP INC,False,True,False,yahoo
+ZM,EQUITY,"Zoom Communications, Inc.",1585521.0,"Zoom Communications, Inc.",False,True,False,yahoo
+AET,EQUITY (delisted),AETNA INC /PA/,1122304.0,AETNA INC /PA/,False,True,True,alpaca
+AGN,EQUITY (delisted),ALLERGAN PLC,1578845.0,Allergan plc,False,True,True,alpaca
+ALXN,EQUITY (delisted),"ALEXION PHARMACEUTICALS, INC.",899866.0,"ALEXION PHARMACEUTICALS, INC.",False,True,True,alpaca
+ATVI,EQUITY (delisted),"ACTIVISION BLIZZARD, INC.",718877.0,"Activision Blizzard, Inc.",False,True,True,alpaca
+BXLT,EQUITY (delisted),Baxalta Inc,1620546.0,Baxalta Inc,False,True,True,alpaca
+CELG,EQUITY (delisted),CELGENE CORPORATION,816284.0,CELGENE CORP /DE/,False,True,True,alpaca
+ESRX,EQUITY (delisted),Express Scripts Holding Co.,1532063.0,Express Scripts Holding Co.,False,True,True,alpaca
+FRC,EQUITY (delisted),no companyfacts (404),1132979.0,FIRST REPUBLIC BANK,False,True,True,alpaca
+LNKD,EQUITY (delisted),LINKEDIN CORP,1271024.0,LINKEDIN CORP,False,True,True,alpaca
+MON,EQUITY (delisted),MONSANTO CO /NEW/,1110783.0,MONSANTO CO /NEW/,False,True,True,alpaca
+PXD,EQUITY (delisted),PIONEER NATURAL RESOURCES CO,1038357.0,PIONEER NATURAL RESOURCES CO,False,True,True,alpaca
+RAI,EQUITY (delisted),REYNOLDS AMERICAN INC,1275283.0,REYNOLDS AMERICAN INC,False,True,True,alpaca
+SHPG,EQUITY (delisted),Shire plc,936402.0,Shire plc,False,True,True,alpaca
+TWC,EQUITY (delisted),TIME WARNER CABLE INC.,1377013.0,"SPECTRUM MANAGEMENT HOLDING COMPANY, LLC",False,True,True,alpaca
+TWTR,EQUITY (delisted),"Twitter, Inc.",1418091.0,"TWITTER, INC.",False,True,True,alpaca
+TWX,EQUITY (delisted),TIME WARNER INC.,1105705.0,"WARNER MEDIA, LLC",False,True,True,alpaca
+WBA,EQUITY (delisted),"WALGREENS BOOTS ALLIANCE, INC.",1618921.0,"Walgreens Boots Alliance, Inc.",False,True,True,alpaca
+X,EQUITY (delisted),United States Steel Corp,1163302.0,UNITED STATES STEEL CORP,False,True,True,alpaca
+XLNX,EQUITY (delisted),"XILINX, INC.",743988.0,XILINX INC,False,True,True,alpaca
+YHOO,EQUITY (delisted),YAHOO INC,1011006.0,ALTABA INC.,False,True,True,alpaca
