@@ -97,6 +97,7 @@ bots/*
 !bots/video_calls.py
 !bots/fleet_positions.py
 !bots/social_calls.py
+!bots/operator_desk.py
 
 # The dossiers that go with them — what each bot is, and what was measured.
 !bots/dividend.json
