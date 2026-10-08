@@ -1,7 +1,15 @@
-"""Watch and read what the operator sent the village by hand.
+"""Answer the operator's chat, and watch and read what they sent the village.
 
     python scripts/inbox_watch.py --to-railway       # the scheduled run, every 5 minutes
     python scripts/inbox_watch.py --to-railway --once
+
+**Chat** (`src/trading/chat.py`): each run stays up for `WATCH_S`, looking for a
+new question every `POLL_S`, so an answer starts within seconds rather than at
+the next five-minute tick. The village is Claude on its strongest model with
+extended thinking, given a snapshot of the ledger and the conversation, from an
+empty scratch folder. The only tools it has are web search and web fetch, which
+read the internet and change nothing. It cannot read this PC's files or run anything,
+and its answer is text in the ledger.
 
 Runs on the operator's PC, because this is where the village browser is signed
 in to Instagram, TikTok and X, where the Whisper model lives, and where Claude
@@ -46,15 +54,27 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from scripts import video_watch  # noqa: E402
-from src.trading import inbox  # noqa: E402
+from src.trading import chat, inbox  # noqa: E402
 
 #: How far into a sent video or clip the transcript goes.
 MAX_AUDIO_S = 3600
 #: Things read per run. Every five minutes, so a backlog drains quickly anyway.
 PER_RUN = 6
 #: A run that finds the lock younger than this assumes another run is going.
+#: The running one touches it every poll, so a crashed run blocks for this long.
 LOCK = REPO / "data" / "inbox_watch.lock"
-LOCK_S = 40 * 60
+LOCK_S = 15 * 60
+#: How long one run keeps watching for chat, and how often it looks. The task
+#: fires every 5 minutes, so a run that stays up 4.5 hands over to the next.
+WATCH_S = 270
+POLL_S = 8
+#: The village's voice: the strongest model, thinking before it answers.
+CHAT_MODEL = os.environ.get("VILLAGE_CHAT_MODEL", "opus")
+CHAT_THINKING = os.environ.get("VILLAGE_CHAT_THINKING", "16000")
+CHAT_TIMEOUT_S = 420
+#: The daily-clock village keeps its own ledger on this PC (Big-5 Trend, VERITAS,
+#: Fleet Desk). Its snapshot goes in front of the village too, when it is here.
+DAILY_DB = Path(os.environ.get("VILLAGE_DAILY_DB", r"C:\dev\trade-bots-daily\data\mvv_daily.db"))
 PAGE_CHARS = 20000
 
 _LOCAL = Path.home() / ".local" / "bin" / ("claude.exe" if sys.platform == "win32" else "claude")
@@ -62,6 +82,7 @@ CLAUDE = str(_LOCAL) if _LOCAL.exists() else "claude"
 CLAUDE_TIMEOUT_S = 300
 NO_TOOLS = "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch,NotebookEdit,Task"
 READ_ONLY = "Bash,Edit,Write,Glob,Grep,WebFetch,WebSearch,NotebookEdit,Task"
+WEB_ONLY = "Bash,Edit,Write,Read,Glob,Grep,NotebookEdit,Task"
 
 GUARD = (
     "The operator of a paper-trading village sent it the content below and wants to "
@@ -91,14 +112,22 @@ def transcribe(path: Path, max_s: int = MAX_AUDIO_S) -> str:
     return " ".join(words)
 
 
-def claude(prompt: str, cwd: str, tools_off: str = NO_TOOLS) -> str:
-    """Claude Code, headless, on the operator's plan. Raises on a failed run."""
+def claude(prompt: str, cwd: str, tools_off: str = NO_TOOLS, model: str = "",
+           thinking: str = "", timeout_s: int = CLAUDE_TIMEOUT_S) -> tuple:
+    """(answer, models used) from Claude Code, headless, on the operator's plan."""
     args = [CLAUDE, "-p", "--output-format", "json", "--disallowedTools", tools_off]
     if tools_off == READ_ONLY:
         args += ["--allowedTools", "Read"]
+    elif tools_off == WEB_ONLY:
+        args += ["--allowedTools", "WebSearch,WebFetch"]
+    if model:
+        args += ["--model", model]
+    env = dict(os.environ)
+    if thinking:
+        env["MAX_THINKING_TOKENS"] = str(thinking)
     result = subprocess.run(args, input=prompt, capture_output=True, text=True,
                             encoding="utf-8", errors="replace",
-                            timeout=CLAUDE_TIMEOUT_S, cwd=cwd)
+                            timeout=timeout_s, cwd=cwd, env=env)
     try:
         out = json.loads(result.stdout)
     except ValueError as exc:
@@ -106,7 +135,8 @@ def claude(prompt: str, cwd: str, tools_off: str = NO_TOOLS) -> str:
                            f"{result.stderr[:160]!r}") from exc
     if out.get("is_error"):
         raise RuntimeError(f"claude error: {str(out.get('result'))[:160]}")
-    return str(out.get("result") or "").strip()
+    models = ",".join((out.get("modelUsage") or {}).keys())
+    return str(out.get("result") or "").strip(), models
 
 
 def summarise(title: str, text: str, note: str) -> str:
@@ -121,7 +151,7 @@ def summarise(title: str, text: str, note: str) -> str:
               + f"Title/caption: {title[:1000]}\n\n<content>\n{text[:15000]}\n</content>")
     with tempfile.TemporaryDirectory() as scratch:
         try:
-            return claude(prompt, scratch)
+            return claude(prompt, scratch)[0]
         except Exception as exc:  # noqa: BLE001 - a summary is a nicety
             print(f"    no summary: {str(exc)[:120]}")
             return ""
@@ -133,7 +163,7 @@ def look(path: Path, kind: str) -> str:
               "of text in it (for a long document, the parts about markets, stocks, coins "
               "or trades in full, the rest briefly), then describe in a few sentences what "
               f"the {kind} shows. Plain text, no preamble.")
-    return claude(prompt, str(path.parent), READ_ONLY)
+    return claude(prompt, str(path.parent), READ_ONLY)[0]
 
 
 # =========================================================================
@@ -233,6 +263,48 @@ def _close(box: dict) -> None:
 
 
 # =========================================================================
+# talking
+# =========================================================================
+def daily_snapshot() -> str:
+    """The daily village's own ledger, read only, or "" when it is not on this PC."""
+    if not DAILY_DB.exists():
+        return ""
+    from src.db.connection import Database
+
+    daily = Database.from_url(f"sqlite:///{DAILY_DB.as_posix()}")
+    try:
+        return ("\n\nTHE DAILY VILLAGE (a second village on the operator's PC, its own "
+                "ledger, ticking once a weekday after the close):\n" + chat.context(daily))
+    except Exception as exc:  # noqa: BLE001 - the main village still answers
+        return f"\n\n(The daily village on the PC could not be read: {str(exc)[:80]})"
+    finally:
+        daily.close()
+
+
+def answer_chat(db) -> int:
+    """Answer every question waiting in the chat. Returns how many."""
+    n = 0
+    while True:
+        q = chat.claim(db)
+        if q is None:
+            return n
+        print(f"chat #{q['id']}: {q['text'][:80]!r}")
+        started = time.time()
+        try:
+            with tempfile.TemporaryDirectory() as scratch:
+                text, models = claude(chat.prompt(db, q, daily_snapshot()), scratch, WEB_ONLY,
+                                      model=CHAT_MODEL, thinking=CHAT_THINKING,
+                                      timeout_s=CHAT_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 - one question is not the run
+            chat.fail(db, q["id"], str(exc))
+            print(f"    FAILED: {str(exc)[:160]}")
+            return n
+        chat.answer(db, q["id"], text, by=models or CHAT_MODEL)
+        n += 1
+        print(f"    answered in {time.time() - started:.0f}s ({models})")
+
+
+# =========================================================================
 # the run
 # =========================================================================
 def _locked() -> bool:
@@ -266,41 +338,24 @@ def main(argv=None) -> int:
 
         url = railway_database_url()
     db = Database.from_url(url)
-    if not db.query_one("SELECT 1 AS n FROM inbox WHERE status IN ('queued', 'reading') "
-                        "LIMIT 1"):
-        return 0                       # nothing sent: say nothing, every five minutes
     if _locked():
         print("another inbox run is going; leaving it")
+        db.close()
         return 0
-    symbols = video_watch.universe()
+    symbols = None
     box: dict = {}
-    done = 0
+    until = time.time() + (0 if args.once else WATCH_S)
     try:
-        while done < (1 if args.once else PER_RUN):
-            row = inbox.claim(db)
-            if row is None:
+        while True:
+            answer_chat(db)
+            if db.query_one("SELECT 1 AS n FROM inbox WHERE status = 'queued' LIMIT 1"):
+                symbols = symbols or video_watch.universe()
+                read_sends(db, box, symbols, 1 if args.once else PER_RUN, args)
+                answer_chat(db)
+            if time.time() >= until:
                 break
-            done += 1
-            what = row.get("url") or row.get("filename")
-            print(f"#{row['id']} {row['kind']}: {str(what)[:80]}")
-            try:
-                got = read_link(row, box) if row["kind"] == "link" else read_file(row)
-            except (Wall, Exception) as exc:  # noqa: BLE001 - one send is not the run
-                wall = isinstance(exc, Wall) or type(exc).__name__ == "Challenged"
-                inbox.fail(db, row["id"], str(exc), retry=not wall)
-                print(f"    FAILED: {str(exc)[:160]}")
-                if wall:
-                    print("    (stopping links this run: a site wants a person)")
-                    break
-                continue
-            summary = "" if args.no_summary else summarise(
-                got["title"], got["text"], row.get("note") or "")
-            calls = inbox.finish(db, row["id"], text=got["text"], title=got["title"],
-                                 summary=summary, heard_by=got["heard_by"],
-                                 symbols=symbols, note=row.get("note") or "")
-            called = ", ".join(f"{c['symbol']}{'+' if c['direction'] > 0 else '-'}"
-                               for c in calls) or "no calls"
-            print(f"    read: {len(got['text'].split())} words, {called}")
+            LOCK.touch()
+            time.sleep(POLL_S)
     finally:
         _close(box)
         try:
@@ -309,6 +364,35 @@ def main(argv=None) -> int:
             pass
         db.close()
     return 0
+
+
+def read_sends(db, box: dict, symbols, limit: int, args) -> None:
+    done = 0
+    while done < limit:
+        row = inbox.claim(db)
+        if row is None:
+            break
+        done += 1
+        what = row.get("url") or row.get("filename")
+        print(f"#{row['id']} {row['kind']}: {str(what)[:80]}")
+        try:
+            got = read_link(row, box) if row["kind"] == "link" else read_file(row)
+        except (Wall, Exception) as exc:  # noqa: BLE001 - one send is not the run
+            wall = isinstance(exc, Wall) or type(exc).__name__ == "Challenged"
+            inbox.fail(db, row["id"], str(exc), retry=not wall)
+            print(f"    FAILED: {str(exc)[:160]}")
+            if wall:
+                print("    (stopping links this run: a site wants a person)")
+                break
+            continue
+        summary = "" if args.no_summary else summarise(
+            got["title"], got["text"], row.get("note") or "")
+        calls = inbox.finish(db, row["id"], text=got["text"], title=got["title"],
+                             summary=summary, heard_by=got["heard_by"],
+                             symbols=symbols, note=row.get("note") or "")
+        called = ", ".join(f"{c['symbol']}{'+' if c['direction'] > 0 else '-'}"
+                           for c in calls) or "no calls"
+        print(f"    read: {len(got['text'].split())} words, {called}")
 
 
 if __name__ == "__main__":

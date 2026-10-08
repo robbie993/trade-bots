@@ -368,7 +368,7 @@ def _render(eco: Ecosystem, said: str) -> str:
         "<button>Carry out approved decisions</button></form>"
         "<a href='/village/flow'><button>Walk the village &rarr;</button></a>"
         "<a href='/village/solar'><button>Solar system &rarr;</button></a>"
-        "<a href='/village/send'><button class=go>Send the village a video or file "
+        "<a href='/village/talk'><button class=go>Talk to the village / send it a video "
         "&rarr;</button></a>",
     )
     if not reconciliation.ok:
@@ -1936,26 +1936,133 @@ def _sent_card(r: dict) -> str:
     return "<div class=card>" + "".join(parts) + "</div>"
 
 
+_CHAT_STYLE = (
+    "<style>"
+    "#chat{display:flex;flex-direction:column;gap:.5rem;max-height:60vh;overflow-y:auto;"
+    "padding:.25rem 0}"
+    ".msg{max-width:85%;padding:.55rem .8rem;border-radius:14px;white-space:pre-wrap;"
+    "overflow-wrap:anywhere;border:1px solid var(--line)}"
+    ".msg.you{align-self:flex-end;background:var(--bg)}"
+    ".msg.village{align-self:flex-start;background:var(--card)}"
+    ".msg .who{display:block;font-size:.75rem;color:var(--muted);margin-bottom:.15rem}"
+    ".msg.wait{color:var(--muted);font-style:italic}"
+    "#say{width:100%;min-height:4.5rem;padding:.6rem;font:inherit;border-radius:8px;"
+    "border:1px solid var(--line);background:var(--bg);color:var(--fg)}"
+    "</style>"
+)
+
+_CHAT_SCRIPT = """<script>
+(function(){
+  var box=document.getElementById('chat'), form=document.getElementById('talk'),
+      say=document.getElementById('say'), last=+box.dataset.last||0, timer=null;
+  function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+  function bubble(m){
+    var el=document.createElement('div');
+    el.className='msg '+(m.role==='you'?'you':'village');
+    el.innerHTML='<span class=who>'+(m.role==='you'?'You':'The village')+' \u00b7 '+
+      esc((m.created_at||'').slice(11,16))+' UTC</span>'+esc(m.text);
+    box.appendChild(el);
+  }
+  function thinking(on, note){
+    var w=document.getElementById('wait');
+    if(on&&!w){w=document.createElement('div');w.id='wait';w.className='msg village wait';
+      box.appendChild(w);}
+    if(w){ if(on){w.textContent=note;} else {w.remove();} }
+  }
+  function poll(){
+    fetch('/village/talk/messages?after='+last,{credentials:'same-origin'})
+      .then(function(r){return r.json();}).then(function(d){
+        (d.messages||[]).forEach(function(m){thinking(false);bubble(m);last=Math.max(last,m.id);});
+        thinking(d.waiting, d.note||'The village is thinking\u2026');
+        if(d.messages&&d.messages.length){box.scrollTop=box.scrollHeight;}
+        clearTimeout(timer); timer=setTimeout(poll, d.waiting?4000:20000);
+      }).catch(function(){clearTimeout(timer); timer=setTimeout(poll,20000);});
+  }
+  form.addEventListener('submit',function(ev){
+    ev.preventDefault(); var t=say.value.trim(); if(!t){return;}
+    say.value=''; var body=new URLSearchParams(); body.set('text',t);
+    fetch('/village/actions/chat',{method:'POST',credentials:'same-origin',
+      headers:{'X-Requested-With':'fetch'},body:body}).then(function(){poll();});
+  });
+  say.addEventListener('keydown',function(ev){
+    if(ev.key==='Enter'&&!ev.shiftKey&&window.innerWidth>700){ev.preventDefault();
+      form.requestSubmit();}
+  });
+  box.scrollTop=box.scrollHeight; poll();
+})();
+</script>"""
+
+
+def _chat_note(waiting: list) -> str:
+    """What to say while a question waits: thinking, or the PC seems to be off."""
+    from ..db.connection import to_datetime, utcnow
+
+    if not waiting:
+        return ""
+    oldest = to_datetime(waiting[0].get("created_at"))
+    if waiting[0].get("status") == "waiting" and oldest is not None \
+            and (utcnow() - oldest).total_seconds() > 360:
+        return ("Still waiting. The village answers from your PC, which looks off or "
+                "asleep; it will answer as soon as the PC is back.")
+    return "The village is thinking\u2026"
+
+
+@router.get("/village/talk", response_class=HTMLResponse)
 @router.get("/village/send", response_class=HTMLResponse)
 def send_page(request: Request) -> HTMLResponse:
     from ..access import UNLOCK_PATH
     from ..agents.web import page
-    from . import inbox
+    from . import chat, inbox
 
     said = request.query_params.get("said", "")
-    head = ("<h1>Send the village something</h1>"
-            "<p class=muted>A link to an Instagram reel, a TikTok, a post on X, a YouTube "
-            "video, or a file: a video, a voice note, a screenshot, a PDF, a text file. "
-            "The village watches or reads it, keeps what was said, and tests any buy or "
-            "sell call in it on paper against SPY. Nothing sent here can place a trade."
-            "</p><p><a href='/village'>&larr; Mission Control</a></p>")
+    head = ("<h1>Talk to the village</h1>"
+            "<p class=muted>Ask it anything: how the firms are doing, what it thinks of a "
+            "stock, what happened in the news, or nothing to do with trading at all. It "
+            "thinks before it answers and can search the web. It only talks: nothing said "
+            "here can place a trade or change a setting.</p>"
+            "<p><a href='/village'>&larr; Mission Control</a> · "
+            "<a href='#send'>Send it a video or file &darr;</a></p>")
     if said:
         head += f"<div class=card><strong>{e(said)}</strong></div>"
     if not _may_see_inbox(request):
-        return page("Send the village something", head + (
-            f"<div class=card><p><a class='btn go' href='{UNLOCK_PATH}?next=/village/send'>"
-            "Sign in</a> to send something or see what you sent.</p></div>"))
+        return page("Talk to the village", head + (
+            f"<div class=card><p><a class='btn go' href='{UNLOCK_PATH}?next=/village/talk'>"
+            "Sign in</a> to talk to the village or send it something.</p></div>"))
+    db = _inbox_db()
+    try:
+        messages = chat.history(db, 40)
+        asking = chat.waiting(db)
+        rows = inbox.recent(db, 30)
+        pending = inbox.waiting(db)
+    finally:
+        db.close()
+    bubbles = "".join(
+        f"<div class='msg {'you' if m['role'] == 'you' else 'village'}'>"
+        f"<span class=who>{'You' if m['role'] == 'you' else 'The village'} · "
+        f"{e(str(m.get('created_at') or '')[11:16])} UTC</span>{e(m['text'])}</div>"
+        for m in messages)
+    failed = [m for m in messages if m["role"] == "you" and m.get("status") == "failed"]
+    if failed:
+        bubbles += ("<div class='msg village wait'>The village could not answer your last "
+                    f"question ({e(str(failed[-1].get('error') or '')[:120])}). Ask again.</div>")
+    last = max((int(m["id"]) for m in messages), default=0)
+    talk = (
+        _CHAT_STYLE +
+        f"<div class=card><div id=chat data-last={last}>"
+        + (bubbles or "<p class=muted>Say hello.</p>") +
+        "</div><form id=talk method=post action='/village/actions/chat' "
+        "style='display:block;margin-top:.75rem'>"
+        "<textarea id=say name=text maxlength=4000 "
+        "placeholder='Ask the village anything'></textarea>"
+        "<button class=go>Send</button></form>"
+        "<p class=muted>Answers come from Claude on your PC, so the PC has to be on. "
+        "Thinking it through can take a minute.</p></div>")
     form = (
+        "<h2 id=send>Send it a video or file</h2>"
+        "<p class=muted>A link to an Instagram reel, a TikTok, a post on X, a YouTube "
+        "video, or a file: a video, a voice note, a screenshot, a PDF, a text file. "
+        "The village watches or reads it, keeps what was said, and tests any buy or "
+        "sell call in it on paper against SPY.</p>"
         "<div class=card><form method=post action='/village/actions/send' "
         "enctype='multipart/form-data' style='display:block'>"
         "<p><label>Link<br><input name=link type=url inputmode=url "
@@ -1969,17 +2076,54 @@ def send_page(request: Request) -> HTMLResponse:
         f"<p class=muted>Files up to {inbox.MAX_BYTES // (1024 * 1024)} MB. Links and videos "
         "are watched on your PC, where the village browser is signed in; the PC "
         "has to be on. Text files are read right away.</p></div>")
+    # Reload for news of a send only while nobody is typing a question.
+    refresh = ("<script>setTimeout(function r(){var s=document.getElementById('say');"
+               "if(s&&(s.value||document.activeElement===s)){setTimeout(r,30000);return;}"
+               "location.reload()},30000)</script>" if pending else "")
+    listing = "".join(_sent_card(r) for r in rows) or "<p class=muted>Nothing sent yet.</p>"
+    if asking:
+        talk = talk.replace("</div><form id=talk",
+                            f"<div id=wait class='msg village wait'>{e(_chat_note(asking))}"
+                            "</div></div><form id=talk", 1)
+    return page("Talk to the village",
+                head + talk + form + "<h2>What you sent</h2>" + listing
+                + _CHAT_SCRIPT + refresh)
+
+
+@router.get("/village/talk/messages")
+def talk_messages(request: Request, after: int = 0) -> JSONResponse:
+    from . import chat
+
+    if not _may_see_inbox(request):
+        return JSONResponse({"messages": [], "waiting": False}, status_code=403)
     db = _inbox_db()
     try:
-        rows = inbox.recent(db, 30)
-        pending = inbox.waiting(db)
+        rows = [m for m in chat.history(db, 60) if int(m["id"]) > after]
+        asking = chat.waiting(db)
     finally:
         db.close()
-    refresh = ("<script>setTimeout(function(){location.reload()},30000)</script>"
-               if pending else "")
-    listing = "".join(_sent_card(r) for r in rows) or "<p class=muted>Nothing sent yet.</p>"
-    return page("Send the village something",
-                head + form + "<h2>What you sent</h2>" + listing + refresh)
+    return JSONResponse({
+        "messages": [{"id": int(m["id"]), "role": m["role"], "text": m["text"],
+                      "created_at": m.get("created_at") or ""} for m in rows],
+        "waiting": bool(asking), "note": _chat_note(asking)})
+
+
+@router.post("/village/actions/chat")
+def action_chat(request: Request, text: str = Form("")):
+    from . import chat
+
+    db = _inbox_db()
+    try:
+        row = chat.post(db, text)
+        said = ""
+    except ValueError as exc:
+        row, said = 0, str(exc)
+    finally:
+        db.close()
+    if request.headers.get("x-requested-with") == "fetch":
+        return JSONResponse({"ok": bool(row), "id": row, "error": said})
+    return RedirectResponse("/village/talk" + (f"?said={quote(said)}" if said else ""),
+                            status_code=303)
 
 
 def _back_to_send(message: str) -> RedirectResponse:

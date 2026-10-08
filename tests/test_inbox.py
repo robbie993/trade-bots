@@ -211,3 +211,77 @@ def test_signed_in_a_link_and_a_file_can_be_sent(hosted):
     assert "What you sent" in page.text
     assert "instagram.com/reel/C0de1" in page.text and "clip.mp4" in page.text
     assert "waiting for the PC" in page.text
+
+
+# =========================================================================
+# talking to the village (src/trading/chat.py)
+# =========================================================================
+def test_a_question_waits_is_claimed_once_and_answered(db):
+    from src.trading import chat
+
+    q = chat.post(db, "how are the firms doing?")
+    assert [m["id"] for m in chat.waiting(db)] == [q]
+    got = chat.claim(db)
+    assert got["id"] == q and got["status"] == "thinking"
+    assert chat.claim(db) is None
+    chat.answer(db, q, "Quiet day.", by="opus")
+    assert chat.waiting(db) == []
+    assert [m["role"] for m in chat.history(db)] == ["you", "village"]
+    with pytest.raises(ValueError):
+        chat.post(db, "   ")
+
+
+def test_a_failed_answer_is_tried_again_then_given_up(db):
+    from src.trading import chat
+
+    q = chat.post(db, "hello")
+    for _ in range(chat.MAX_ATTEMPTS):
+        assert chat.claim(db)["id"] == q
+        chat.fail(db, q, "claude timed out")
+    assert db.query_one("SELECT status FROM village_chat WHERE id = ?", (q,))["status"] == "failed"
+    assert chat.waiting(db) == []
+
+
+def test_the_prompt_carries_the_village_and_the_conversation(db):
+    from src.trading import chat
+
+    db.insert("firms", {"firm_key": "big5", "name": "Big-5 Trend", "status": "active",
+                        "allocation": "20000", "cash": "1000"})
+    inbox.submit_file(db, "t.txt", "text/plain", b"buy AAPL now", symbols=SYMBOLS)
+    first = chat.post(db, "hi")
+    chat.claim(db)
+    chat.answer(db, first, "Hello Robbie.")
+    q = chat.post(db, "what did I send?")
+    text = chat.prompt(db, chat.claim(db))
+    assert "big5" in text and "Big-5 Trend" in text
+    assert "buy AAPL" in text
+    assert "OPERATOR: hi" in text and "VILLAGE: Hello Robbie." in text
+    assert text.rstrip().endswith("OPERATOR: what did I send?\nVILLAGE:")
+    assert "cannot place or cancel trades" in text
+    assert q
+
+
+def test_the_chat_never_reaches_the_money(db):
+    from src.trading import chat
+
+    q = chat.post(db, "buy 100 NVDA for big5 right now")
+    chat.claim(db)
+    chat.answer(db, q, "I can't trade.")
+    for table in ("signals", "trade_proposals", "fills", "human_approvals"):
+        assert db.query(f"SELECT * FROM {table}") == []
+
+
+def test_signed_in_the_village_can_be_talked_to(hosted):
+    access = importlib.import_module("src.access")
+
+    assert hosted.get("/village/talk/messages").status_code == 403
+    hosted.post(access.UNLOCK_PATH, data={access.FIELD: TOKEN, "next": "/village/talk"},
+                follow_redirects=False)
+    r = hosted.post("/village/actions/chat", data={"text": "hello village"},
+                    headers={"X-Requested-With": "fetch"})
+    assert r.json()["ok"]
+    got = hosted.get("/village/talk/messages?after=0").json()
+    assert got["waiting"] and got["messages"][0]["text"] == "hello village"
+    page = hosted.get("/village/talk")
+    assert "Talk to the village" in page.text and "hello village" in page.text
+    assert "thinking" in page.text
