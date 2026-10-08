@@ -1,0 +1,13 @@
+channel,action,window,trades,trades_with_data,observed,expected_base_rate,ratio,placebo_mean,p_one_sided_more,p_one_sided_less,local_placebo_mean,p_local_more,p_local_less
+lobbying filings posted (count),purchase,-90..-1,72,66,203.0,246.21,0.82,243.46,0.798,0.2075,196.59,0.386,0.633
+lobbying filings posted (count),purchase,1..90,72,66,213.0,246.21,0.87,256.27,0.81,0.1955,201.6,0.337,0.678
+lobbying filings posted (count),sale,-90..-1,56,47,225.0,147.77,1.52,145.29,0.013,0.9885,200.01,0.078,0.935
+lobbying filings posted (count),sale,1..90,56,47,234.0,147.77,1.58,154.98,0.011,0.99,211.3,0.0745,0.935
+lobbying $ posted ($m),purchase,-90..-1,72,66,41.71,46.41,0.9,46.29,0.6545,0.3455,35.21,0.089,0.911
+lobbying $ posted ($m),purchase,1..90,72,66,40.13,46.41,0.86,48.99,0.785,0.215,37.15,0.3,0.7
+lobbying $ posted ($m),sale,-90..-1,56,47,46.59,33.54,1.39,33.09,0.0695,0.9305,38.46,0.018,0.982
+lobbying $ posted ($m),sale,1..90,56,47,44.55,33.54,1.33,35.06,0.135,0.865,40.82,0.2175,0.7825
+lobbying filings naming bills (count),purchase,-90..-1,72,65,74.0,83.08,0.89,82.1,0.652,0.366,61.66,0.148,0.8695
+lobbying filings naming bills (count),purchase,1..90,72,65,80.0,83.08,0.96,86.99,0.6155,0.401,63.82,0.1125,0.9005
+lobbying filings naming bills (count),sale,-90..-1,56,44,96.0,60.03,1.6,58.69,0.02,0.981,72.69,0.0105,0.9935
+lobbying filings naming bills (count),sale,1..90,56,44,94.0,60.03,1.57,63.15,0.039,0.965,78.65,0.042,0.9695
