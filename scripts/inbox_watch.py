@@ -423,6 +423,7 @@ def main(argv=None) -> int:
     symbols = None
     box: dict = {}
     until = time.time() + (0 if args.once else WATCH_S)
+    relearned = 0
     try:
         while True:
             answer_chat(db)
@@ -430,8 +431,10 @@ def main(argv=None) -> int:
                 symbols = symbols or video_watch.universe()
                 read_sends(db, box, symbols, 1 if args.once else PER_RUN, args)
                 answer_chat(db)
-            if not args.no_summary:
-                relearn(db, 1)
+            # Old sends are read again one per run, and only while nobody is
+            # waiting for an answer: the chat comes first.
+            if not args.no_summary and not relearned and not chat.waiting(db):
+                relearned = relearn(db, 1)
             if time.time() >= until:
                 break
             LOCK.touch()
@@ -478,6 +481,7 @@ def relearn(db, limit: int = 2) -> int:
 def read_sends(db, box: dict, symbols, limit: int, args) -> None:
     done = 0
     while done < limit:
+        answer_chat(db)              # a question never waits behind a video
         row = inbox.claim(db)
         if row is None:
             break
