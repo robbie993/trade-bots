@@ -38,6 +38,14 @@ export MVV_LOCAL_DB="${MVV_LOCAL_DB:-sqlite:///data/mvv_daily.db}"
 export TRADE_FIRMS_CONFIG="${TRADE_FIRMS_CONFIG:-config/firm_config_daily.yaml}"
 export TRADE_BAR="${TRADE_BAR:-1d}"
 export VERITAS_BARS_PER_DAY="${VERITAS_BARS_PER_DAY:-1}"
+
+# Daily history is counted in calendar days, and the default (180) is about 124
+# trading days, too few for any 200-day rule: VERITAS and Big-5 Trend would
+# quietly decline every bar. 450 calendar days is about 310 sessions.
+export TRADE_HISTORY_DAYS="${TRADE_HISTORY_DAYS:-450}"
+# The CLI's default source is `synthetic` (practice prices). A daily village
+# that trades on made-up bars is not a test of anything.
+export TRADE_DATA_SOURCE="${TRADE_DATA_SOURCE:-alpaca,yahoo}"
 export MVV_RUN_DIR="${MVV_RUN_DIR:-run-daily}"
 export MVV_LOG_DIR="${MVV_LOG_DIR:-logs-daily}"
 export MVV_GATE_PORT="${MVV_GATE_PORT:-8001}"
