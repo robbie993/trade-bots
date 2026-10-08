@@ -955,7 +955,13 @@ class Ecosystem:
 
                 calls = [call for name, readings in outside
                          for call in calls_from(name, readings, outside=True)]
+                # What the operator sent by hand (src/trading/inbox.py): tested
+                # here on paper and nowhere else — never on the signal board.
+                from . import inbox
+
+                calls += inbox.lab_calls(self.db, market.as_of())
                 report.bot_notes.extend(lab.run(market, calls).lines())
+                inbox.mark_entered(self.db, market.as_of())
         except Exception as exc:  # noqa: BLE001 - research, never a precondition
             report.bot_notes.append(f"idea lab failed: {str(exc)[:160]}")
         # The Pump.fun lab: the launches the meme radar just logged, bought on
