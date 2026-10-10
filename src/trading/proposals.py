@@ -46,14 +46,68 @@ MAX_CHANGES = 4
 FOLLOW_UP = ("heir", "quiet", "review", "estate", "operator")
 
 
-def genes_for(firm) -> dict:
-    """Each gene the firm has: its current value and legal range."""
-    from .brain.evolver import BASE_GENOME, GENES
+#: Genes the backtest feels whatever seats a firm has.
+_EVERY_FIRM = ("stop_loss_pct",)
+
+
+def seats_of(firm, spec=None) -> tuple:
+    """The seats a firm really has: an heir's genome, else its spec, else the
+    old three-seat default (the same order `test_one` uses)."""
+    if spec is None:
+        try:
+            from .firms.spec import load_firm_specs
+            from .config import TradingConfig
+
+            spec = next((s for s in load_firm_specs(config=TradingConfig())
+                         if s.firm_key == firm.firm_key), None)
+        except Exception:  # noqa: BLE001 - no spec is the default seats, not an error
+            spec = None
+    return tuple((firm.genome or {}).get("analysts") or getattr(spec, "analysts", None)
+                 or ("technical", "sentiment", "macro"))
+
+
+def genes_read_by(seats) -> set:
+    """The genes these seats read, found the way UNREAD_GENES was: by reading
+    the seat's own code for the gene names it asks its genome for."""
+    import inspect
+
+    from .firms import analysts as A
+
+    names = set(_EVERY_FIRM)
+    for raw in seats or ():
+        key = str(raw).strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+        key = A.ALIASES.get(key.replace("analyst", ""), key.replace("analyst", ""))
+        cls = A.ANALYSTS.get(key)
+        if cls is None:
+            continue
+        for klass in cls.__mro__:
+            if klass is object or klass.__module__ != A.__name__:
+                continue
+            names.update(re.findall(r"_genome\(genome,\s*[\"']([a-z_]+)[\"']",
+                                    inspect.getsource(klass)))
+        if getattr(cls, "trust_gene", None):
+            names.add(cls.trust_gene)
+    return names
+
+
+def genes_for(firm, seats=None) -> dict:
+    """Each gene the firm's backtest can feel: its current value and legal range.
+
+    Live 2026-10-04 to 10-10: advisers were offered every gene in the
+    vocabulary, so they changed ones this firm's seats never read (and the four
+    UNREAD_GENES nothing reads, and the shadow desk's, which the backtest never
+    runs). Every one came back "changed nothing" and was refused. Offering only
+    what bites turns advice into a change the test can actually judge.
+    """
+    from .brain.evolver import BASE_GENOME, GENES, UNREAD_GENES
 
     genome = firm.genome or {}
+    read = genes_read_by(seats if seats is not None else seats_of(firm))
+    keep = {n for n in GENES if n in read and n not in UNREAD_GENES
+            and not n.startswith("shadow_")}
     return {name: {"now": str(genome.get(name, BASE_GENOME.get(name))),
                    "min": str(lo), "max": str(hi), "integer": is_int}
-            for name, (lo, hi, is_int) in GENES.items()}
+            for name, (lo, hi, is_int) in GENES.items() if name in keep}
 
 
 def follow_up(db, question: dict, answered_by: str, answer_text: str) -> Optional[int]:

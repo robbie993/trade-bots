@@ -2048,8 +2048,81 @@ def _ideas_html(given: list) -> str:
                      "from": e(str(d.get("origin") or "")), "when":
                      e(str(g.get("last_seen") or "")[5:16].replace("T", " "))})
     return ("<h2>Ideas you've given the village</h2><p class=muted>Firms test any change "
-            "an idea leads to on past prices; only a winner reaches the Council. Ask the "
-            "Mind what became of one.</p><div class=card>" + _table(rows) + "</div>")
+            "an idea leads to on past prices; only a winner reaches the Council. "
+            "<a href='/village/ideas'>What became of each one &rarr;</a></p>"
+            "<div class=card>" + _table(rows) + "</div>")
+
+
+#: Each stage an idea can reach, sorted into the three answers the operator asked
+#: for: did it change the village, was it turned down, or has nothing happened yet.
+_IDEA_BUCKET = {
+    "adopted": ("good", "built"),
+    "refused": ("bad", "rejected"), "no change": ("bad", "rejected"),
+    "flagged": ("bad", "rejected"), "reviewed, skipped": ("bad", "rejected"),
+    "testing": ("warn", "in progress"), "with the Council": ("warn", "in progress"),
+    "waiting": ("warn", "in progress"),
+    "one reviewer said test it": ("warn", "in progress"),
+    "shortlisted, not built": ("muted", "not started"),
+    "not reviewed yet": ("muted", "not started"),
+    "kept as advice": ("muted", "not started"),
+}
+
+
+def _idea_overall(fates: list) -> tuple:
+    """One answer for an idea from its firms' fates: built beats in progress beats
+    not started beats rejected."""
+    buckets = [_IDEA_BUCKET.get(f.get("stage"), ("muted", "not started")) for f in fates]
+    for want in ("built", "in progress", "not started", "rejected"):
+        for b in buckets:
+            if b[1] == want:
+                return b
+    return ("muted", "not started")
+
+
+@router.get("/village/ideas", response_class=HTMLResponse)
+def page_ideas(request: Request) -> str:
+    """Every idea the operator gave the village and what became of it."""
+    from ..access import UNLOCK_PATH
+    from ..agents.web import page
+    from . import ideas
+
+    head = ("<h1>Your ideas</h1><p class=muted>Every idea you have given the village, in "
+            "the chat or in something you sent, and what became of it. A firm idea is "
+            "built only when a firm changed a setting for it and the Council adopted it. "
+            "A village idea (a tool, data, how the village runs) goes to the daily "
+            "research review; even a shortlisted one still needs someone to build it.</p>"
+            "<p><a href='/village/talk'>&larr; Talk to the village</a></p>")
+    if not _may_see_inbox(request):
+        return page("Your ideas", head + (
+            f"<div class=card><p><a class='btn go' href='{UNLOCK_PATH}?next=/village/ideas'>"
+            "Sign in</a> to see your ideas.</p></div>"))
+    db = _inbox_db()
+    try:
+        entries = ideas.status(db, 80)
+    finally:
+        db.close()
+    if not entries:
+        return page("Your ideas", head + "<p class=muted>No ideas given yet.</p>")
+    counts: dict = {}
+    cards = []
+    for g in entries:
+        fates = g.get("firms") or ([g["village"]] if g.get("village") else [])
+        tone, word = _idea_overall(fates)
+        counts[word] = counts.get(word, 0) + 1
+        lines = "".join(
+            f"<li><strong>{e(f.get('firm') or 'research review')}</strong>: "
+            f"{e(f['stage'])}. <span class=muted>{e(str(f.get('detail') or '')[:300])}</span></li>"
+            for f in fates)
+        if g.get("error"):
+            lines += f"<li class=muted>could not read its history: {e(g['error'])}</li>"
+        cards.append(
+            f"<div class=card><p><span class={tone}>{e(word.upper())}</span> "
+            f"<strong>{e(str(g.get('idea') or '')[:400])}</strong></p>"
+            f"<p class=muted>{e(str(g.get('given_at') or '')[:16].replace('T', ' '))} UTC · "
+            f"{e(g.get('origin') or '')} · to {e(g.get('to') or 'village')}</p>"
+            f"<ul>{lines}</ul></div>")
+    summary = " · ".join(f"{n} {w}" for w, n in sorted(counts.items()))
+    return page("Your ideas", head + f"<p><strong>{e(summary)}</strong></p>" + "".join(cards))
 
 
 def _chat_note(waiting: list) -> str:

@@ -123,10 +123,124 @@ def describe(result: dict) -> str:
             "whether and how to test it.")
 
 
+# =========================================================================
+# what became of each idea
+# =========================================================================
+def _json(v, default):
+    try:
+        return json.loads(v) if isinstance(v, str) else (v if v is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _firm_fate(db, firm_key: str, question_id) -> dict:
+    """Where one firm got to with one idea: advice -> proposal -> test -> council."""
+    if not question_id:
+        return {"firm": firm_key, "stage": "kept as advice",
+                "detail": "too many questions were open, so no adviser was asked "
+                          "what to change"}
+    ask_row = db.query_one("SELECT id, status FROM ai_questions WHERE topic = 'proposal' "
+                           "AND dedupe_key LIKE ?", (f"proposal:{question_id}:%",))
+    if ask_row is None:
+        return {"firm": firm_key, "stage": "kept as advice",
+                "detail": "no adviser was asked what to change"}
+    answers = db.query("SELECT answered_by, answer FROM ai_answers WHERE question_id = ?",
+                       (ask_row["id"],))
+    if not answers:
+        return {"firm": firm_key, "stage": "waiting",
+                "detail": "waiting for an adviser (Claude on your PC) to say what to change"}
+    props = db.query("SELECT id, changes, status, verdict FROM ai_proposals "
+                     "WHERE question_id = ? ORDER BY id", (ask_row["id"],))
+    if not props:
+        why = ""
+        for a in answers:
+            why = str((_json(_answer_json(a.get("answer")), {}) or {}).get("why") or "")
+            if why:
+                break
+        return {"firm": firm_key, "stage": "no change",
+                "detail": "the adviser found no setting of this firm that the idea maps to"
+                          + (f": {why[:200]}" if why else "")}
+    p = props[-1]
+    stage = {"awaiting_test": "testing", "filed": "with the Council",
+             "adopted": "adopted", "refused": "refused"}.get(p["status"], p["status"])
+    return {"firm": firm_key, "stage": stage,
+            "detail": f"{p['changes']}: {str(p.get('verdict') or 'not tested yet')[:240]}"}
+
+
+def _answer_json(text) -> str:
+    text = str(text or "")
+    start, end = text.find("{"), text.rfind("}")
+    return text[start:end + 1] if 0 <= start < end else "{}"
+
+
+def _village_fate(db, title: str) -> dict:
+    """Where a village idea got to in the research review and the shortlist."""
+    from . import shortlist
+
+    key = shortlist._key(title[:200])
+    reviewed, verdicts = 0, []
+    for q in db.query("SELECT id, context FROM ai_questions WHERE topic = 'research' "
+                      "ORDER BY id DESC LIMIT 60"):
+        finds = (_json(q.get("context"), {}) or {}).get("finds") or []
+        if not any(isinstance(f, dict) and shortlist._key(f.get("name") or "") == key
+                   for f in finds):
+            continue
+        for a in db.query("SELECT answered_by, answer FROM ai_answers WHERE question_id = ?",
+                          (q["id"],)):
+            reviewed += 1
+            for v in shortlist.verdicts(a.get("answer")):
+                if shortlist._key(v["name"]) == key:
+                    verdicts.append({"mind": a["answered_by"], **v})
+    if not reviewed:
+        return {"stage": "not reviewed yet",
+                "detail": "no research review that included it has been answered"}
+    tests = [v for v in verdicts if v["verdict"] == "test"]
+    danger = [v for v in verdicts if v["verdict"] == "danger"]
+    if danger:
+        return {"stage": "flagged", "detail": f"{danger[0]['mind']}: {danger[0]['why'][:240]}"}
+    minds = {v["mind"] for v in tests}
+    if len(minds) >= shortlist.MIN_MINDS:
+        return {"stage": "shortlisted, not built",
+                "detail": f"{len(minds)} reviewers said test it ({tests[0]['test'][:200]}); "
+                          "it needs someone to build it"}
+    if tests:
+        return {"stage": "one reviewer said test it",
+                "detail": f"{tests[0]['mind']}: {tests[0]['test'][:200]}; the shortlist "
+                          f"needs {shortlist.MIN_MINDS} reviewers to agree"}
+    return {"stage": "reviewed, skipped",
+            "detail": f"reviewed {reviewed} time(s); no reviewer said to test it"}
+
+
+def status(db, limit: int = 40) -> list:
+    """Every idea given, newest first, with what became of it."""
+    out = []
+    for r in recent(db, limit):
+        d = r.get("detail") or {}
+        firms = d.get("firms") or []
+        questions = d.get("questions") or []
+        entry = {"idea": r.get("title") or "", "origin": d.get("origin") or "",
+                 "given_at": d.get("given_at") or r.get("first_seen") or "",
+                 "to": d.get("to") or "village"}
+        try:
+            if firms:
+                by_firm = {}
+                for q in questions:
+                    row = db.query_one("SELECT firm_key FROM ai_questions WHERE id = ?", (q,))
+                    if row:
+                        by_firm[row["firm_key"]] = q
+                entry["firms"] = [_firm_fate(db, f, by_firm.get(f)) for f in firms]
+            else:
+                entry["village"] = _village_fate(db, entry["idea"])
+        except Exception as exc:  # noqa: BLE001 - one idea's history is not the list
+            entry["error"] = str(exc)[:160]
+        out.append(entry)
+    return out
+
+
 def recent(db, limit: int = 12) -> list:
     from . import intel
 
     return intel.recent(db, SOURCE, limit)
 
 
-__all__ = ["SOURCE", "describe", "give", "parse", "recent"]
+__all__ = ["SOURCE", "describe", "give", "parse", "recent", "status"]

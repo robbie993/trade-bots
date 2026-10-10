@@ -93,3 +93,57 @@ def test_ideas_in_something_sent_are_passed_on(firms):
     kept = db.query_one("SELECT summary FROM inbox WHERE id = ?", (row,))["summary"]
     assert "IDEA:" not in kept and "Ideas passed to the village" in kept
     assert ideas.recent(db)[0]["detail"]["origin"].endswith(f"(#{row})")
+
+
+def _proposal_q(db, firm_key):
+    return db.query_one("SELECT id FROM ai_questions WHERE topic = 'proposal' "
+                        "AND firm_key = ?", (firm_key,))["id"]
+
+
+def test_status_follows_each_firm_idea_to_its_end(firms):
+    from src.trading import ask
+
+    db = firms
+    ideas.give(db, "use a tighter stop", "firms")
+    first = {f["firm"]: f["stage"] for f in ideas.status(db)[0]["firms"]}
+    assert first == {"alpha": "waiting", "beta": "waiting"}
+    # alpha's adviser finds nothing to change; beta's proposes a tighter stop.
+    ask.answer(db, _proposal_q(db, "alpha"), "claude",
+               '{"changes": {}, "why": "this is a data idea, not a setting"}')
+    ask.answer(db, _proposal_q(db, "beta"), "claude",
+               '{"changes": {"stop_loss_pct": 3}, "why": "tighter"}')
+    fates = {f["firm"]: f for f in ideas.status(db)[0]["firms"]}
+    assert fates["alpha"]["stage"] == "no change"
+    assert "data idea" in fates["alpha"]["detail"]
+    assert fates["beta"]["stage"] == "testing"
+    db.execute("UPDATE ai_proposals SET status = 'refused', verdict = 'lost the held-out bars'")
+    beta = {f["firm"]: f for f in ideas.status(db)[0]["firms"]}["beta"]
+    assert beta["stage"] == "refused" and "lost" in beta["detail"]
+
+
+def test_a_village_idea_waits_for_the_research_review(firms):
+    ideas.give(firms, "add options flow as a data source", "village")
+    assert ideas.status(firms)[0]["village"]["stage"] == "not reviewed yet"
+
+
+def test_the_village_can_see_what_became_of_its_ideas(firms):
+    db = firms
+    ideas.give(db, "add options flow as a data source", "village")
+    q = chat.post(db, "what happened to my ideas?")
+    p = chat.prompt(db, db.query_one("SELECT * FROM village_chat WHERE id = ?", (q,)))
+    assert "WHAT BECAME OF EACH" in p and "research review: not reviewed yet" in p
+
+
+def test_advisers_are_only_offered_genes_the_firm_can_feel():
+    from src.trading import proposals
+
+    class F:
+        firm_key, genome = "x", {"analysts": ["reversion"]}
+
+    offered = set(proposals.genes_for(F()))
+    assert offered == {"rsi_entry", "ibs_entry", "pullback_atr", "stop_loss_pct"}
+    trend = set(proposals.genes_for(F(), seats=("technical", "sentiment", "macro")))
+    assert {"fast_window", "slow_window", "stop_loss_pct"} <= trend
+    # Nothing reads these anywhere, and the backtest never runs the shadow desk.
+    assert not trend & {"top_fraction", "max_per_name", "lookback", "max_positions",
+                        "rsi_entry", "shadow_dte_min"}
