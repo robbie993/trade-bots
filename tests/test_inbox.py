@@ -300,3 +300,23 @@ def test_the_talk_page_lets_you_pick_who_you_talk_to(hosted):
                 headers={"X-Requested-With": "fetch"})
     got = hosted.get("/village/talk/messages?after=0").json()["messages"]
     assert [m["to"] for m in got] == ["the Council", ""]
+
+
+def test_the_ideas_page_says_what_became_of_each_idea(hosted):
+    access = importlib.import_module("src.access")
+
+    assert "Sign in" in hosted.get("/village/ideas").text
+    hosted.post(access.UNLOCK_PATH, data={access.FIELD: TOKEN, "next": "/village/ideas"},
+                follow_redirects=False)
+    assert "No ideas given yet" in hosted.get("/village/ideas").text
+    from src.trading import ideas
+    from src.trading.web import _inbox_db
+
+    db = _inbox_db()
+    try:
+        ideas.give(db, "add options flow as a data source", "village")
+    finally:
+        db.close()
+    page = hosted.get("/village/ideas").text
+    assert "add options flow" in page and "NOT STARTED" in page
+    assert "not reviewed yet" in page

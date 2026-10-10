@@ -283,17 +283,23 @@ def context(db) -> str:
         for p in proposals:
             out.append(f"- {p['firm_key']} from {p.get('proposed_by')}: {p.get('changes')} "
                        f"[{p['status']}] {str(p.get('verdict') or p.get('why') or '')[:160]}")
-    given = _rows(db, "SELECT title, detail, last_seen FROM intel WHERE source = 'your_ideas' "
-                      "ORDER BY last_seen DESC, id DESC LIMIT 10")
+    try:
+        from . import ideas
+
+        given = ideas.status(db, 20)
+    except Exception:  # noqa: BLE001 - the snapshot goes on without it
+        given = []
     if given:
-        out.append("\nIDEAS THE OPERATOR HAS GIVEN THE VILLAGE (newest first):")
+        out.append("\nIDEAS THE OPERATOR HAS GIVEN THE VILLAGE, AND WHAT BECAME OF EACH "
+                   "(newest first; this is the record, so report it as it is):")
         for g in given:
-            try:
-                d = json.loads(g.get("detail") or "{}")
-            except (TypeError, ValueError):
-                d = {}
-            out.append(f"- {str(g.get('last_seen'))[:10]} to {d.get('to') or 'village'} "
-                       f"({d.get('origin') or ''}): {str(g.get('title') or '')[:200]}")
+            out.append(f"- {str(g.get('given_at'))[:10]} to {g.get('to')} "
+                       f"({g.get('origin')}): {str(g.get('idea') or '')[:200]}")
+            for f in g.get("firms") or []:
+                out.append(f"    {f['firm']}: {f['stage']} ({str(f['detail'])[:200]})")
+            if g.get("village"):
+                v = g["village"]
+                out.append(f"    research review: {v['stage']} ({str(v['detail'])[:200]})")
 
     sent = _rows(db, "SELECT id, kind, platform, url, filename, title, summary, calls, "
                      "status, submitted_at FROM inbox ORDER BY id DESC LIMIT 8")
